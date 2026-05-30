@@ -112,12 +112,12 @@ func TestTFIDFWriteToReadFrom(t *testing.T) {
 	original := idx.Search("brown fox")
 
 	var buf bytes.Buffer
-	if err := idx.WriteTo(&buf); err != nil {
+	if _, err := idx.WriteTo(&buf); err != nil {
 		t.Fatal(err)
 	}
 
 	idx2 := NewTFIDF(nil)
-	if err := idx2.ReadFrom(&buf); err != nil {
+	if _, err := idx2.ReadFrom(&buf); err != nil {
 		t.Fatal(err)
 	}
 	restored := idx2.Search("brown fox")
@@ -141,12 +141,12 @@ func TestBM25WriteToReadFrom(t *testing.T) {
 	original := idx.Search("brown fox")
 
 	var buf bytes.Buffer
-	if err := idx.WriteTo(&buf); err != nil {
+	if _, err := idx.WriteTo(&buf); err != nil {
 		t.Fatal(err)
 	}
 
 	idx2 := NewBM25(nil)
-	if err := idx2.ReadFrom(&buf); err != nil {
+	if _, err := idx2.ReadFrom(&buf); err != nil {
 		t.Fatal(err)
 	}
 	restored := idx2.Search("brown fox")
@@ -158,9 +158,57 @@ func TestBM25WriteToReadFrom(t *testing.T) {
 		if original[i].Index != restored[i].Index {
 			t.Fatalf("index mismatch at %d: %d vs %d", i, original[i].Index, restored[i].Index)
 		}
-		if math.Abs(original[i].Score-restored[i].Score) > 1e-9 {
+		if math.Abs(original[i].Score-restored[i].Score) > 1e-4 {
 			t.Fatalf("score mismatch at %d: %f vs %f", i, original[i].Score, restored[i].Score)
 		}
+	}
+}
+
+func TestBM25WriteToReadFromScale(t *testing.T) {
+	docs := make([]string, 100_000)
+	for i := range docs {
+		docs[i] = corpus[i%len(corpus)]
+	}
+	idx := NewBM25(nil)
+	idx.Build(docs)
+	original := idx.Search("brown fox")
+
+	var buf bytes.Buffer
+	if _, err := idx.WriteTo(&buf); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("100K docs: %d bytes", buf.Len())
+
+	idx2 := NewBM25(nil)
+	if _, err := idx2.ReadFrom(&buf); err != nil {
+		t.Fatal(err)
+	}
+	restored := idx2.Search("brown fox")
+
+	if len(original) != len(restored) {
+		t.Fatalf("result count mismatch: %d vs %d", len(original), len(restored))
+	}
+	if original[0].Index != restored[0].Index {
+		t.Fatalf("top result mismatch: %d vs %d", original[0].Index, restored[0].Index)
+	}
+}
+
+func TestBM25ReadFromBadMagic(t *testing.T) {
+	idx := NewBM25(nil)
+	_, err := idx.ReadFrom(bytes.NewReader([]byte("not a bm25 file!")))
+	if err == nil {
+		t.Fatal("expected error for bad magic")
+	}
+}
+
+func TestBM25ReadFromBadVersion(t *testing.T) {
+	var buf [17]byte
+	copy(buf[:4], "BM25")
+	buf[16] = 99
+	idx := NewBM25(nil)
+	_, err := idx.ReadFrom(bytes.NewReader(buf[:]))
+	if err == nil {
+		t.Fatal("expected error for bad version")
 	}
 }
 

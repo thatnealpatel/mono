@@ -1,3 +1,10 @@
+// Package ranking implements various
+// types of vector searchable formats
+// that can be used in a variety of
+// different programs.
+//
+// Where necessary, custom wire formats
+// are implemented.
 package ranking
 
 import (
@@ -17,7 +24,7 @@ type DefaultTokenizer struct{}
 
 func (DefaultTokenizer) Tokenize(text string) []string {
 	var tokens []string
-	for _, w := range strings.Fields(strings.ToLower(text)) {
+	for w := range strings.FieldsSeq(strings.ToLower(text)) {
 		w = strings.Trim(w, ".,;:!?\"'`()[]{}#*-_/\\")
 		if len(w) < 2 || stopWords[w] {
 			continue
@@ -37,8 +44,8 @@ var stopWords = map[string]bool{
 type BagOfWordsRanker interface {
 	Build(docs []string)
 	Search(query string) []*Result
-	WriteTo(w io.Writer) error
-	ReadFrom(r io.Reader) error
+	io.WriterTo
+	io.ReaderFrom
 }
 
 type Result struct {
@@ -145,21 +152,24 @@ func (t *TFIDF) Similarity(i, j int) float64 {
 	return dot / (a.Mag * b.Mag)
 }
 
-func (t *TFIDF) WriteTo(w io.Writer) error {
-	return gob.NewEncoder(w).Encode(tfidfGob{
+func (t *TFIDF) WriteTo(w io.Writer) (int64, error) {
+	cw := &countWriter{w: w}
+	err := gob.NewEncoder(cw).Encode(tfidfGob{
 		Docs: t.docs,
 		IDF:  t.idf,
 	})
+	return cw.n, err
 }
 
-func (t *TFIDF) ReadFrom(r io.Reader) error {
+func (t *TFIDF) ReadFrom(r io.Reader) (int64, error) {
+	cr := &countReader{r: r}
 	var g tfidfGob
-	if err := gob.NewDecoder(r).Decode(&g); err != nil {
-		return err
+	if err := gob.NewDecoder(cr).Decode(&g); err != nil {
+		return cr.n, err
 	}
 	t.docs = g.Docs
 	t.idf = g.IDF
-	return nil
+	return cr.n, nil
 }
 
 type tfidfDoc struct {
@@ -279,38 +289,15 @@ func (bm *BM25) Search(query string) []*Result {
 	return results
 }
 
-func (bm *BM25) WriteTo(w io.Writer) error {
-	return gob.NewEncoder(w).Encode(bm25Gob{
-		K1:    bm.k1,
-		B:     bm.b,
-		Docs:  bm.docs,
-		IDF:   bm.idf,
-		Avgdl: bm.avgdl,
-	})
+func (bm *BM25) WriteTo(w io.Writer) (int64, error) {
+	return bm25WriteTo(bm, w)
 }
 
-func (bm *BM25) ReadFrom(r io.Reader) error {
-	var g bm25Gob
-	if err := gob.NewDecoder(r).Decode(&g); err != nil {
-		return err
-	}
-	bm.k1 = g.K1
-	bm.b = g.B
-	bm.docs = g.Docs
-	bm.idf = g.IDF
-	bm.avgdl = g.Avgdl
-	return nil
+func (bm *BM25) ReadFrom(r io.Reader) (int64, error) {
+	return bm25ReadFrom(bm, r)
 }
 
 type bm25Doc struct {
 	TF map[string]float64
 	DL float64
-}
-
-type bm25Gob struct {
-	K1    float64
-	B     float64
-	Docs  []bm25Doc
-	IDF   map[string]float64
-	Avgdl float64
 }
