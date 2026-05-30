@@ -1,3 +1,3 @@
 module patel.codes/ranking
 
-go 1.27
+go 1.26.3
