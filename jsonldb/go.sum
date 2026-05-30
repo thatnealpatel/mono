@@ -1,2 +1,4 @@
 golang.org/x/sys v0.45.0 h1:dO4czNzziLiiXplLQgBCEpCvXQ3dnkn0SdaZSYdQ+FY=
 golang.org/x/sys v0.45.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+patel.codes/unsafe v0.0.0-20260530205543-beb9b4adb400 h1:g2Qj3mQgQhzBE/BBqFEbxXhu6VJ1vpIC2kEeR9++dpE=
+patel.codes/unsafe v0.0.0-20260530205543-beb9b4adb400/go.mod h1:2imHk7v7BE9iPDGJrctSkT5sY0t0SEYOuQdrCWjepUQ=

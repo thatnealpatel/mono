@@ -13,7 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"patel.codes/jsonldb/internal/uuid"
+	"patel.codes/unsafe/uuid"
 
 	"golang.org/x/sys/unix"
 )

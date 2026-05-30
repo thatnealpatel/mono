@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"patel.codes/jsonldb/internal/uuid"
+	"patel.codes/unsafe/uuid"
 )
 
 type entry struct {
