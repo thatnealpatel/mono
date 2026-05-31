@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+
 	"patel.codes/unsafe/uuid"
 )
 
@@ -164,16 +165,14 @@ func TestConcurrentReads(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 10 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s.Read(nil, func(items []entry) error {
 				if len(items) != 1 {
 					t.Errorf("expected 1 item, got %d", len(items))
 				}
 				return nil
 			})
-		}()
+		})
 	}
 	wg.Wait()
 }

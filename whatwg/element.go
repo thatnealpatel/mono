@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -57,7 +58,7 @@ func findElementDL(doc *html.Node, name string) (heading, *html.Node) {
 			}
 			hd := extractHeading(parent)
 			for sib := parent.NextSibling; sib != nil; sib = sib.NextSibling {
-				if isElement(sib, "dl") && hasClass(sib, "element") {
+				if isElement(sib, "dl") && slices.Contains(strings.Fields(attr(sib, "class")), "element") {
 					return hd, sib
 				}
 				if _, ok := headingLevel(sib); ok {
@@ -106,10 +107,8 @@ func resolveTokenizerState(doc *html.Node, name string) string {
 			return "rawtext-state"
 		}
 	}
-	for _, e := range elementNamesAtAnchor(doc, "escapable-raw-text-elements") {
-		if e == name {
-			return "rcdata-state"
-		}
+	if slices.Contains(elementNamesAtAnchor(doc, "escapable-raw-text-elements"), name) {
+		return "rcdata-state"
 	}
 	return "data-state"
 }

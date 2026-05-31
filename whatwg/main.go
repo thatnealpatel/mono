@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -275,13 +276,13 @@ func extractHeading(n *html.Node) heading {
 	var dfnText, trailing strings.Builder
 	for c := range n.ChildNodes() {
 		switch {
-		case isElement(c, "span") && hasClass(c, "secno"):
+		case isElement(c, "span") && slices.Contains(strings.Fields(attr(c, "class")), "secno"):
 			h.Secno = collapseSpace(textOf(c))
 		case isElement(c, "dfn"):
 			if dfnText.Len() == 0 {
 				dfnText.WriteString(textOf(c))
 			}
-		case isElement(c, "a") && hasClass(c, "self-link"):
+		case isElement(c, "a") && slices.Contains(strings.Fields(attr(c, "class")), "self-link"):
 		case c.Type == html.TextNode:
 			trailing.WriteString(c.Data)
 		case c.Type == html.ElementNode:
@@ -298,15 +299,6 @@ func extractHeading(n *html.Node) heading {
 
 func isElement(n *html.Node, name string) bool {
 	return n != nil && n.Type == html.ElementNode && n.Data == name
-}
-
-func hasClass(n *html.Node, want string) bool {
-	for _, f := range strings.Fields(attr(n, "class")) {
-		if f == want {
-			return true
-		}
-	}
-	return false
 }
 
 func collapseSpace(s string) string {
@@ -465,7 +457,7 @@ func findStateBody(h *html.Node) (body *html.Node, isSwitch bool) {
 		if _, ok := headingLevel(n); ok {
 			break
 		}
-		if isElement(n, "dl") && hasClass(n, "switch") {
+		if isElement(n, "dl") && slices.Contains(strings.Fields(attr(n, "class")), "switch") {
 			return n, true
 		}
 		if algo == nil && isElement(n, "div") && hasAttr(n, "data-algorithm") {

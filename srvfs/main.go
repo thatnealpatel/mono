@@ -103,7 +103,7 @@ func safePath(root, name string) (string, bool) {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", false
 	}
-	for _, seg := range strings.Split(filepath.ToSlash(rel), "/") {
+	for seg := range strings.SplitSeq(filepath.ToSlash(rel), "/") {
 		if strings.HasPrefix(seg, ".") {
 			return "", false // refuse hidden path components
 		}
