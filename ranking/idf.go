@@ -2,7 +2,6 @@ package ranking
 
 import (
 	"cmp"
-	"encoding/gob"
 	"io"
 	"math"
 	"slices"
@@ -73,26 +72,9 @@ func (idx *IDF) Search(query string) []*Result {
 }
 
 func (idx *IDF) WriteTo(w io.Writer) (int64, error) {
-	cw := &countWriter{w: w}
-	err := gob.NewEncoder(cw).Encode(idfGob{
-		Postings: idx.postings,
-		IDF:      idx.idf,
-	})
-	return cw.n, err
+	return idfWriteBinary(idx, w)
 }
 
 func (idx *IDF) ReadFrom(r io.Reader) (int64, error) {
-	cr := &countReader{r: r}
-	var g idfGob
-	if err := gob.NewDecoder(cr).Decode(&g); err != nil {
-		return cr.n, err
-	}
-	idx.postings = g.Postings
-	idx.idf = g.IDF
-	return cr.n, nil
-}
-
-type idfGob struct {
-	Postings map[string][]idfPosting
-	IDF      map[string]float64
+	return idfReadBinary(idx, r)
 }

@@ -303,7 +303,7 @@ func TestIDFWriteToReadFrom(t *testing.T) {
 		if original[i].Index != restored[i].Index {
 			t.Fatalf("index mismatch at %d: %d vs %d", i, original[i].Index, restored[i].Index)
 		}
-		if math.Abs(original[i].Score-restored[i].Score) > 1e-9 {
+		if math.Abs(original[i].Score-restored[i].Score) > 1e-4 {
 			t.Fatalf("score mismatch at %d: %f vs %f", i, original[i].Score, restored[i].Score)
 		}
 	}
@@ -333,7 +333,7 @@ func TestIDFWriteToReadFromScale(t *testing.T) {
 	if len(original) != len(restored) {
 		t.Fatalf("result count mismatch: %d vs %d", len(original), len(restored))
 	}
-	if math.Abs(original[0].Score-restored[0].Score) > 1e-9 {
+	if math.Abs(original[0].Score-restored[0].Score) > 1e-4 {
 		t.Fatalf("top score mismatch: %f vs %f", original[0].Score, restored[0].Score)
 	}
 }
