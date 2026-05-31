@@ -26,6 +26,7 @@ import (
 )
 
 func main() {
+	log.SetFlags(0)
 	cacheDir = os.Getenv("OEIS_CACHE_DIR")
 	if cacheDir == "" {
 		log.Fatal("OEIS_CACHE_DIR is not set")
