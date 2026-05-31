@@ -2,7 +2,9 @@ package ranking
 
 import (
 	"bytes"
+	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -341,3 +343,43 @@ var (
 	_ BagOfWordsRanker = (*BM25)(nil)
 	_ BagOfWordsRanker = (*IDF)(nil)
 )
+
+func BenchmarkIDFWriteTo(b *testing.B) {
+	for _, n := range []int{10_000, 100_000, 1_000_000} {
+		idx := buildIDFIndex(n)
+		var buf bytes.Buffer
+		idx.WriteTo(&buf)
+		data := buf.Bytes()
+		b.Run(strconv.Itoa(n), func(b *testing.B) {
+			for b.Loop() {
+				idx2 := NewIDF(nil)
+				idx2.ReadFrom(bytes.NewReader(data))
+			}
+		})
+	}
+}
+
+func BenchmarkIDFReadFrom(b *testing.B) {
+	for _, n := range []int{10_000, 100_000, 1_000_000} {
+		idx := buildIDFIndex(n)
+		var buf bytes.Buffer
+		idx.WriteTo(&buf)
+		data := buf.Bytes()
+		b.Run(strconv.Itoa(n), func(b *testing.B) {
+			for b.Loop() {
+				idx2 := NewIDF(nil)
+				idx2.ReadFrom(bytes.NewReader(data))
+			}
+		})
+	}
+}
+
+func buildIDFIndex(n int) *IDF {
+	docs := make([]string, n)
+	for i := range docs {
+		docs[i] = fmt.Sprintf("article about topic %x in category %x", i<<8, i<<16)
+	}
+	idx := NewIDF(nil)
+	idx.Build(docs)
+	return idx
+}
