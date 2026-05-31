@@ -19,6 +19,7 @@ func (DefaultTokenizer) Tokenize(text string) []string {
 	var tokens []string
 	for w := range strings.FieldsSeq(strings.ToLower(text)) {
 		w = strings.Trim(w, ".,;:!?\"'`()[]{}#*-_/\\")
+		w = strings.TrimSuffix(w, "'s")
 		if len(w) < 2 || stopWords[w] {
 			continue
 		}
