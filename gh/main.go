@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -44,11 +43,8 @@ func main() {
 	args = args[1:]
 
 	if len(args) == 0 {
-		if err := ghList(repo); err != nil {
-			fmt.Fprintf(os.Stderr, "goof-gh: %v\n", err)
-			os.Exit(1)
-		}
-		return
+		fmt.Fprint(os.Stdout, usage)
+		os.Exit(0)
 	}
 
 	if args[0] == "search" {
@@ -76,51 +72,12 @@ func main() {
 	}
 }
 
-const usage = `usage: gh <owner/repo> [search <query> | <num> [-all]]
+const usage = `usage: gh <owner/repo> <command> [args]
 
-  <owner/repo>              list cached issues
-  <owner/repo> <num>        show issue
-  <owner/repo> <num> -all   show issue with comments
-  <owner/repo> search <q>   search issues
+  <owner/repo> <num>          show issue
+  <owner/repo> <num> -all     show issue with comments
+  <owner/repo> search <query> search issues
 `
-
-func ghList(repo string) error {
-	dir := ghCacheDir(repo)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		fmt.Println("no cached issues")
-		return nil
-	}
-	var nums []int
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		n, err := strconv.Atoi(e.Name())
-		if err == nil {
-			nums = append(nums, n)
-		}
-	}
-	slices.Sort(nums)
-	if len(nums) == 0 {
-		fmt.Println("no cached issues")
-		return nil
-	}
-	fmt.Printf("%d cached issues:\n", len(nums))
-	for i, n := range nums {
-		if i > 0 {
-			fmt.Print("  ")
-		}
-		fmt.Printf("%d", n)
-		if (i+1)%10 == 0 {
-			fmt.Println()
-		}
-	}
-	if len(nums)%10 != 0 {
-		fmt.Println()
-	}
-	return nil
-}
 
 func ghCacheDir(repo string) string {
 	return filepath.Join(ghCacheRoot, repo)
@@ -228,10 +185,12 @@ func ghShow(repo string, num int, comments bool) error {
 
 func ghEnsure(dir, num, token, baseURL string) (retErr error) {
 	ghDir := filepath.Join(dir, num)
-	// https://patel.codes/goof/issues/64
-	// if _, err := os.Stat(filepath.Join(ghDir, "issue.json")); err == nil {
-	// 	return nil
-	// }
+	if info, err := os.Stat(filepath.Join(ghDir, "issue.json")); err == nil {
+		if time.Since(info.ModTime()) < 30*time.Minute {
+			return nil
+		}
+		os.RemoveAll(ghDir)
+	}
 	if err := os.MkdirAll(ghDir, 0o755); err != nil {
 		return err
 	}
