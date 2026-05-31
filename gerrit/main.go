@@ -18,9 +18,9 @@ import (
 	neturl "net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -42,74 +42,45 @@ func main() {
 
 	args := os.Args[1:]
 	if len(args) == 0 {
-		if err := gerritList(); err != nil {
-			fmt.Fprintf(os.Stderr, "goof-cl: %v\n", err)
-			os.Exit(1)
-		}
-		return
+		fmt.Fprint(os.Stdout, usage)
+		os.Exit(0)
 	}
 	switch args[0] {
 	case "-h":
-		fmt.Println(usage)
+		fmt.Print(usage)
 	case "search":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stdout, usage)
+			fmt.Fprint(os.Stdout, usage)
 			os.Exit(0)
 		}
 		if err := gerritSearch(strings.Join(args[1:], "+")); err != nil {
 			fmt.Fprintf(os.Stderr, "goof-cl: %v\n", err)
 			os.Exit(1)
 		}
-	default:
-		if err := gerritShow(args[0]); err != nil {
-			fmt.Fprintf(os.Stderr, "goof-cl: %v\n", err)
+	case "fetch":
+		if len(args) < 2 {
+			fmt.Fprint(os.Stdout, usage)
 			os.Exit(1)
 		}
+		all := len(args) > 2 && args[2] == "-all"
+		if err := gerritShow(args[1], all); err != nil {
+			fmt.Fprintf(os.Stderr, "goof-gerrit: %v\n", err)
+			os.Exit(1)
+		}
+	default:
+		fmt.Fprint(os.Stdout, usage)
+		os.Exit(0)
 	}
 }
 
-func gerritList() error {
-	entries, err := os.ReadDir(gerritDir)
-	if err != nil {
-		fmt.Println("no cached CLs")
-		return nil
-	}
-	var nums []int
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		n, err := strconv.Atoi(e.Name())
-		if err == nil {
-			nums = append(nums, n)
-		}
-	}
-	slices.Sort(nums)
-	if len(nums) == 0 {
-		fmt.Println("no cached CLs")
-		return nil
-	}
-	fmt.Printf("%d cached CLs:\n", len(nums))
-	for i, n := range nums {
-		if i > 0 {
-			fmt.Print("  ")
-		}
-		fmt.Printf("%d", n)
-		if (i+1)%10 == 0 {
-			fmt.Println()
-		}
-	}
-	if len(nums)%10 != 0 {
-		fmt.Println()
-	}
-	return nil
-}
+const usage = `usage: gerrit <command> [args]
 
-const usage = `usage: cl [<num|hash> | search <query>]
+  fetch <number> [-all]   show CL by Gerrit change number
+  fetch <commit> [-all]   show CL by commit hash (min 8 hex chars)
+  search <query>          search Gerrit
 
-  (no args)          list cached CLs
-  <num|hash>         show CL detail, comments, and linked issues
-  search <query>     search Gerrit
+flags:
+  -all   include patchset diff in output
 
 env: GERRIT_REVIEW_INSTANCE (default: go-review)
 `
@@ -139,7 +110,6 @@ func gerritSearch(query string) error {
 	return printJSON(results)
 }
 
-
 func gerritJSON(url string) ([]byte, error) {
 	resp, err := http.Get(url)
 	if err != nil {
@@ -165,7 +135,7 @@ func printJSON(v any) error {
 	return enc.Encode(v)
 }
 
-func gerritShow(arg string) error {
+func gerritShow(arg string, all bool) error {
 	num, err := gerritResolveArg(arg)
 	if err != nil {
 		return err
@@ -185,18 +155,29 @@ func gerritShow(arg string) error {
 	cleanDetail := cleanupDetail(detail)
 	cleanComments := cleanupComments(comments)
 
+	var patch string
+	if all {
+		p, err := os.ReadFile(filepath.Join(gerritDir, num, "patch.diff"))
+		if err != nil {
+			return err
+		}
+		patch = string(p)
+	}
+
 	out := struct {
 		Number   int    `json:"number"`
 		URL      string `json:"url"`
 		Detail   any    `json:"detail"`
 		Comments any    `json:"comments"`
 		Issues   []int  `json:"issues,omitempty"`
+		Patch    string `json:"patch,omitempty"`
 	}{
 		Number:   mustAtoi(num),
 		URL:      "https://go.dev/cl/" + num,
 		Detail:   cleanDetail,
 		Comments: cleanComments,
 		Issues:   clExtractIssueNums(detail),
+		Patch:    patch,
 	}
 	return printJSON(out)
 }
@@ -448,10 +429,12 @@ func clResolveHash(hash string) (string, error) {
 
 func gerritEnsure(dir, num string) (retErr error) {
 	numDir := filepath.Join(dir, num)
-	// https://patel.codes/goof/issues/64
-	// if _, err := os.Stat(filepath.Join(numDir, "detail.json")); err == nil {
-	// 	return nil
-	// }
+	if info, err := os.Stat(filepath.Join(numDir, "detail.json")); err == nil {
+		if time.Since(info.ModTime()) < 30*time.Minute {
+			return nil
+		}
+		os.RemoveAll(numDir)
+	}
 	if err := os.MkdirAll(numDir, 0o755); err != nil {
 		return err
 	}
@@ -543,17 +526,13 @@ func clExtractIssueNums(detail []byte) []int {
 }
 
 func parseLeadingInt(s string) int {
-	var digits []byte
-	for i := 0; i < len(s); i++ {
-		if s[i] >= '0' && s[i] <= '9' {
-			digits = append(digits, s[i])
-		} else {
-			break
-		}
-	}
-	if len(digits) == 0 {
+	end := strings.IndexFunc(s, func(r rune) bool { return r < '0' || r > '9' })
+	if end == 0 {
 		return 0
 	}
-	n, _ := strconv.Atoi(string(digits))
+	if end < 0 {
+		end = len(s)
+	}
+	n, _ := strconv.Atoi(s[:end])
 	return n
 }
