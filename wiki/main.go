@@ -282,7 +282,7 @@ func wikiClean(text string) string {
 	text = reLink.ReplaceAllString(text, "$1")
 	text = reExtLink.ReplaceAllString(text, "$1")
 	for i, m := range maths {
-		text = strings.Replace(text, fmt.Sprintf("WIKIMATH%dENDMATH", i), "$"+m+"$", 1)
+		text = strings.ReplaceAll(text, fmt.Sprintf("WIKIMATH%dENDMATH", i), "$"+m+"$")
 	}
 	text = reMultiNL.ReplaceAllString(text, "\n\n")
 	return strings.TrimSpace(text)

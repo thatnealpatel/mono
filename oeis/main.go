@@ -139,7 +139,9 @@ func ensureFresh(dir string) error {
 		fmt.Fprintln(os.Stderr, "oeis: fetch failed, using cached data")
 		return nil
 	}
-	os.WriteFile(marker, fmt.Appendf(nil, "%d\n", time.Now().Unix()), 0o644)
+	if err := os.WriteFile(marker, fmt.Appendf(nil, "%d\n", time.Now().Unix()), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "oeis: writing marker: %v\n", err)
+	}
 	local, err := gitRev(dir, "HEAD")
 	if err != nil {
 		return nil
@@ -275,7 +277,10 @@ func oeisWalk(fn func(id, path string, q oeisQuick)) error {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			files, _ := os.ReadDir(filepath.Join(oeisDir, dir))
+			files, err := os.ReadDir(filepath.Join(oeisDir, dir))
+			if err != nil {
+				return
+			}
 			for _, f := range files {
 				if !strings.HasSuffix(f.Name(), ".seq") {
 					continue

@@ -105,7 +105,7 @@ func ensureRepo() error {
 	}
 	cveRepoDir = filepath.Join(cveCacheDir, "cvelistV5.git")
 	if _, err := os.Stat(filepath.Join(cveRepoDir, ".git")); err == nil {
-		return ensureFresh()
+		return ensureFresh(cveRepoDir)
 	}
 	cmd := exec.Command("git", "clone", "--depth", "1", cveRemote, cveRepoDir)
 	cmd.Stderr = os.Stderr
@@ -115,7 +115,7 @@ func ensureRepo() error {
 	return nil
 }
 
-func ensureFresh() error {
+func ensureFresh(dir string) error {
 	marker := filepath.Join(cveCacheDir, "fetched")
 	if b, err := os.ReadFile(marker); err == nil {
 		var ts int64
@@ -125,18 +125,20 @@ func ensureFresh() error {
 			}
 		}
 	}
-	fetch := exec.Command("git", "-C", cveRepoDir, "fetch")
+	fetch := exec.Command("git", "-C", dir, "fetch")
 	fetch.Stderr = os.Stderr
 	if err := fetch.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "cve: fetch failed, using cached data")
 		return nil
 	}
-	os.WriteFile(marker, fmt.Appendf(nil, "%d\n", time.Now().Unix()), 0o644)
-	local, err := gitRev("HEAD")
+	if err := os.WriteFile(marker, fmt.Appendf(nil, "%d\n", time.Now().Unix()), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "cve: writing marker: %v\n", err)
+	}
+	local, err := gitRev(dir, "HEAD")
 	if err != nil {
 		return nil
 	}
-	remote, err := gitRev("@{u}")
+	remote, err := gitRev(dir, "@{u}")
 	if err != nil {
 		return nil
 	}
@@ -144,7 +146,7 @@ func ensureFresh() error {
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "cve: updating %s..%s ... ", local[:8], remote[:8])
-	pull := exec.Command("git", "-C", cveRepoDir, "pull", "--ff-only")
+	pull := exec.Command("git", "-C", dir, "pull", "--ff-only")
 	pull.Stderr = os.Stderr
 	if err := pull.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "update failed, using cached data")
@@ -154,8 +156,8 @@ func ensureFresh() error {
 	return nil
 }
 
-func gitRev(ref string) (string, error) {
-	out, err := exec.Command("git", "-C", cveRepoDir, "rev-parse", ref).Output()
+func gitRev(dir, ref string) (string, error) {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", ref).Output()
 	if err != nil {
 		return "", err
 	}
@@ -169,7 +171,7 @@ func parseAll() ([]Record, error) {
 	var paths []string
 	if err := filepath.WalkDir(cveDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			return err
 		}
 		if !d.IsDir() && strings.HasSuffix(d.Name(), ".json") && !strings.Contains(d.Name(), "delta") {
 			paths = append(paths, path)

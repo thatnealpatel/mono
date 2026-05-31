@@ -75,7 +75,7 @@ func (s *Store[T]) Write(fn func(tx *Tx[T]) error) error {
 	if err := s.write(d); err != nil {
 		var rollback db[T]
 		if jerr := json.Unmarshal(snapshot, &rollback.items); jerr != nil {
-			panic("jsonldb: corrupted rollback: " + err.Error())
+			panic("jsonldb: corrupted rollback: " + jerr.Error())
 		}
 		rollback.ids = make([]uuid.UUID, len(rollback.items))
 		for i, item := range rollback.items {

@@ -180,7 +180,7 @@ func ensureRepo() error {
 	}
 	erdosRepoDir = filepath.Join(erdosCacheDir, "erdosproblems.git")
 	if _, err := os.Stat(filepath.Join(erdosRepoDir, ".git")); err == nil {
-		return ensureFresh()
+		return ensureFresh(erdosRepoDir)
 	}
 	cmd := exec.Command("git", "clone", erdosRemote, erdosRepoDir)
 	cmd.Stderr = os.Stderr
@@ -190,7 +190,7 @@ func ensureRepo() error {
 	return nil
 }
 
-func ensureFresh() error {
+func ensureFresh(dir string) error {
 	marker := filepath.Join(erdosCacheDir, "fetched")
 	if b, err := os.ReadFile(marker); err == nil {
 		var ts int64
@@ -200,18 +200,20 @@ func ensureFresh() error {
 			}
 		}
 	}
-	fetch := exec.Command("git", "-C", erdosRepoDir, "fetch")
+	fetch := exec.Command("git", "-C", dir, "fetch")
 	fetch.Stderr = os.Stderr
 	if err := fetch.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "erdos: fetch failed, using cached data")
 		return nil
 	}
-	os.WriteFile(marker, fmt.Appendf(nil, "%d\n", time.Now().Unix()), 0o644)
-	local, err := gitRev("HEAD")
+	if err := os.WriteFile(marker, fmt.Appendf(nil, "%d\n", time.Now().Unix()), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "erdos: writing marker: %v\n", err)
+	}
+	local, err := gitRev(dir, "HEAD")
 	if err != nil {
 		return nil
 	}
-	remote, err := gitRev("@{u}")
+	remote, err := gitRev(dir, "@{u}")
 	if err != nil {
 		return nil
 	}
@@ -219,7 +221,7 @@ func ensureFresh() error {
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "erdos: updating %s..%s ... ", local[:8], remote[:8])
-	pull := exec.Command("git", "-C", erdosRepoDir, "pull", "--ff-only")
+	pull := exec.Command("git", "-C", dir, "pull", "--ff-only")
 	pull.Stderr = os.Stderr
 	if err := pull.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "update failed, using cached data")
@@ -229,8 +231,8 @@ func ensureFresh() error {
 	return nil
 }
 
-func gitRev(ref string) (string, error) {
-	out, err := exec.Command("git", "-C", erdosRepoDir, "rev-parse", ref).Output()
+func gitRev(dir, ref string) (string, error) {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", ref).Output()
 	if err != nil {
 		return "", err
 	}
@@ -286,7 +288,7 @@ func cmdFetch(number string) error {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
 	}
 

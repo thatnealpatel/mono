@@ -189,7 +189,9 @@ func ensureSpec() error {
 		return fmt.Errorf("writing spec: %w", err)
 	}
 	if newEtag := dlResp.Header.Get("ETag"); newEtag != "" {
-		os.WriteFile(etagFile(), []byte(newEtag), 0o644)
+		if err := os.WriteFile(etagFile(), []byte(newEtag), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "whatwg: writing etag: %v\n", err)
+		}
 	}
 	fmt.Fprintf(os.Stderr, "OK (%d bytes)\n", n)
 	return nil

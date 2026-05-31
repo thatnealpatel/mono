@@ -4,6 +4,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"html"
 	"html/template"
@@ -12,7 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"rsc.io/markdown"
@@ -151,11 +152,14 @@ func treeHTML(root, dir string) (body string, hasMarkdown bool, err error) {
 	if err != nil {
 		return "", false, err
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		if di, dj := entries[i].IsDir(), entries[j].IsDir(); di != dj {
-			return di // directories before files
+	slices.SortFunc(entries, func(a, b os.DirEntry) int {
+		if a.IsDir() != b.IsDir() {
+			if a.IsDir() {
+				return -1
+			}
+			return 1
 		}
-		return entries[i].Name() < entries[j].Name()
+		return cmp.Compare(a.Name(), b.Name())
 	})
 
 	var b strings.Builder
