@@ -1,11 +1,24 @@
+// Package main implements a simple vector
+// search over Wikipedia article titles and
+// reformats the articles to Markdown; in
+// addition, it provides a way to extract
+// all outgoing links from a target artice.
+//
+// It constructs one gob-encoded index and
+// one custom wire format-encoded IDF cache
+// that is used to make arbitrary search
+// and retrieval fast.
+//
+// See README for how WIKI_CACHE_DIR should
+// be setup with the Wikimedia Dump Files.
 package main
 
 import (
 	"compress/bzip2"
 	"encoding/gob"
-	"errors"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log"

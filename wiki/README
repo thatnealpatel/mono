@@ -1,13 +1,19 @@
-$WIKI_CACHE_DIR should contain two bz2 downloads
-from Wikipedia; other files are built and managed
-by this tool.
+Install:
 
-```
-% la -h ~/d/wiki
-total 26G
-drwxr-xr-x  2 neal neal 4.0K May 30 23:34 .
-drwxr-xr-x 13 neal neal 4.0K May 30 19:00 ..
--rw-r--r--  1 neal neal 878M May 30 19:03 enwiki-20260501.index
--rw-r--r--  1 neal neal 269M May  6 00:28 enwiki-20260501-pages-articles-multistream-index.txt.bz2
--rw-r--r--  1 neal neal  25G May  6 02:07 enwiki-20260501-pages-articles-multistream.xml.bz2
-```
+  go install patel.codes/wiki@latest
+
+Set up:
+
+  $WIKI_CACHE_DIR should contain two bz2 downloads
+  from Wikipedia.
+
+  See: https://dumps.wikimedia.org/enwiki/20260501
+
+  ```
+  % la -h ~/d/wiki
+  total 26G
+  drwxr-xr-x  2 neal neal 4.0K May 30 23:34 .
+  drwxr-xr-x 13 neal neal 4.0K May 30 19:00 ..
+  -rw-r--r--  1 neal neal 269M May  6 00:28 enwiki-20260501-pages-articles-multistream-index.txt.bz2
+  -rw-r--r--  1 neal neal  25G May  6 02:07 enwiki-20260501-pages-articles-multistream.xml.bz2
+  ```
