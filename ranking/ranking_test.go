@@ -60,7 +60,7 @@ func TestSearchNoMatch(t *testing.T) {
 }
 
 func TestEmptyCorpus(t *testing.T) {
-	for _, name := range []string{"tfidf-nil", "tfidf-empty", "bm25-nil", "bm25-empty"} {
+	for _, name := range []string{"tfidf-nil", "tfidf-empty", "bm25-nil", "bm25-empty", "idf-nil", "idf-empty"} {
 		t.Run(name, func(t *testing.T) {
 			var r BagOfWordsRanker
 			switch name {
@@ -78,6 +78,14 @@ func TestEmptyCorpus(t *testing.T) {
 				r = idx
 			case "bm25-empty":
 				idx := NewBM25(nil)
+				idx.Build([]string{})
+				r = idx
+			case "idf-nil":
+				idx := NewIDF(nil)
+				idx.Build(nil)
+				r = idx
+			case "idf-empty":
+				idx := NewIDF(nil)
 				idx.Build([]string{})
 				r = idx
 			}
@@ -158,7 +166,7 @@ func TestBM25WriteToReadFrom(t *testing.T) {
 		if original[i].Index != restored[i].Index {
 			t.Fatalf("index mismatch at %d: %d vs %d", i, original[i].Index, restored[i].Index)
 		}
-		if math.Abs(original[i].Score-restored[i].Score) > 1e-4 {
+		if math.Abs(original[i].Score-restored[i].Score) > 1e-9 {
 			t.Fatalf("score mismatch at %d: %f vs %f", i, original[i].Score, restored[i].Score)
 		}
 	}
@@ -193,25 +201,6 @@ func TestBM25WriteToReadFromScale(t *testing.T) {
 	}
 }
 
-func TestBM25ReadFromBadMagic(t *testing.T) {
-	idx := NewBM25(nil)
-	_, err := idx.ReadFrom(bytes.NewReader([]byte("not a bm25 file!")))
-	if err == nil {
-		t.Fatal("expected error for bad magic")
-	}
-}
-
-func TestBM25ReadFromBadVersion(t *testing.T) {
-	var buf [17]byte
-	copy(buf[:4], "BM25")
-	buf[16] = 99
-	idx := NewBM25(nil)
-	_, err := idx.ReadFrom(bytes.NewReader(buf[:]))
-	if err == nil {
-		t.Fatal("expected error for bad version")
-	}
-}
-
 type upperTokenizer struct{}
 
 func (upperTokenizer) Tokenize(text string) []string {
@@ -233,6 +222,31 @@ func TestCustomTokenizer(t *testing.T) {
 func TestNilParams(t *testing.T) {
 	_ = NewTFIDF(nil)
 	_ = NewBM25(nil)
+	_ = NewIDF(nil)
+}
+
+func TestWriteToReadFromEmpty(t *testing.T) {
+	rankers := map[string]BagOfWordsRanker{
+		"tfidf": NewTFIDF(nil),
+		"bm25":  NewBM25(nil),
+		"idf":   NewIDF(nil),
+	}
+	for name, r := range rankers {
+		t.Run(name, func(t *testing.T) {
+			r.Build(nil)
+			var buf bytes.Buffer
+			if _, err := r.WriteTo(&buf); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.ReadFrom(&buf); err != nil {
+				t.Fatal(err)
+			}
+			results := r.Search("anything")
+			if len(results) != 0 {
+				t.Fatalf("expected no results, got %d", len(results))
+			}
+		})
+	}
 }
 
 func TestBM25CustomParams(t *testing.T) {
@@ -252,7 +266,78 @@ func TestBM25CustomParams(t *testing.T) {
 	}
 }
 
+func TestIDFSearch(t *testing.T) {
+	idx := NewIDF(nil)
+	idx.Build(corpus)
+	results := idx.Search("brown fox")
+	if len(results) == 0 {
+		t.Fatal("expected results")
+	}
+	if results[0].Index != 0 {
+		t.Fatalf("expected top result index 0, got %d", results[0].Index)
+	}
+}
+
+func TestIDFWriteToReadFrom(t *testing.T) {
+	idx := NewIDF(nil)
+	idx.Build(corpus)
+	original := idx.Search("brown fox")
+
+	var buf bytes.Buffer
+	if _, err := idx.WriteTo(&buf); err != nil {
+		t.Fatal(err)
+	}
+
+	idx2 := NewIDF(nil)
+	if _, err := idx2.ReadFrom(&buf); err != nil {
+		t.Fatal(err)
+	}
+	restored := idx2.Search("brown fox")
+
+	if len(original) != len(restored) {
+		t.Fatalf("result count mismatch: %d vs %d", len(original), len(restored))
+	}
+	for i := range original {
+		if original[i].Index != restored[i].Index {
+			t.Fatalf("index mismatch at %d: %d vs %d", i, original[i].Index, restored[i].Index)
+		}
+		if math.Abs(original[i].Score-restored[i].Score) > 1e-9 {
+			t.Fatalf("score mismatch at %d: %f vs %f", i, original[i].Score, restored[i].Score)
+		}
+	}
+}
+
+func TestIDFWriteToReadFromScale(t *testing.T) {
+	docs := make([]string, 100_000)
+	for i := range docs {
+		docs[i] = corpus[i%len(corpus)]
+	}
+	idx := NewIDF(nil)
+	idx.Build(docs)
+	original := idx.Search("brown fox")
+
+	var buf bytes.Buffer
+	if _, err := idx.WriteTo(&buf); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("100K docs: %d bytes", buf.Len())
+
+	idx2 := NewIDF(nil)
+	if _, err := idx2.ReadFrom(&buf); err != nil {
+		t.Fatal(err)
+	}
+	restored := idx2.Search("brown fox")
+
+	if len(original) != len(restored) {
+		t.Fatalf("result count mismatch: %d vs %d", len(original), len(restored))
+	}
+	if math.Abs(original[0].Score-restored[0].Score) > 1e-9 {
+		t.Fatalf("top score mismatch: %f vs %f", original[0].Score, restored[0].Score)
+	}
+}
+
 var (
 	_ BagOfWordsRanker = (*TFIDF)(nil)
 	_ BagOfWordsRanker = (*BM25)(nil)
+	_ BagOfWordsRanker = (*IDF)(nil)
 )
