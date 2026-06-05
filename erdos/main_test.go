@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseHTML(t *testing.T) {
 	for _, tt := range []struct {
@@ -111,5 +115,91 @@ func TestCleanMath(t *testing.T) {
 				t.Errorf("cleanMath(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseForumPosts(t *testing.T) {
+	for _, tt := range []struct {
+		file       string
+		wantTotal  int
+		wantTop    int
+		firstID    string
+		firstAuthr string
+	}{
+		{
+			file:       filepath.Join("..", "erdos727.html"),
+			wantTotal:  6,
+			wantTop:    5,
+			firstID:    "post-3424",
+			firstAuthr: "Dogmachine",
+		},
+		{
+			file:       filepath.Join("..", "erdos20.html"),
+			wantTotal:  9,
+			wantTop:    7,
+			firstID:    "post-6089",
+			firstAuthr: "Dogmachine",
+		},
+	} {
+		t.Run(tt.file, func(t *testing.T) {
+			data, err := os.ReadFile(tt.file)
+			if err != nil {
+				t.Skipf("sample file not available: %v", err)
+			}
+			posts := parseForumPosts(string(data))
+			total := countPosts(posts)
+			if total != tt.wantTotal {
+				t.Errorf("total posts = %d, want %d", total, tt.wantTotal)
+			}
+			if len(posts) != tt.wantTop {
+				t.Errorf("top-level posts = %d, want %d", len(posts), tt.wantTop)
+			}
+			if len(posts) > 0 {
+				if posts[0].ID != tt.firstID {
+					t.Errorf("first post ID = %q, want %q", posts[0].ID, tt.firstID)
+				}
+				if posts[0].Author != tt.firstAuthr {
+					t.Errorf("first post author = %q, want %q", posts[0].Author, tt.firstAuthr)
+				}
+				if posts[0].BodyHTML == "" {
+					t.Error("first post body_html is empty")
+				}
+				if posts[0].Date == "" {
+					t.Error("first post date is empty")
+				}
+			}
+		})
+	}
+}
+
+func TestParseForumPostsReplies(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "erdos727.html"))
+	if err != nil {
+		t.Skipf("sample file not available: %v", err)
+	}
+	posts := parseForumPosts(string(data))
+
+	var withReplies *ForumPost
+	for i := range posts {
+		if len(posts[i].Replies) > 0 {
+			withReplies = &posts[i]
+			break
+		}
+	}
+	if withReplies == nil {
+		t.Fatal("expected at least one post with replies in erdos727.html")
+	}
+	if withReplies.ID != "post-851" {
+		t.Errorf("post with replies ID = %q, want %q", withReplies.ID, "post-851")
+	}
+	if len(withReplies.Replies) != 1 {
+		t.Fatalf("replies count = %d, want 1", len(withReplies.Replies))
+	}
+	reply := withReplies.Replies[0]
+	if reply.ID != "post-852" {
+		t.Errorf("reply ID = %q, want %q", reply.ID, "post-852")
+	}
+	if reply.Author != "Thomas Bloom" {
+		t.Errorf("reply author = %q, want %q", reply.Author, "Thomas Bloom")
 	}
 }

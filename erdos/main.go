@@ -11,13 +11,13 @@
 //
 // Similarly to patel.codes/oeis, a 'fetched'
 // tombstone prevents upstream from being hit
-// more than once per day per problem.
-//
-// Set ERDOS_CACHE_DIR_CLEAN=1 to auto-clean
-// stale problem cache entries.
+// more than once per day and each problem
+// from itself being queried upstream more
+// than once per day.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -81,18 +81,19 @@ func main() {
 	}
 }
 
-const erdosRemote = "git@github.com:teorth/erdosproblems.git"
-
 var (
 	erdosCacheDir string
 	erdosRepoDir  string
-	usage         = `usage: erdos <command> [args]
+)
+
+const erdosRemote = "git@github.com:teorth/erdosproblems.git"
+
+const usage = `usage: erdos <command> [args]
 
   list              all problems as JSON
   search <query>    BM25 search over comments+tags
-  fetch <N>         fetch problem statement from erdosproblems.com
+  fetch <N>         fetch problem and comments from erdosproblems.com
 `
-)
 
 type Problem struct {
 	Number  string   `yaml:"number"  json:"number"`
@@ -239,87 +240,136 @@ func gitRev(dir, ref string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func cacheKey(number string) string {
-	return time.Now().Format("20060102") + "-" + number + ".problem"
+func problemDir(number string) string {
+	return filepath.Join(erdosCacheDir, number)
 }
 
-func cacheClean() {
-	if os.Getenv("ERDOS_CACHE_DIR_CLEAN") != "1" {
-		return
-	}
-	today := time.Now().Format("20060102")
-	entries, err := os.ReadDir(erdosCacheDir)
+func problemCacheFresh(number string) bool {
+	marker := filepath.Join(problemDir(number), "fetched")
+	b, err := os.ReadFile(marker)
 	if err != nil {
-		return
+		return false
 	}
-	for _, e := range entries {
-		name := e.Name()
-		if !strings.HasSuffix(name, ".problem") {
-			continue
-		}
-		if strings.HasPrefix(name, today+"-") {
-			continue
-		}
-		os.Remove(filepath.Join(erdosCacheDir, name))
+	var ts int64
+	if _, err := fmt.Sscanf(string(b), "%d", &ts); err != nil {
+		return false
 	}
+	return time.Since(time.Unix(ts, 0)) < 24*time.Hour
 }
 
-func cmdFetch(number string) error {
-	cacheClean()
-	dir := erdosCacheDir
-	key := cacheKey(number)
-	path := filepath.Join(dir, key)
-
-	if data, err := os.ReadFile(path); err == nil {
-		_, err = os.Stdout.Write(data)
+func writeProblemCache(number string, prob []byte, comments []byte) error {
+	dir := problemDir(number)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	if err := os.WriteFile(filepath.Join(dir, "problem.json"), prob, 0o644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "comments.json"), comments, 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "fetched"), fmt.Appendf(nil, "%d\n", time.Now().Unix()), 0o644)
+}
 
-	url := "https://www.erdosproblems.com/latex/" + number
-	req, err := http.NewRequest("GET", url, nil)
+type CachedProblem struct {
+	Statement string   `json:"statement"`
+	Sections  []string `json:"sections,omitempty"`
+}
+
+type FetchResult struct {
+	Number    string      `json:"number"`
+	Statement string      `json:"statement"`
+	Sections  []string    `json:"sections,omitempty"`
+	Comments  []ForumPost `json:"comments"`
+}
+
+func httpGet(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	// Be honest about who you are.
 	req.Header.Set("User-Agent", "patel.codes.erdos/1.0")
-
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
+		return nil, fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func cmdFetch(number string) error {
+	dir := problemDir(number)
+
+	if problemCacheFresh(number) {
+		probData, err := os.ReadFile(filepath.Join(dir, "problem.json"))
+		if err != nil {
+			return err
+		}
+		commData, err := os.ReadFile(filepath.Join(dir, "comments.json"))
+		if err != nil {
+			return err
+		}
+		return emitFetchResult(number, probData, commData)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	latexBody, err := httpGet(ctx, "https://www.erdosproblems.com/latex/"+number)
 	if err != nil {
 		return err
 	}
 
-	statement, sections := parseHTML(string(body))
+	statement, sections := parseHTML(string(latexBody))
 	if statement == "" {
 		return fmt.Errorf("no problem statement found for #%s", number)
 	}
 
-	var out strings.Builder
-	fmt.Fprintf(&out, "# Erdős Problem #%s\n\n", number)
-	fmt.Fprintln(&out, statement)
-	for _, s := range sections {
-		fmt.Fprintln(&out)
-		fmt.Fprintln(&out, s)
-	}
-
-	result := out.String()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, []byte(result), 0o644); err != nil {
+	prob := CachedProblem{Statement: statement, Sections: sections}
+	probData, err := json.Marshal(prob)
+	if err != nil {
 		return err
 	}
 
-	_, err = os.Stdout.WriteString(result)
-	return err
+	forumBody, err := httpGet(ctx, "https://www.erdosproblems.com/forum/thread/"+number)
+	if err != nil {
+		return err
+	}
+
+	posts := parseForumPosts(string(forumBody))
+	commData, err := json.Marshal(posts)
+	if err != nil {
+		return err
+	}
+
+	if err := writeProblemCache(number, probData, commData); err != nil {
+		fmt.Fprintf(os.Stderr, "erdos: writing cache: %v\n", err)
+	}
+
+	return emitFetchResult(number, probData, commData)
+}
+
+func emitFetchResult(number string, probData, commData []byte) error {
+	var prob CachedProblem
+	if err := json.Unmarshal(probData, &prob); err != nil {
+		return err
+	}
+	var posts []ForumPost
+	if err := json.Unmarshal(commData, &posts); err != nil {
+		return err
+	}
+	result := FetchResult{
+		Number:    number,
+		Statement: prob.Statement,
+		Sections:  prob.Sections,
+		Comments:  posts,
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(result)
 }
 
 func parseHTML(s string) (statement string, sections []string) {
@@ -420,4 +470,169 @@ func cleanMath(s string) string {
 		s = strings.ReplaceAll(s, noise, "")
 	}
 	return strings.TrimSpace(s)
+}
+
+type ForumPost struct {
+	ID       string      `json:"id"`
+	Author   string      `json:"author"`
+	Date     string      `json:"date"`
+	BodyHTML string      `json:"body_html"`
+	Depth    int         `json:"depth"`
+	Replies  []ForumPost `json:"replies,omitempty"`
+}
+
+func countPosts(posts []ForumPost) int {
+	n := len(posts)
+	for _, p := range posts {
+		n += countPosts(p.Replies)
+	}
+	return n
+}
+
+func parseForumPosts(s string) []ForumPost {
+	doc, err := html.Parse(strings.NewReader(s))
+	if err != nil {
+		return nil
+	}
+
+	var posts []ForumPost
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if isPostList(n) {
+			posts = append(posts, extractPostsFromList(n)...)
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	return posts
+}
+
+func isPostList(n *html.Node) bool {
+	if n.Type != html.ElementNode || n.Data != "ul" {
+		return false
+	}
+	for _, a := range n.Attr {
+		if a.Key == "class" && strings.Contains(a.Val, "post-list") {
+			return true
+		}
+	}
+	return false
+}
+
+func extractPostsFromList(ul *html.Node) []ForumPost {
+	var posts []ForumPost
+	for li := ul.FirstChild; li != nil; li = li.NextSibling {
+		if li.Type != html.ElementNode || li.Data != "li" {
+			continue
+		}
+		if !hasClass(li, "post") {
+			continue
+		}
+		post := extractPost(li)
+		posts = append(posts, post)
+	}
+	return posts
+}
+
+func extractPost(li *html.Node) ForumPost {
+	var p ForumPost
+	p.ID = getAttr(li, "id")
+	p.Depth = parseDepth(li)
+
+	for c := li.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode {
+			continue
+		}
+		if c.Data == "div" && hasClass(c, "post-body") {
+			p.BodyHTML = renderChildren(c)
+		}
+		if c.Data == "div" && hasClass(c, "post-meta") {
+			p.Author, p.Date = parsePostMeta(c)
+		}
+		if c.Data == "ul" && hasClass(c, "replies") {
+			p.Replies = extractPostsFromList(c)
+		}
+	}
+	return p
+}
+
+func parseDepth(n *html.Node) int {
+	cls := getAttr(n, "class")
+	for _, part := range strings.Fields(cls) {
+		if strings.HasPrefix(part, "depth-") {
+			var d int
+			if _, err := fmt.Sscanf(part, "depth-%d", &d); err == nil {
+				return d
+			}
+		}
+	}
+	return 0
+}
+
+func parsePostMeta(div *html.Node) (author, date string) {
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "strong" {
+			author = textContent(n)
+		}
+		if n.Type == html.ElementNode && n.Data == "a" {
+			href := getAttr(n, "href")
+			if strings.Contains(href, "#post-") {
+				date = textContent(n)
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(div)
+	return strings.TrimSpace(author), strings.TrimSpace(date)
+}
+
+func textContent(n *html.Node) string {
+	var buf strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			buf.WriteString(n.Data)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(n)
+	return buf.String()
+}
+
+func renderChildren(n *html.Node) string {
+	var buf strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		html.Render(&buf, c)
+	}
+	return strings.TrimSpace(buf.String())
+}
+
+func hasClass(n *html.Node, cls string) bool {
+	for _, a := range n.Attr {
+		if a.Key == "class" {
+			for _, part := range strings.Fields(a.Val) {
+				if part == cls {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func getAttr(n *html.Node, key string) string {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return a.Val
+		}
+	}
+	return ""
 }
