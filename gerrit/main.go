@@ -37,7 +37,11 @@ func main() {
 
 	gerritDir = os.Getenv("GERRIT_CACHE_DIR")
 	if gerritDir == "" {
-		log.Fatal("GERRIT_CACHE_DIR is not set")
+		base, err := os.UserCacheDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		gerritDir = filepath.Join(base, "gerrit")
 	}
 
 	args := os.Args[1:]

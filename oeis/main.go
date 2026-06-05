@@ -29,7 +29,11 @@ func main() {
 	log.SetFlags(0)
 	cacheDir = os.Getenv("OEIS_CACHE_DIR")
 	if cacheDir == "" {
-		log.Fatal("OEIS_CACHE_DIR is not set")
+		base, err := os.UserCacheDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		cacheDir = filepath.Join(base, "oeis")
 	}
 	oeisDir = filepath.Join(cacheDir, "oeisdata.git", "seq")
 

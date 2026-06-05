@@ -39,7 +39,11 @@ func main() {
 
 	cacheDir = os.Getenv("WHATWG_CACHE_DIR")
 	if cacheDir == "" {
-		log.Fatal("WHATWG_CACHE_DIR is not set")
+		base, err := os.UserCacheDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		cacheDir = filepath.Join(base, "whatwg")
 	}
 
 	args := os.Args[1:]

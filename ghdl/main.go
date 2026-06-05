@@ -45,7 +45,11 @@ func main() {
 		repo = args[0]
 		cacheRoot := os.Getenv("GHDL_CACHE_DIR")
 		if cacheRoot == "" {
-			log.Fatal("GHDL_CACHE_DIR is not set")
+			base, err := os.UserCacheDir()
+			if err != nil {
+				log.Fatal(err)
+			}
+			cacheRoot = filepath.Join(base, "ghdl")
 		}
 		cacheDir = filepath.Join(cacheRoot, repo)
 		err = scrape()

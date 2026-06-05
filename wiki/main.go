@@ -44,7 +44,11 @@ func main() {
 
 	wikiCacheDir = os.Getenv("WIKI_CACHE_DIR")
 	if wikiCacheDir == "" {
-		log.Fatal("WIKI_CACHE_DIR is not set")
+		base, err := os.UserCacheDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		wikiCacheDir = filepath.Join(base, "wiki")
 	}
 	if err := wikiResolveDump(); err != nil {
 		fmt.Fprintf(os.Stderr, "goof-wiki: %v\n", err)

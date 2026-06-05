@@ -40,7 +40,11 @@ func main() {
 
 	erdosCacheDir = os.Getenv("ERDOS_CACHE_DIR")
 	if erdosCacheDir == "" {
-		log.Fatal("ERDOS_CACHE_DIR is not set")
+		base, err := os.UserCacheDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		erdosCacheDir = filepath.Join(base, "erdos")
 	}
 
 	if err := ensureRepo(); err != nil {

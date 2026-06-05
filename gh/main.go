@@ -27,7 +27,11 @@ func main() {
 
 	ghCacheRoot = os.Getenv("GH_CACHE_DIR")
 	if ghCacheRoot == "" {
-		log.Fatal("GH_CACHE_DIR is not set")
+		base, err := os.UserCacheDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		ghCacheRoot = filepath.Join(base, "gh")
 	}
 
 	args := os.Args[1:]

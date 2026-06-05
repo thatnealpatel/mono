@@ -21,7 +21,11 @@ func main() {
 
 	dir := os.Getenv("RFC_CACHE_DIR")
 	if dir == "" {
-		log.Fatal("RFC_CACHE_DIR is not set")
+		base, err := os.UserCacheDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		dir = filepath.Join(base, "rfc")
 	}
 
 	fs := flag.NewFlagSet("rfc", flag.ExitOnError)

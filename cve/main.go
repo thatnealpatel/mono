@@ -23,7 +23,11 @@ func main() {
 
 	cveCacheDir = os.Getenv("CVE_CACHE_DIR")
 	if cveCacheDir == "" {
-		log.Fatal("CVE_CACHE_DIR is not set")
+		base, err := os.UserCacheDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		cveCacheDir = filepath.Join(base, "cve")
 	}
 
 	if err := ensureRepo(); err != nil {
