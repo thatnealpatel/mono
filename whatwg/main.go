@@ -10,7 +10,7 @@
 // On reasonably fast consumer hardware, the
 // parsing of the entire spec is O(10ms) to
 // O(100ms) obviating the need for an type of
-// intermediate representation.
+// caching.
 package main
 
 import (
@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/net/html"
@@ -202,26 +201,15 @@ func ensureSpec() error {
 }
 
 func specDoc() (*html.Node, error) {
-	specCache.Do(func() {
-		specCache.err = ensureSpec()
-		if specCache.err != nil {
-			return
-		}
-		f, err := os.Open(specFile())
-		if err != nil {
-			specCache.err = err
-			return
-		}
-		defer f.Close()
-		specCache.doc, specCache.err = html.Parse(f)
-	})
-	return specCache.doc, specCache.err
-}
-
-var specCache struct {
-	sync.Once
-	doc *html.Node
-	err error
+	if err := ensureSpec(); err != nil {
+		return nil, err
+	}
+	f, err := os.Open(specFile())
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return html.Parse(f)
 }
 
 func findHeadingBySecno(doc *html.Node, target string) *html.Node {
