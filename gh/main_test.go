@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -41,7 +42,7 @@ func TestGhEnsureCacheStale(t *testing.T) {
 	if err == nil {
 		t.Fatal("stale cache should attempt re-fetch and fail (no network), got nil")
 	}
-	if _, serr := os.Stat(numDir); !os.IsNotExist(serr) {
+	if _, serr := os.Stat(numDir); !errors.Is(serr, os.ErrNotExist) {
 		t.Error("stale cache dir should have been removed before re-fetch")
 	}
 }

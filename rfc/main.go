@@ -9,12 +9,16 @@ import (
 	"io"
 	"log"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
+
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 func main() {
 	log.SetFlags(0)
@@ -115,9 +119,12 @@ func rfcEnsure(dir, num string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	url := "https://www.rfc-editor.org/rfc/rfc" + num + ".txt"
+	url, err := neturl.JoinPath("https://www.rfc-editor.org", "rfc", "rfc"+num+".txt")
+	if err != nil {
+		return err
+	}
 	fmt.Fprintf(os.Stderr, "downloading rfc%s.txt ... ", num)
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ERROR")
 		return fmt.Errorf("fetching rfc %s: %w", num, err)
@@ -136,7 +143,7 @@ func rfcEnsure(dir, num string) error {
 		err = closeErr
 	}
 	if err != nil {
-		os.Remove(path)
+		os.Remove(path) // ignore error
 		fmt.Fprintln(os.Stderr, "ERROR")
 		return fmt.Errorf("writing rfc %s: %w", num, err)
 	}

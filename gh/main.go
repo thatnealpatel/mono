@@ -20,7 +20,10 @@ import (
 	"time"
 )
 
-var ghCacheRoot string
+var (
+	ghCacheRoot string
+	httpClient  = &http.Client{Timeout: 30 * time.Second}
+)
 
 func main() {
 	log.SetFlags(0)
@@ -83,22 +86,22 @@ const usage = `usage: gh <owner/repo> <command> [args]
   <owner/repo> search <query> search issues
 `
 
-func ghCacheDir(repo string) string {
-	return filepath.Join(ghCacheRoot, repo)
-}
-
 func ghSearch(repo string, query string) error {
 	token := loadGitHubToken()
 	q := "repo:" + repo + " " + query
 	if !strings.Contains(q, "is:") {
 		q = "is:issue " + q
 	}
-	u := githubAPI + "/search/issues?q=" + url.QueryEscape(q) + "&per_page=30"
+	base, err := url.JoinPath(githubAPI, "search", "issues")
+	if err != nil {
+		return err
+	}
+	u := base + "?q=" + url.QueryEscape(q) + "&per_page=30"
 	body, _, err := githubGet(u, token)
 	if err != nil {
 		return fmt.Errorf("searching: %w", err)
 	}
-	os.Stdout.Write(body)
+	fmt.Print(string(body))
 	return nil
 }
 
@@ -118,7 +121,7 @@ func githubGet(u, token string) (body []byte, next string, err error) {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, "", err
 	}
@@ -163,11 +166,18 @@ func parseLinkNext(header string) string {
 	return ""
 }
 
+func ghCacheDir(repo string) string {
+	return filepath.Join(ghCacheRoot, repo)
+}
+
 func ghShow(repo string, num int, comments bool) error {
 	dir := ghCacheDir(repo)
 	token := loadGitHubToken()
 	numStr := strconv.Itoa(num)
-	baseURL := githubAPI + "/repos/" + repo
+	baseURL, err := url.JoinPath(githubAPI, "repos", repo)
+	if err != nil {
+		return err
+	}
 	if err := ghEnsure(dir, numStr, token, baseURL); err != nil {
 		return err
 	}
@@ -176,14 +186,14 @@ func ghShow(repo string, num int, comments bool) error {
 		if err != nil {
 			return err
 		}
-		os.Stdout.Write(data)
+		fmt.Print(string(data))
 		return nil
 	}
 	data, err := os.ReadFile(filepath.Join(dir, numStr, "issue.json"))
 	if err != nil {
 		return err
 	}
-	os.Stdout.Write(data)
+	fmt.Print(string(data))
 	return nil
 }
 
@@ -193,24 +203,32 @@ func ghEnsure(dir, num, token, baseURL string) (retErr error) {
 		if time.Since(info.ModTime()) < 30*time.Minute {
 			return nil
 		}
-		os.RemoveAll(ghDir)
+		os.RemoveAll(ghDir) // ignore error
 	}
 	if err := os.MkdirAll(ghDir, 0o755); err != nil {
 		return err
 	}
 	defer func() {
 		if retErr != nil {
-			os.RemoveAll(ghDir)
+			os.RemoveAll(ghDir) // ignore error
 		}
 	}()
-	issue, _, err := githubGet(baseURL+"/issues/"+num, token)
+	issueURL, err := url.JoinPath(baseURL, "issues", num)
+	if err != nil {
+		return err
+	}
+	issue, _, err := githubGet(issueURL, token)
 	if err != nil {
 		return fmt.Errorf("fetching issue: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(ghDir, "issue.json"), issue, 0o644); err != nil {
 		return err
 	}
-	cmts, err := githubGetAll(baseURL+"/issues/"+num+"/comments?per_page=100", token)
+	cmtsURL, err := url.JoinPath(baseURL, "issues", num, "comments")
+	if err != nil {
+		return err
+	}
+	cmts, err := githubGetAll(cmtsURL+"?per_page=100", token)
 	if err != nil {
 		return fmt.Errorf("fetching comments: %w", err)
 	}

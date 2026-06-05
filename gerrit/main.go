@@ -26,6 +26,7 @@ import (
 var (
 	gerritDir  string
 	gerritBase = "https://go-review.googlesource.com"
+	httpClient = &http.Client{Timeout: 30 * time.Second}
 )
 
 func main() {
@@ -90,7 +91,11 @@ env: GERRIT_REVIEW_INSTANCE (default: go-review)
 `
 
 func gerritSearch(query string) error {
-	url := gerritBase + "/changes/?q=" + neturl.QueryEscape(query) + "&n=50&o=DETAILED_ACCOUNTS"
+	base, err := neturl.JoinPath(gerritBase, "changes")
+	if err != nil {
+		return err
+	}
+	url := base + "?q=" + neturl.QueryEscape(query) + "&n=50&o=DETAILED_ACCOUNTS"
 	body, err := gerritJSON(url)
 	if err != nil {
 		return err
@@ -115,7 +120,7 @@ func gerritSearch(query string) error {
 }
 
 func gerritJSON(url string) ([]byte, error) {
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -415,7 +420,11 @@ func isHex(s string) bool {
 }
 
 func clResolveHash(hash string) (string, error) {
-	body, err := gerritJSON(gerritBase + "/changes/?q=commit:" + hash)
+	u, err := neturl.JoinPath(gerritBase, "changes")
+	if err != nil {
+		return "", fmt.Errorf("resolving hash %s: %w", hash, err)
+	}
+	body, err := gerritJSON(u + "?q=commit:" + hash)
 	if err != nil {
 		return "", fmt.Errorf("resolving hash %s: %w", hash, err)
 	}
@@ -437,24 +446,32 @@ func gerritEnsure(dir, num string) (retErr error) {
 		if time.Since(info.ModTime()) < 30*time.Minute {
 			return nil
 		}
-		os.RemoveAll(numDir)
+		os.RemoveAll(numDir) // ignore error
 	}
 	if err := os.MkdirAll(numDir, 0o755); err != nil {
 		return err
 	}
 	defer func() {
 		if retErr != nil {
-			os.RemoveAll(numDir)
+			os.RemoveAll(numDir) // ignore error
 		}
 	}()
-	detail, err := gerritJSON(gerritBase + "/changes/" + num + "/detail?o=ALL_REVISIONS&o=ALL_COMMITS")
+	detailURL, err := neturl.JoinPath(gerritBase, "changes", num, "detail")
+	if err != nil {
+		return err
+	}
+	detail, err := gerritJSON(detailURL + "?o=ALL_REVISIONS&o=ALL_COMMITS")
 	if err != nil {
 		return fmt.Errorf("fetching detail: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(numDir, "detail.json"), detail, 0o644); err != nil {
 		return err
 	}
-	resp, err := http.Get(gerritBase + "/changes/" + num + "/revisions/current/patch")
+	patchURL, err := neturl.JoinPath(gerritBase, "changes", num, "revisions", "current", "patch")
+	if err != nil {
+		return err
+	}
+	resp, err := httpClient.Get(patchURL)
 	if err != nil {
 		return fmt.Errorf("fetching patch: %w", err)
 	}
@@ -473,7 +490,11 @@ func gerritEnsure(dir, num string) (retErr error) {
 	if err := os.WriteFile(filepath.Join(numDir, "patch.diff"), patch, 0o644); err != nil {
 		return err
 	}
-	cmt, err := gerritJSON(gerritBase + "/changes/" + num + "/comments")
+	cmtURL, err := neturl.JoinPath(gerritBase, "changes", num, "comments")
+	if err != nil {
+		return err
+	}
+	cmt, err := gerritJSON(cmtURL)
 	if err != nil {
 		return fmt.Errorf("fetching comments: %w", err)
 	}

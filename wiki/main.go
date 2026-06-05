@@ -100,6 +100,28 @@ const usage = `usage: wiki <command> [args]
   search <query>     search titles
 `
 
+var reWikiDump = regexp.MustCompile(`^enwiki-(\d{8})-pages-articles-multistream\.xml\.bz2$`)
+
+func wikiResolveDump() error {
+	entries, err := os.ReadDir(wikiCacheDir)
+	if err != nil {
+		return fmt.Errorf("reading wikipedia source dir: %w", err)
+	}
+	var best string
+	for _, e := range entries {
+		if m := reWikiDump.FindStringSubmatch(e.Name()); m != nil {
+			if m[1] > best {
+				best = m[1]
+			}
+		}
+	}
+	if best == "" {
+		return fmt.Errorf("no enwiki dump found in %s", wikiCacheDir)
+	}
+	wikiDumpDate = best
+	return nil
+}
+
 func wikiBuild() error {
 	f, err := os.Open(filepath.Join(wikiCacheDir, "enwiki-"+wikiDumpDate+"-pages-articles-multistream-index.txt.bz2"))
 	if err != nil {
@@ -134,28 +156,6 @@ func wikiBuild() error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "indexed %d articles\n", len(entries))
-	return nil
-}
-
-var reWikiDump = regexp.MustCompile(`^enwiki-(\d{8})-pages-articles-multistream\.xml\.bz2$`)
-
-func wikiResolveDump() error {
-	entries, err := os.ReadDir(wikiCacheDir)
-	if err != nil {
-		return fmt.Errorf("reading wikipedia source dir: %w", err)
-	}
-	var best string
-	for _, e := range entries {
-		if m := reWikiDump.FindStringSubmatch(e.Name()); m != nil {
-			if m[1] > best {
-				best = m[1]
-			}
-		}
-	}
-	if best == "" {
-		return fmt.Errorf("no enwiki dump found in %s", wikiCacheDir)
-	}
-	wikiDumpDate = best
 	return nil
 }
 
@@ -523,7 +523,7 @@ func wikiSearch(query string) error {
 			err = closeErr
 		}
 		if err != nil {
-			os.Remove(cachePath)
+			os.Remove(cachePath) // ignore error
 			return err
 		}
 	}

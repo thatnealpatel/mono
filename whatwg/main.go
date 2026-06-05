@@ -16,6 +16,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -31,7 +32,10 @@ import (
 	"golang.org/x/net/html"
 )
 
-var cacheDir string
+var (
+	cacheDir   string
+	httpClient = &http.Client{Timeout: 30 * time.Second}
+)
 
 func main() {
 	log.SetFlags(0)
@@ -147,10 +151,13 @@ func ensureSpec() error {
 		if time.Since(info.ModTime()) < 24*time.Hour {
 			return nil
 		}
-		b, _ := os.ReadFile(etagFile())
+		b, err := os.ReadFile(etagFile())
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("reading etag: %w", err)
+		}
 		etag = strings.TrimSpace(string(b))
 	}
-	resp, err := http.Head(specURL)
+	resp, err := httpClient.Head(specURL)
 	if err != nil {
 		if _, serr := os.Stat(specFile()); serr == nil {
 			fmt.Fprintln(os.Stderr, "whatwg: update check failed, using cached spec")
@@ -164,11 +171,13 @@ func ensureSpec() error {
 	}
 	remoteEtag := resp.Header.Get("ETag")
 	if etag != "" && remoteEtag == etag {
-		os.Chtimes(etagFile(), time.Time{}, time.Now())
+		if err := os.Chtimes(etagFile(), time.Time{}, time.Now()); err != nil {
+			return fmt.Errorf("touching etag: %w", err)
+		}
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "whatwg: updating spec ... ")
-	dlResp, err := http.Get(specURL)
+	dlResp, err := httpClient.Get(specURL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ERROR")
 		return fmt.Errorf("fetching spec: %w", err)
@@ -187,7 +196,7 @@ func ensureSpec() error {
 		err = closeErr
 	}
 	if err != nil {
-		os.Remove(specFile())
+		os.Remove(specFile()) // ignore error
 		fmt.Fprintln(os.Stderr, "ERROR")
 		return fmt.Errorf("writing spec: %w", err)
 	}
@@ -309,12 +318,34 @@ func textOf(n *html.Node) string {
 	return b.String()
 }
 
+type sectionJSON struct {
+	Secno     string         `json:"secno"`
+	Title     string         `json:"title"`
+	SizeBytes int            `json:"size_bytes"`
+	Children  []sectionChild `json:"children"`
+}
+
+type sectionChild struct {
+	Secno     string `json:"secno"`
+	Title     string `json:"title"`
+	SizeBytes int    `json:"size_bytes"`
+}
+
+type countingWriter struct{ n int64 }
+
+func (w *countingWriter) Write(p []byte) (int, error) {
+	w.n += int64(len(p))
+	return len(p), nil
+}
+
 func whatwgSectionJSON(secno string, start *html.Node) error {
 	h := extractHeading(start)
 	out := sectionJSON{Secno: h.Secno, Title: h.Title}
 	var cw countingWriter
 	bw := bufio.NewWriter(&cw)
-	_ = html.Render(bw, start)
+	if err := html.Render(bw, start); err != nil {
+		return fmt.Errorf("rendering section: %w", err)
+	}
 	parentLevel := h.Level
 	var childStart *html.Node
 	var childHeading heading
@@ -338,7 +369,9 @@ func whatwgSectionJSON(secno string, start *html.Node) error {
 				childStart = nil
 			}
 		}
-		_ = html.Render(bw, n)
+		if err := html.Render(bw, n); err != nil {
+			return fmt.Errorf("rendering section: %w", err)
+		}
 	}
 	if childStart != nil {
 		out.Children = append(out.Children, sectionChild{
@@ -347,29 +380,11 @@ func whatwgSectionJSON(secno string, start *html.Node) error {
 			SizeBytes: sectionSize(childStart, nil),
 		})
 	}
-	_ = bw.Flush()
+	if err := bw.Flush(); err != nil {
+		return fmt.Errorf("flushing section: %w", err)
+	}
 	out.SizeBytes = int(cw.n)
 	return printJSON(out)
-}
-
-type sectionJSON struct {
-	Secno     string         `json:"secno"`
-	Title     string         `json:"title"`
-	SizeBytes int            `json:"size_bytes"`
-	Children  []sectionChild `json:"children"`
-}
-
-type sectionChild struct {
-	Secno     string `json:"secno"`
-	Title     string `json:"title"`
-	SizeBytes int    `json:"size_bytes"`
-}
-
-type countingWriter struct{ n int64 }
-
-func (w *countingWriter) Write(p []byte) (int, error) {
-	w.n += int64(len(p))
-	return len(p), nil
 }
 
 func isDescendantSecno(child, parent string) bool {
@@ -380,15 +395,23 @@ func sectionSize(start, end *html.Node) int {
 	var cw countingWriter
 	bw := bufio.NewWriter(&cw)
 	for n := start; n != nil && n != end; n = n.NextSibling {
-		_ = html.Render(bw, n)
+		if err := html.Render(bw, n); err != nil {
+			// countingWriter never errors; this is defensive.
+			return int(cw.n)
+		}
 	}
-	_ = bw.Flush()
+	if err := bw.Flush(); err != nil {
+		return int(cw.n)
+	}
 	return int(cw.n)
 }
 
 func renderHTML(n *html.Node) string {
 	var b strings.Builder
-	html.Render(&b, n)
+	// strings.Builder.Write never errors, but don't discard.
+	if err := html.Render(&b, n); err != nil {
+		return b.String()
+	}
 	return b.String()
 }
 
@@ -396,6 +419,14 @@ func printJSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+type switchRule struct {
+	Conditions  []string `json:"conditions"`
+	Prose       string   `json:"prose"`
+	Refs        []string `json:"refs,omitempty"`
+	InfraRefs   []string `json:"infra_refs,omitempty"`
+	ParseErrors []string `json:"parse_errors,omitempty"`
 }
 
 func whatwgState(query string) error {
@@ -492,14 +523,6 @@ func hasAttr(n *html.Node, key string) bool {
 	return false
 }
 
-type switchRule struct {
-	Conditions  []string `json:"conditions"`
-	Prose       string   `json:"prose"`
-	Refs        []string `json:"refs,omitempty"`
-	InfraRefs   []string `json:"infra_refs,omitempty"`
-	ParseErrors []string `json:"parse_errors,omitempty"`
-}
-
 func parseSwitchDL(dl *html.Node) []switchRule {
 	var rules []switchRule
 	var pending []string
@@ -585,6 +608,13 @@ func kindOf(isSwitch bool) string {
 	return "steps"
 }
 
+type algoRecord struct {
+	Secno  string `json:"secno,omitempty"`
+	Anchor string `json:"anchor"`
+	Name   string `json:"name"`
+	node   *html.Node
+}
+
 func whatwgAlgoList() error {
 	doc, err := specDoc()
 	if err != nil {
@@ -595,7 +625,9 @@ func whatwgAlgoList() error {
 	defer bw.Flush()
 	enc := json.NewEncoder(bw)
 	for _, a := range algos {
-		_ = enc.Encode(a)
+		if err := enc.Encode(a); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -640,13 +672,6 @@ func scanAlgos(doc *html.Node) []algoRecord {
 		}
 	}
 	return out
-}
-
-type algoRecord struct {
-	Secno  string `json:"secno,omitempty"`
-	Anchor string `json:"anchor"`
-	Name   string `json:"name"`
-	node   *html.Node
 }
 
 // whatwgAlgoShow returns raw HTML:

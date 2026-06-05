@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +82,18 @@ func srcDir() (string, error) {
 	return filepath.Join(dotLake, "packages"), nil
 }
 
+func cacheDir() (string, error) {
+	dir := os.Getenv("LEANDOC_CACHE_DIR")
+	if dir == "" {
+		base, err := os.UserCacheDir()
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(base, "leandoc")
+	}
+	return dir, os.MkdirAll(dir, 0o755)
+}
+
 func ensureIndex() error {
 	cache, err := cacheDir()
 	if err != nil {
@@ -94,11 +105,11 @@ func ensureIndex() error {
 	if err == nil {
 		src, err := srcDir()
 		if err != nil {
-			return nil
+			return err
 		}
 		srcInfo, err := os.Stat(src)
 		if err != nil {
-			return nil
+			return err
 		}
 		if info.ModTime().After(srcInfo.ModTime()) {
 			return nil
@@ -247,16 +258,4 @@ func search(query string, verbose bool) error {
 		}
 	}
 	return json.NewEncoder(os.Stdout).Encode(out)
-}
-
-func cacheDir() (string, error) {
-	dir := os.Getenv("LEANDOC_CACHE_DIR")
-	if dir == "" {
-		base, err := os.UserCacheDir()
-		if err != nil {
-			log.Fatal(err)
-		}
-		dir = filepath.Join(base, "leandoc")
-	}
-	return dir, os.MkdirAll(dir, 0o755)
 }

@@ -16,6 +16,12 @@ import (
 	"time"
 )
 
+var (
+	repo       string
+	cacheDir   string
+	linkNextRe = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
+)
+
 func main() {
 	var ghpat string
 	flag.StringVar(&ghpat, "ghpat", "", "GitHub personal access token")
@@ -29,6 +35,7 @@ func main() {
 	}
 
 	client = &http.Client{
+		Timeout:   30 * time.Second,
 		Transport: &authTransport{token: ghpat, rt: http.DefaultTransport},
 	}
 
@@ -78,11 +85,11 @@ func scrape() error {
 		return err
 	}
 
-	listURL := repoURL("issues", url.Values{
+	listURL := repoURL("issues") + "?" + url.Values{
 		"state":     {"all"},
 		"per_page":  {"100"},
 		"direction": {"asc"},
-	})
+	}.Encode()
 	var fetched, skipped, updated int
 
 	for listURL != "" {
@@ -108,7 +115,7 @@ func scrape() error {
 			issDir := filepath.Join(cacheDir, numStr)
 			issFile := filepath.Join(issDir, "issue.json")
 			issETag := filepath.Join(issDir, "issue.etag")
-			issURL := repoURL("issues/"+numStr, nil)
+			issURL := repoURL("issues", numStr)
 
 			cached := readETag(issETag)
 			if cached != "" {
@@ -163,20 +170,17 @@ func scrape() error {
 	return nil
 }
 
-var (
-	repo       string
-	cacheDir   string
-	linkNextRe = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
-)
+func repoURL(parts ...string) string {
+	segs := append([]string{"repos", repo}, parts...)
+	u, _ := url.JoinPath("https://api.github.com", segs...)
+	return u
+}
 
-func repoURL(path string, query url.Values) string {
-	u := &url.URL{
-		Scheme:   "https",
-		Host:     "api.github.com",
-		Path:     "/repos/" + repo + "/" + path,
-		RawQuery: query.Encode(),
-	}
-	return u.String()
+type ghResponse struct {
+	Body   []byte
+	Next   string
+	ETag   string
+	NotMod bool
 }
 
 func ghGet(rawURL, ifNoneMatch string) (*ghResponse, error) {
@@ -230,13 +234,6 @@ func ghGet(rawURL, ifNoneMatch string) (*ghResponse, error) {
 	}
 }
 
-type ghResponse struct {
-	Body   []byte
-	Next   string
-	ETag   string
-	NotMod bool
-}
-
 func rateLimitWait(resp *http.Response) time.Duration {
 	if ra := resp.Header.Get("Retry-After"); ra != "" {
 		if secs, err := strconv.Atoi(ra); err == nil {
@@ -274,7 +271,7 @@ func writeETag(path, etag string) error {
 
 func updateComments(issDir, numStr string) error {
 	cmtETagFile := filepath.Join(issDir, "comments.etag")
-	cmtURL := repoURL("issues/"+numStr+"/comments", url.Values{"per_page": {"100"}})
+	cmtURL := repoURL("issues", numStr, "comments") + "?" + url.Values{"per_page": {"100"}}.Encode()
 	cmts, etag, err := ghGetAll(cmtURL)
 	if err != nil {
 		return fmt.Errorf("issue %s comments: %w", numStr, err)

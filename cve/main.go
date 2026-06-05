@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -94,15 +95,6 @@ search flags:
 `
 )
 
-type Record struct {
-	ID    string `json:"id"`
-	State string `json:"state"`
-	Year  string `json:"year"`
-	CNA   string `json:"cna"`
-	Title string `json:"title"`
-	Desc  string `json:"desc"`
-}
-
 func ensureRepo() error {
 	if err := os.MkdirAll(cveCacheDir, 0o755); err != nil {
 		return err
@@ -111,7 +103,9 @@ func ensureRepo() error {
 	if _, err := os.Stat(filepath.Join(cveRepoDir, ".git")); err == nil {
 		return ensureFresh(cveRepoDir)
 	}
-	cmd := exec.Command("git", "clone", "--depth", "1", cveRemote, cveRepoDir)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", cveRemote, cveRepoDir)
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("cloning cvelistV5: %w", err)
@@ -129,7 +123,9 @@ func ensureFresh(dir string) error {
 			}
 		}
 	}
-	fetch := exec.Command("git", "-C", dir, "fetch")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	fetch := exec.CommandContext(ctx, "git", "-C", dir, "fetch")
 	fetch.Stderr = os.Stderr
 	if err := fetch.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "cve: fetch failed, using cached data")
@@ -140,17 +136,17 @@ func ensureFresh(dir string) error {
 	}
 	local, err := gitRev(dir, "HEAD")
 	if err != nil {
-		return nil
+		return fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
 	remote, err := gitRev(dir, "@{u}")
 	if err != nil {
-		return nil
+		return fmt.Errorf("git rev-parse @{u}: %w", err)
 	}
 	if local == remote {
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "cve: updating %s..%s ... ", local[:8], remote[:8])
-	pull := exec.Command("git", "-C", dir, "pull", "--ff-only")
+	pull := exec.CommandContext(ctx, "git", "-C", dir, "pull", "--ff-only")
 	pull.Stderr = os.Stderr
 	if err := pull.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "update failed, using cached data")
@@ -161,11 +157,22 @@ func ensureFresh(dir string) error {
 }
 
 func gitRev(dir, ref string) (string, error) {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", ref).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", ref).Output()
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+type Record struct {
+	ID    string `json:"id"`
+	State string `json:"state"`
+	Year  string `json:"year"`
+	CNA   string `json:"cna"`
+	Title string `json:"title"`
+	Desc  string `json:"desc"`
 }
 
 func parseAll() ([]Record, error) {

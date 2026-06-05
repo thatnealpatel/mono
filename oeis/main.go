@@ -12,6 +12,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -23,6 +24,11 @@ import (
 	"time"
 
 	"patel.codes/ranking"
+)
+
+var (
+	cacheDir string
+	oeisDir  string
 )
 
 func main() {
@@ -104,11 +110,6 @@ func oeisSeqPath(id string) string {
 	return filepath.Join(oeisDir, id[:4], id+".seq")
 }
 
-var (
-	cacheDir string
-	oeisDir  string
-)
-
 const oeisRemote = "git@github.com:oeis/oeisdata.git"
 
 func ensureRepo() error {
@@ -119,7 +120,9 @@ func ensureRepo() error {
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 		return ensureFresh(dir)
 	}
-	cmd := exec.Command("git", "clone", oeisRemote, dir)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "clone", oeisRemote, dir)
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("cloning oeisdata: %w", err)
@@ -137,7 +140,9 @@ func ensureFresh(dir string) error {
 			}
 		}
 	}
-	fetch := exec.Command("git", "-C", dir, "fetch")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	fetch := exec.CommandContext(ctx, "git", "-C", dir, "fetch")
 	fetch.Stderr = os.Stderr
 	if err := fetch.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "oeis: fetch failed, using cached data")
@@ -148,17 +153,17 @@ func ensureFresh(dir string) error {
 	}
 	local, err := gitRev(dir, "HEAD")
 	if err != nil {
-		return nil
+		return fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
 	remote, err := gitRev(dir, "@{u}")
 	if err != nil {
-		return nil
+		return fmt.Errorf("git rev-parse @{u}: %w", err)
 	}
 	if local == remote {
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "oeis: updating %s..%s ... ", local[:8], remote[:8])
-	pull := exec.Command("git", "-C", dir, "pull", "--ff-only")
+	pull := exec.CommandContext(ctx, "git", "-C", dir, "pull", "--ff-only")
 	pull.Stderr = os.Stderr
 	if err := pull.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "update failed, using cached data")
@@ -283,6 +288,7 @@ func oeisWalk(fn func(id, path string, q oeisQuick)) error {
 
 			files, err := os.ReadDir(filepath.Join(oeisDir, dir))
 			if err != nil {
+				fmt.Fprintf(os.Stderr, "oeis: readdir %s: %v\n", dir, err)
 				return
 			}
 			for _, f := range files {

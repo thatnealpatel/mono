@@ -23,6 +23,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +35,8 @@ import (
 	"gopkg.in/yaml.v3"
 	"patel.codes/ranking"
 )
+
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 func main() {
 	log.SetFlags(0)
@@ -187,7 +190,9 @@ func ensureRepo() error {
 	if _, err := os.Stat(filepath.Join(erdosRepoDir, ".git")); err == nil {
 		return ensureFresh(erdosRepoDir)
 	}
-	cmd := exec.Command("git", "clone", erdosRemote, erdosRepoDir)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "clone", erdosRemote, erdosRepoDir)
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("cloning erdosproblems: %w", err)
@@ -205,7 +210,9 @@ func ensureFresh(dir string) error {
 			}
 		}
 	}
-	fetch := exec.Command("git", "-C", dir, "fetch")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	fetch := exec.CommandContext(ctx, "git", "-C", dir, "fetch")
 	fetch.Stderr = os.Stderr
 	if err := fetch.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "erdos: fetch failed, using cached data")
@@ -216,17 +223,17 @@ func ensureFresh(dir string) error {
 	}
 	local, err := gitRev(dir, "HEAD")
 	if err != nil {
-		return nil
+		return fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
 	remote, err := gitRev(dir, "@{u}")
 	if err != nil {
-		return nil
+		return fmt.Errorf("git rev-parse @{u}: %w", err)
 	}
 	if local == remote {
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "erdos: updating %s..%s ... ", local[:8], remote[:8])
-	pull := exec.Command("git", "-C", dir, "pull", "--ff-only")
+	pull := exec.CommandContext(ctx, "git", "-C", dir, "pull", "--ff-only")
 	pull.Stderr = os.Stderr
 	if err := pull.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "update failed, using cached data")
@@ -293,7 +300,7 @@ func httpGet(ctx context.Context, url string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "patel.codes.erdos/1.0")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +329,11 @@ func cmdFetch(number string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	latexBody, err := httpGet(ctx, "https://www.erdosproblems.com/latex/"+number)
+	latexURL, err := neturl.JoinPath("https://www.erdosproblems.com", "latex", number)
+	if err != nil {
+		return err
+	}
+	latexBody, err := httpGet(ctx, latexURL)
 	if err != nil {
 		return err
 	}
@@ -338,7 +349,11 @@ func cmdFetch(number string) error {
 		return err
 	}
 
-	forumBody, err := httpGet(ctx, "https://www.erdosproblems.com/forum/thread/"+number)
+	forumURL, err := neturl.JoinPath("https://www.erdosproblems.com", "forum", "thread", number)
+	if err != nil {
+		return err
+	}
+	forumBody, err := httpGet(ctx, forumURL)
 	if err != nil {
 		return err
 	}
@@ -614,7 +629,9 @@ func textContent(n *html.Node) string {
 func renderChildren(n *html.Node) string {
 	var buf strings.Builder
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		html.Render(&buf, c)
+		if err := html.Render(&buf, c); err != nil {
+			return buf.String()
+		}
 	}
 	return strings.TrimSpace(buf.String())
 }
