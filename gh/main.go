@@ -7,6 +7,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -112,7 +113,7 @@ func loadGitHubToken() string {
 const githubAPI = "https://api.github.com"
 
 func githubGet(u, token string) (body []byte, next string, err error) {
-	req, err := http.NewRequest("GET", u, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, u, nil)
 	if err != nil {
 		return nil, "", err
 	}

@@ -148,9 +148,6 @@ func ensureFresh(dir string) error {
 		fmt.Fprintln(os.Stderr, "oeis: fetch failed, using cached data")
 		return nil
 	}
-	if err := os.WriteFile(marker, fmt.Appendf(nil, "%d\n", time.Now().Unix()), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "oeis: writing marker: %v\n", err)
-	}
 	local, err := gitRev(dir, "HEAD")
 	if err != nil {
 		return fmt.Errorf("git rev-parse HEAD: %w", err)
@@ -162,12 +159,21 @@ func ensureFresh(dir string) error {
 	if local == remote {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "oeis: updating %s..%s ... ", local[:8], remote[:8])
+	short := func(s string) string {
+		if len(s) > 8 {
+			return s[:8]
+		}
+		return s
+	}
+	fmt.Fprintf(os.Stderr, "oeis: updating %s..%s ... ", short(local), short(remote))
 	pull := exec.CommandContext(ctx, "git", "-C", dir, "pull", "--ff-only")
 	pull.Stderr = os.Stderr
 	if err := pull.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "update failed, using cached data")
 		return nil
+	}
+	if err := os.WriteFile(marker, fmt.Appendf(nil, "%d\n", time.Now().Unix()), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "oeis: writing marker: %v\n", err)
 	}
 	fmt.Fprintln(os.Stderr, "done")
 	return nil
@@ -297,7 +303,11 @@ func oeisWalk(fn func(id, path string, q oeisQuick)) error {
 				}
 				path := filepath.Join(oeisDir, dir, f.Name())
 				id := strings.TrimSuffix(f.Name(), ".seq")
-				q := oeisQuickParse(path)
+				q, err := oeisQuickParse(path)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "oeis: parse %s: %v\n", path, err)
+					continue
+				}
 				mu.Lock()
 				fn(id, path, q)
 				mu.Unlock()
@@ -308,10 +318,10 @@ func oeisWalk(fn func(id, path string, q oeisQuick)) error {
 	return nil
 }
 
-func oeisQuickParse(path string) oeisQuick {
+func oeisQuickParse(path string) (oeisQuick, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return oeisQuick{}
+		return oeisQuick{}, err
 	}
 	defer f.Close()
 
@@ -336,7 +346,7 @@ func oeisQuickParse(path string) oeisQuick {
 		}
 	}
 	q.Terms = strings.Join(terms, "")
-	return q
+	return q, sc.Err()
 }
 
 type oeisQuick struct {

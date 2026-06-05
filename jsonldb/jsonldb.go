@@ -75,13 +75,8 @@ func (s *Store[T]) Write(fn func(tx *Tx[T]) error) error {
 // T in a consistent, safe way.
 type Tx[T any] struct{ db *db[T] }
 
-// All returns a shallow copy
-// to the underlying items in
-// the database.
-//
-// Any mutations to the items
-// in the returned slice do
-// not persistent.
+// All returns the underlying items
+// in the current transaction.
 func (tx *Tx[T]) All() []T { return tx.db.items }
 
 // Len returns the number of

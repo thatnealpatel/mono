@@ -108,7 +108,7 @@ type Problem struct {
 	Status  Status   `yaml:"status"  json:"status"`
 	OEIS    []string `yaml:"oeis"    json:"oeis"`
 	Tags    []string `yaml:"tags"    json:"tags"`
-	Comment string   `yaml:"comments" json:"comment,omitempty"`
+	Comment string   `yaml:"comments" json:"comments,omitempty"`
 	Formal  Formal   `yaml:"formalized" json:"formalized"`
 }
 
@@ -232,7 +232,13 @@ func ensureFresh(dir string) error {
 	if local == remote {
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "erdos: updating %s..%s ... ", local[:8], remote[:8])
+	short := func(s string) string {
+		if len(s) > 8 {
+			return s[:8]
+		}
+		return s
+	}
+	fmt.Fprintf(os.Stderr, "erdos: updating %s..%s ... ", short(local), short(remote))
 	pull := exec.CommandContext(ctx, "git", "-C", dir, "pull", "--ff-only")
 	pull.Stderr = os.Stderr
 	if err := pull.Run(); err != nil {
@@ -358,7 +364,10 @@ func cmdFetch(number string) error {
 		return err
 	}
 
-	posts := parseForumPosts(string(forumBody))
+	posts, err := parseForumPosts(string(forumBody))
+	if err != nil {
+		return err
+	}
 	commData, err := json.Marshal(posts)
 	if err != nil {
 		return err
@@ -508,10 +517,10 @@ func countPosts(posts []ForumPost) int {
 	return n
 }
 
-func parseForumPosts(s string) []ForumPost {
+func parseForumPosts(s string) ([]ForumPost, error) {
 	doc, err := html.Parse(strings.NewReader(s))
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("parsing forum HTML: %w", err)
 	}
 
 	var posts []ForumPost
@@ -526,7 +535,7 @@ func parseForumPosts(s string) []ForumPost {
 		}
 	}
 	walk(doc)
-	return posts
+	return posts, nil
 }
 
 func isPostList(n *html.Node) bool {

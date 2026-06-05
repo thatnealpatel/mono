@@ -146,7 +146,10 @@ func TestParseForumPosts(t *testing.T) {
 			if err != nil {
 				t.Skipf("sample file not available: %v", err)
 			}
-			posts := parseForumPosts(string(data))
+			posts, err := parseForumPosts(string(data))
+			if err != nil {
+				t.Fatalf("parseForumPosts: %v", err)
+			}
 			total := countPosts(posts)
 			if total != tt.wantTotal {
 				t.Errorf("total posts = %d, want %d", total, tt.wantTotal)
@@ -177,7 +180,10 @@ func TestParseForumPostsReplies(t *testing.T) {
 	if err != nil {
 		t.Skipf("sample file not available: %v", err)
 	}
-	posts := parseForumPosts(string(data))
+	posts, err := parseForumPosts(string(data))
+	if err != nil {
+		t.Fatalf("parseForumPosts: %v", err)
+	}
 
 	var withReplies *ForumPost
 	for i := range posts {

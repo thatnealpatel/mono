@@ -82,14 +82,23 @@ func ExtractFile(path string, src []byte) []Declaration {
 		}
 
 		if strings.HasPrefix(trimmed, "namespace ") {
-			ns := strings.Fields(trimmed)[1]
-			nsStack = append(nsStack, ns)
+			fields := strings.Fields(trimmed)
+			if len(fields) >= 2 {
+				nsStack = append(nsStack, fields[1])
+			}
 			docBuf.Reset()
 			hasDoc = false
 			continue
 		}
-		if trimmed == "end" || strings.HasPrefix(trimmed, "end ") {
+		if trimmed == "end" {
 			if len(nsStack) > 0 {
+				nsStack = nsStack[:len(nsStack)-1]
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "end ") {
+			name := strings.Fields(trimmed)[1]
+			if len(nsStack) > 0 && nsStack[len(nsStack)-1] == name {
 				nsStack = nsStack[:len(nsStack)-1]
 			}
 			continue

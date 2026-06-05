@@ -30,7 +30,7 @@ func NewBM25(p *BM25Params) *BM25 {
 		if p.K1 != 0 {
 			bm.k1 = p.K1
 		}
-		if p.B != 0 {
+		if p.B > 0 {
 			bm.b = p.B
 		}
 	}
@@ -93,7 +93,8 @@ func (bm *BM25) Search(query string) []*Result {
 				continue
 			}
 			idf := bm.idf[term]
-			score += idf * (tf * (bm.k1 + 1)) / (tf + bm.k1*(1-bm.b+bm.b*doc.DL/bm.avgdl))
+			denom := tf + bm.k1*(1-bm.b+bm.b*doc.DL/max(bm.avgdl, 1e-10))
+			score += idf * (tf * (bm.k1 + 1)) / denom
 		}
 		if score > 0.001 {
 			results = append(results, &Result{Index: i, Score: score})

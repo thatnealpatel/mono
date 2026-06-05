@@ -3,6 +3,7 @@ package ranking
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math"
 	"strconv"
 	"strings"
@@ -347,13 +348,9 @@ var (
 func BenchmarkIDFWriteTo(b *testing.B) {
 	for _, n := range []int{10_000, 100_000, 1_000_000} {
 		idx := buildIDFIndex(n)
-		var buf bytes.Buffer
-		idx.WriteTo(&buf)
-		data := buf.Bytes()
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
 			for b.Loop() {
-				idx2 := NewIDF(nil)
-				idx2.ReadFrom(bytes.NewReader(data))
+				idx.WriteTo(io.Discard)
 			}
 		})
 	}

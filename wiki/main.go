@@ -482,6 +482,10 @@ func wikiLinks(title string) error {
 	if err != nil {
 		return err
 	}
+	page, err = wikiFollowRedirect(page)
+	if err != nil {
+		return err
+	}
 	if len(page.Revisions) == 0 {
 		return fmt.Errorf("no revisions for %q", title)
 	}
@@ -505,13 +509,14 @@ func wikiSearch(query string) error {
 
 	idx := ranking.NewIDF(nil)
 	cachePath := filepath.Join(wikiCacheDir, "enwiki-"+wikiDumpDate+"-idf.cache")
-	if f, err := os.Open(cachePath); err == nil {
+	switch f, err := os.Open(cachePath); {
+	case err == nil:
 		_, err = idx.ReadFrom(f)
 		f.Close()
 		if err != nil {
 			return err
 		}
-	} else {
+	case errors.Is(err, os.ErrNotExist):
 		fmt.Fprintln(os.Stderr, "wiki: building search index ...")
 		idx.Build(titles)
 		f, err := os.Create(cachePath)
@@ -526,6 +531,8 @@ func wikiSearch(query string) error {
 			os.Remove(cachePath) // ignore error
 			return err
 		}
+	default:
+		return err
 	}
 	results := idx.Search(query)
 
