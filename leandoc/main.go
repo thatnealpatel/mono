@@ -155,7 +155,7 @@ func buildIndex() error {
 	}
 
 	tok := LeanTokenizer{}
-	bm := ranking.NewBM25(&ranking.BM25Params{Tokenizer: tok})
+	bm := ranking.NewBM25(&ranking.BM25Params{K1: 1.2, B: 0.75, Tokenizer: tok})
 	bm.Build(docs)
 
 	cache, err := cacheDir()
@@ -225,7 +225,7 @@ func search(query string, verbose bool) error {
 	f.Close()
 
 	tok := LeanTokenizer{}
-	bm := ranking.NewBM25(&ranking.BM25Params{Tokenizer: tok})
+	bm := ranking.NewBM25(&ranking.BM25Params{K1: 1.2, B: 0.75, Tokenizer: tok})
 	f, err = os.Open(bm25Path)
 	if err != nil {
 		return err

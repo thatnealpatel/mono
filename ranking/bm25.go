@@ -8,6 +8,42 @@ import (
 	"slices"
 )
 
+// NewBM25 creates a [BM25] with the
+// specified p; if p is nil, then the
+// defaults K1=1.2 B=0.75 are used.
+//
+// Degenerate parameters, such as K1=0
+// and B=0, are allowed; the caller is
+// responsible for non-degenerate p.
+//
+// NewBM25 panics if K1 or B is negative.
+func NewBM25(p *BM25Params) *BM25 {
+	// TODO(nealpatel): This can be a slightly
+	// better API since BM25{k1: 0, b: 0} is
+	// just IDF as implemented in ranking.
+	bm := &BM25{
+		tok: DefaultTokenizer{},
+		k1:  1.2,
+		b:   0.75,
+	}
+	if p == nil {
+		return bm
+	}
+
+	if p.Tokenizer != nil {
+		bm.tok = p.Tokenizer
+	}
+	if p.K1 < 0 {
+		panic("bm25: K1 cannot be negative")
+	}
+	if p.B < 0 {
+		panic("bm25: B cannot be negative")
+	}
+	bm.k1 = p.K1
+	bm.b = p.B
+	return bm
+}
+
 type BM25 struct {
 	tok   Tokenizer
 	k1    float64
@@ -15,26 +51,6 @@ type BM25 struct {
 	docs  []bm25Doc
 	idf   map[string]float64
 	avgdl float64
-}
-
-func NewBM25(p *BM25Params) *BM25 {
-	bm := &BM25{
-		tok: DefaultTokenizer{},
-		k1:  1.2,
-		b:   0.75,
-	}
-	if p != nil {
-		if p.Tokenizer != nil {
-			bm.tok = p.Tokenizer
-		}
-		if p.K1 != 0 {
-			bm.k1 = p.K1
-		}
-		if p.B > 0 {
-			bm.b = p.B
-		}
-	}
-	return bm
 }
 
 type BM25Params struct {
