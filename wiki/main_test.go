@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestWikiClean(t *testing.T) {
 	for _, tt := range []struct {
@@ -182,6 +187,47 @@ func TestCleanMathInner(t *testing.T) {
 				t.Errorf("cleanMathInner(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestWikiProofBlocks(t *testing.T) {
+	wikiCacheDir = os.Getenv("WIKI_CACHE_DIR")
+	if wikiCacheDir == "" {
+		base, err := os.UserCacheDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		wikiCacheDir = filepath.Join(base, "wiki")
+	}
+	if err := wikiResolveDump(); err != nil {
+		t.Skip("no dump available:", err)
+	}
+	wikiIdxPath = filepath.Join(wikiCacheDir, "enwiki-"+wikiDumpDate+".index")
+
+	page, err := wikiFetchPage("Lucas's theorem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := len(page.Revisions) - 1
+	raw := page.Revisions[n].Text
+
+	if !strings.Contains(raw, "{{Math proof") {
+		t.Fatal("raw wikitext has no {{Math proof}} templates")
+	}
+
+	cleaned := wikiClean(raw)
+
+	if !strings.Contains(cleaned, "Combinatorial proof") {
+		t.Error("combinatorial proof title was stripped")
+	}
+	if !strings.Contains(cleaned, "cyclic group") {
+		t.Error("combinatorial proof body was stripped")
+	}
+	if !strings.Contains(cleaned, "generating functions") {
+		t.Error("generating functions proof title was stripped")
+	}
+	if !strings.Contains(cleaned, "Nathan Fine") {
+		t.Error("generating functions proof body was stripped")
 	}
 }
 

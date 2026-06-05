@@ -267,6 +267,7 @@ func wikiClean(text string) string {
 		return fmt.Sprintf("WIKIMATH%dENDMATH", len(maths)-1)
 	})
 	text = extractMathTemplates(text, &maths)
+	text = extractProofBlocks(text)
 	text = reFile.ReplaceAllString(text, "")
 	text = reTable.ReplaceAllString(text, "")
 	for range 5 {
@@ -346,6 +347,83 @@ func cleanMathInner(s string) string {
 	s = reSub.ReplaceAllString(s, "_{$1}")
 	s = reWikiIta.ReplaceAllString(s, "$1")
 	return s
+}
+
+var reProofTmpl = regexp.MustCompile(`\{\{[Mm]ath proof\s*\|`)
+
+func extractProofBlocks(text string) string {
+	for {
+		loc := reProofTmpl.FindStringIndex(text)
+		if loc == nil {
+			break
+		}
+		depth := 0
+		end := -1
+		for i := loc[0]; i < len(text)-1; i++ {
+			if text[i] == '{' && text[i+1] == '{' {
+				depth++
+				i++
+			} else if text[i] == '}' && text[i+1] == '}' {
+				depth--
+				i++
+				if depth == 0 {
+					end = i + 1
+					break
+				}
+			}
+		}
+		if end == -1 {
+			break
+		}
+		inner := text[loc[1] : end-2]
+		title, proof := parseProofParams(inner)
+		var replacement string
+		if title != "" {
+			replacement = "\n**" + title + "**\n" + proof + "\n"
+		} else {
+			replacement = "\n" + proof + "\n"
+		}
+		text = text[:loc[0]] + replacement + text[end:]
+	}
+	return text
+}
+
+func parseProofParams(s string) (title, proof string) {
+	var depth int
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if i < len(s)-1 {
+			if s[i] == '{' && s[i+1] == '{' || s[i] == '[' && s[i+1] == '[' {
+				depth++
+				i++
+				continue
+			}
+			if s[i] == '}' && s[i+1] == '}' || s[i] == ']' && s[i+1] == ']' {
+				depth--
+				i++
+				continue
+			}
+		}
+		if s[i] == '|' && depth == 0 {
+			applyProofParam(s[start:i], &title, &proof)
+			start = i + 1
+		}
+	}
+	applyProofParam(s[start:], &title, &proof)
+	return title, proof
+}
+
+func applyProofParam(param string, title, proof *string) {
+	k, v, ok := strings.Cut(param, "=")
+	if !ok {
+		return
+	}
+	switch strings.TrimSpace(k) {
+	case "title":
+		*title = strings.TrimSpace(v)
+	case "proof":
+		*proof = strings.TrimSpace(v)
+	}
 }
 
 var (
