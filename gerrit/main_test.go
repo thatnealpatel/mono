@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -95,7 +96,7 @@ func TestClExtractIssueNums(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			detail := buildDetailJSON(tt.message)
 			got := clExtractIssueNums(detail)
-			if !intsEqual(got, tt.want) {
+			if !slices.Equal(got, tt.want) {
 				t.Errorf("clExtractIssueNums(%q) = %v, want %v", tt.message, got, tt.want)
 			}
 		})
@@ -161,19 +162,4 @@ func TestGerritEnsureCacheStale(t *testing.T) {
 	if _, serr := os.Stat(numDir); !errors.Is(serr, os.ErrNotExist) {
 		t.Error("stale cache dir should have been removed before re-fetch")
 	}
-}
-
-func intsEqual(a, b []int) bool {
-	if len(a) == 0 && len(b) == 0 {
-		return true
-	}
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

@@ -509,14 +509,6 @@ type ForumPost struct {
 	Replies  []ForumPost `json:"replies,omitempty"`
 }
 
-func countPosts(posts []ForumPost) int {
-	n := len(posts)
-	for _, p := range posts {
-		n += countPosts(p.Replies)
-	}
-	return n
-}
-
 func parseForumPosts(s string) ([]ForumPost, error) {
 	doc, err := html.Parse(strings.NewReader(s))
 	if err != nil {

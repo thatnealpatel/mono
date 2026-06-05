@@ -272,9 +272,13 @@ func writeETag(path, etag string) error {
 func updateComments(issDir, numStr string) error {
 	cmtETagFile := filepath.Join(issDir, "comments.etag")
 	cmtURL := repoURL("issues", numStr, "comments") + "?" + url.Values{"per_page": {"100"}}.Encode()
-	cmts, etag, err := ghGetAll(cmtURL)
+	cached := readETag(cmtETagFile)
+	cmts, etag, err := ghGetAll(cmtURL, cached)
 	if err != nil {
 		return fmt.Errorf("issue %s comments: %w", numStr, err)
+	}
+	if cmts == nil {
+		return nil
 	}
 	if err := os.WriteFile(filepath.Join(issDir, "comments.json"), cmts, 0o644); err != nil {
 		return err
@@ -282,13 +286,22 @@ func updateComments(issDir, numStr string) error {
 	return writeETag(cmtETagFile, etag)
 }
 
-func ghGetAll(rawURL string) ([]byte, string, error) {
+func ghGetAll(rawURL, ifNoneMatch string) ([]byte, string, error) {
 	var all []json.RawMessage
 	var lastETag string
+	first := true
 	for rawURL != "" {
-		r, err := ghGet(rawURL, "")
+		etag := ""
+		if first {
+			etag = ifNoneMatch
+			first = false
+		}
+		r, err := ghGet(rawURL, etag)
 		if err != nil {
 			return nil, "", err
+		}
+		if r.NotMod {
+			return nil, "", nil
 		}
 		var page []json.RawMessage
 		if err := json.Unmarshal(r.Body, &page); err != nil {

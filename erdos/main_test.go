@@ -6,6 +6,14 @@ import (
 	"testing"
 )
 
+func countPosts(posts []ForumPost) int {
+	n := len(posts)
+	for _, p := range posts {
+		n += countPosts(p.Replies)
+	}
+	return n
+}
+
 func TestParseHTML(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
