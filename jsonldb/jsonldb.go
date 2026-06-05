@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
 	"patel.codes/unsafe/uuid"
 
 	"golang.org/x/sys/unix"
@@ -62,31 +63,11 @@ func (s *Store[T]) Write(fn func(tx *Tx[T]) error) error {
 	defer unlock()
 	d := s.load()
 
-	snapshot, err := json.Marshal(d.items)
-	if err != nil {
-		panic("jsonldb: snapshot: " + err.Error())
-	}
-
 	tx := &Tx[T]{db: d}
 	if err := fn(tx); err != nil {
 		return err
 	}
-
-	if err := s.write(d); err != nil {
-		var rollback db[T]
-		if jerr := json.Unmarshal(snapshot, &rollback.items); jerr != nil {
-			panic("jsonldb: corrupted rollback: " + jerr.Error())
-		}
-		rollback.ids = make([]uuid.UUID, len(rollback.items))
-		for i, item := range rollback.items {
-			rollback.ids[i] = extractID(item)
-		}
-		if werr := s.write(&rollback); werr != nil {
-			panic("jsonldb: corrupted write: " + werr.Error())
-		}
-		panic("jsonldb: write failed (recovered): " + err.Error())
-	}
-	return nil
+	return s.write(d)
 }
 
 // Tx provides an abstraction
@@ -212,50 +193,52 @@ func (s *Store[T]) load() *db[T] {
 	return &d
 }
 
+// write creates a temporary file that
+// contains the new database and attempts
+// to atomically update the existing file.
+//
+// write can fail but leaves data on disk
+// in a recoverable state.
 func (s *Store[T]) write(d *db[T]) error {
 	path := filepath.Join(s.dir, "db.jsonl")
-	f, err := os.Create(path)
+	f, err := os.CreateTemp(s.dir, "db-*.jsonl.tmp")
 	if err != nil {
 		return err
 	}
+	tmp := f.Name()
+	defer func() {
+		if f != nil {
+			f.Close()
+			os.Remove(tmp) // ignore error
+		}
+	}()
 	enc := json.NewEncoder(f)
 	for i, item := range d.items {
 		raw, err := json.Marshal(item)
 		if err != nil {
-			f.Close()
 			return fmt.Errorf("marshal item %d: %w", i, err)
 		}
 		var m map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &m); err != nil {
-			f.Close()
 			return fmt.Errorf("unmarshal item %d: %w", i, err)
 		}
 		idBytes, err := json.Marshal(d.ids[i])
 		if err != nil {
-			f.Close()
 			return fmt.Errorf("marshal id %d: %w", i, err)
 		}
 		m["id"] = idBytes
 		if err := enc.Encode(m); err != nil {
-			f.Close()
 			return err
 		}
 	}
-	return f.Close()
-}
-
-func extractID(item any) uuid.UUID {
-	raw, err := json.Marshal(item)
-	if err != nil {
-		return uuid.UUID{}
+	if err := f.Sync(); err != nil {
+		return err
 	}
-	var partial struct {
-		ID uuid.UUID `json:"id"`
+	if err := f.Close(); err != nil {
+		return err
 	}
-	if err := json.Unmarshal(raw, &partial); err != nil {
-		return uuid.UUID{}
-	}
-	return partial.ID
+	f = nil
+	return os.Rename(tmp, path)
 }
 
 func (s *Store[T]) rlock() func() {
