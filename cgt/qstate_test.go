@@ -1,9 +1,13 @@
 package cgt
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
 	"math/bits"
 	"math/cmplx"
+	"strings"
 	"testing"
 )
 
@@ -39,12 +43,36 @@ func oracleComplex(rows, cols int, factor [2]int, data []uint64) []complex128 {
 		phases[i] = f
 		f *= complex(0, 1)
 	}
+	data = oracleCheckData(ncols, data)
 	a := make([]complex128, 1<<ncols)
 	for v := uint64(1); v < uint64(1)<<len(data); v += 2 {
 		idx, q := evalAQ(ncols, data, v)
 		a[idx] += phases[q]
 	}
 	return a
+}
+
+// oracleCheckData normalizes a copy of data the same way
+// QStateMatrix.check() does in mmgroup: it mirrors Q[0,i]
+// into Q[i,0] and clears the diagonal entry Q[0,0]. The
+// reference slow_complex() calls .check() before expanding
+// (m.copy().check().raw_data), so the oracle must too;
+// otherwise a set Q[0,0] bit injects a spurious global
+// i**Q[0,0] phase (v is always odd, so v[0]=1 always),
+// which the gate/reduce path drops by clearing Q[0,0].
+func oracleCheckData(ncols int, data []uint64) []uint64 {
+	out := make([]uint64, len(data))
+	copy(out, data)
+	if len(out) == 0 {
+		return out
+	}
+	c := uint(ncols)
+	out[0] &^= uint64(1) << c // clear Q[0,0]
+	for i := 1; i < len(out); i++ {
+		out[i] &^= uint64(1) << c                        // clear old Q[i,0]
+		out[i] |= (out[0] >> uint(i)) & (uint64(1) << c) // set Q[i,0] = Q[0,i]
+	}
+	return out
 }
 
 func parity(v uint64) int {
@@ -137,8 +165,8 @@ func gateCtrlNotRef(c []complex128, vc, v uint64) []complex128 {
 
 func TestGateCtrlNot(t *testing.T) {
 	cases := []struct {
-		c      tcase
-		vc, v  uint64
+		c     tcase
+		vc, v uint64
 	}{
 		{tcase{0, 1, [2]int{0, 0}, []uint64{0b0}}, 1, 0},
 		{tcase{0, 4, [2]int{0, 0}, []uint64{0b110_1001, 0b101_0111, 0b011_0100}}, 0b01, 0b10},
@@ -285,8 +313,8 @@ func rotRef(c []complex128, rot, nrot, n0 int) []complex128 {
 
 func TestRotBits(t *testing.T) {
 	cases := []struct {
-		c              tcase
-		rot, nrot, n0  int
+		c             tcase
+		rot, nrot, n0 int
 	}{
 		{tcase{0, 4, [2]int{0, 0}, []uint64{0b000}}, 3, 2, 1},
 		{tcase{0, 4, [2]int{0, 0}, []uint64{0b110_1001, 0b101_0111, 0b011_0100}}, 2, 1, 1},
@@ -459,8 +487,8 @@ func TestMatMul(t *testing.T) {
 			tcase{2, 2, [2]int{0, 0}, []uint64{0b101_01_11, 0b110_10_01, 0b011_01_00}}},
 		{tcase{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}},
 			tcase{1, 1, [2]int{0, 0}, []uint64{0b10_1, 0b01_1}}},
-		{tcase{2, 1, [2]int{0, 0}, []uint64{0b000_10, 0b010_01, 0b100_01}},
-			tcase{1, 2, [2]int{0, 0}, []uint64{0b00_001, 0b01_010, 0b10_100}}},
+		{tcase{2, 1, [2]int{0, 0}, []uint64{18, 41, 17}},
+			tcase{1, 2, [2]int{0, 0}, []uint64{17, 42, 20}}},
 	}
 	for _, tc := range cases {
 		ca := oracleComplex(tc.a.rows, tc.a.cols, tc.a.factor, tc.a.data)
@@ -471,6 +499,23 @@ func TestMatMul(t *testing.T) {
 	}
 }
 
+func TestQNotSymmetricPanic(t *testing.T) {
+	// Q stored lower-triangular: Q[2][1]=1 but
+	// Q[1][2]=0. NewQState(mode=0) must panic
+	// with errQNotSymmetric.
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic on asymmetric Q")
+		}
+		err, ok := r.(error)
+		if !ok || !errors.Is(err, errQNotSymmetric) {
+			t.Fatalf("expected errQNotSymmetric, got %v", r)
+		}
+	}()
+	NewQState(2, 1, []uint64{0b000_10, 0b010_01, 0b100_01}, 0)
+}
+
 func TestMulElementwise(t *testing.T) {
 	cases := []struct {
 		a, b tcase
@@ -479,7 +524,7 @@ func TestMulElementwise(t *testing.T) {
 			tcase{2, 2, [2]int{1, 0}, []uint64{0b101_01_11, 0b011_01_00}}},
 		{tcase{0, 4, [2]int{0, 0}, []uint64{0b00_0101, 0b00_0011}},
 			tcase{0, 4, [2]int{0, 0}, []uint64{0b00_0111, 0b00_1001}}},
-		{tcase{2, 1, [2]int{0, 0}, []uint64{0b000_10, 0b010_01, 0b100_01}},
+		{tcase{2, 1, [2]int{0, 0}, []uint64{18, 41, 17}},
 			tcase{2, 1, [2]int{-3, 4}, []uint64{0b100_01, 0b010_01}}},
 	}
 	for _, tc := range cases {
@@ -496,8 +541,8 @@ func TestMulElementwise(t *testing.T) {
 
 func TestProduct(t *testing.T) {
 	cases := []struct {
-		a, b     tcase
-		nqb, nc  int
+		a, b    tcase
+		nqb, nc int
 	}{
 		{tcase{0, 0, [2]int{1, 0}, nil}, tcase{0, 0, [2]int{1, 0}, nil}, 0, 0},
 		{tcase{0, 4, [2]int{0, 0}, []uint64{0b00_0101, 0b00_0011}},
@@ -788,17 +833,33 @@ func TestPauliVectorExp(t *testing.T) {
 }
 
 func TestPauliConjugate(t *testing.T) {
+	// {0b110_10_01, ...} is singular (det=0);
+	// Inv correctly panics on it.
+	t.Run("singular_panics", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("Inv on singular (2,2) matrix did not panic")
+			}
+		}()
+		s := tcase{2, 2, [2]int{0, 0}, []uint64{0b110_10_01, 0b101_01_11, 0b011_01_00}}
+		s.state().Inv()
+	})
+	// Build an invertible (2,2) matrix from gates
+	// (Hadamard on qubit 0), matching how Python
+	// creates test inputs via rand_unitary_matrix.
+	hq := UnitMatrix(2).GateH(0x1)
 	cases := []struct {
-		c tcase
+		c *QState
+		n int
 		v []uint64
 	}{
-		{tcase{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}}, []uint64{0, 1, 2, 3}},
-		{tcase{2, 2, [2]int{0, 0}, []uint64{0b110_10_01, 0b101_01_11, 0b011_01_00}}, []uint64{0x1, 0x4, 0xa}},
-		{tcase{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}}, []uint64{0x2, 0x3}},
+		{tcase{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}}.state(), 1, []uint64{0, 1, 2, 3}},
+		{hq, 2, []uint64{0x1, 0x4, 0xa}},
+		{tcase{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}}.state(), 1, []uint64{0x2, 0x3}},
 	}
 	for _, tc := range cases {
-		m := tc.c.state()
-		n := tc.c.rows
+		m := tc.c
+		n := tc.n
 		mi := m.Inv()
 		p := make([]*QState, len(tc.v))
 		for i, x := range tc.v {
@@ -828,14 +889,23 @@ func TestPauliConjugate(t *testing.T) {
 }
 
 func TestToSymplectic(t *testing.T) {
-	cases := []tcase{
-		{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}},
-		{2, 2, [2]int{0, 0}, []uint64{0b110_10_01, 0b101_01_11, 0b011_01_00}},
-		{2, 2, [2]int{0, 0}, []uint64{0b101_01_11, 0b110_10_01, 0b011_01_00}},
+	// Build invertible matrices; the original
+	// (2,2) fixtures were singular (det=0).
+	inv1 := tcase{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}}.state()
+	inv2 := UnitMatrix(2).GateH(0x1)
+	inv3 := UnitMatrix(2).GateH(0x2)
+	type scase struct {
+		m *QState
+		n int
+	}
+	cases := []scase{
+		{inv1, 1},
+		{inv2, 2},
+		{inv3, 2},
 	}
 	for _, c := range cases {
-		m := c.state()
-		n := c.rows
+		m := c.m
+		n := c.n
 		mi := m.Inv()
 		mask := (uint64(1) << (2 * n)) - 1
 		want := make([]uint64, 2*n)
@@ -870,4 +940,278 @@ func TestOrder(t *testing.T) {
 			t.Fatalf("order: m^%d is not unit", order)
 		}
 	}
+}
+
+// qMatrix decodes the Q (quadratic-form) block of a
+// raw qstate data slice exactly as qsCheck reads it:
+// Q[i][j] is bit (ncols+j) of data[i], for an
+// nrows x nrows symmetric matrix. It does NOT
+// normalize; it reports the bits as stored.
+func qMatrix(ncols int, data []uint64) [][]int {
+	n := len(data)
+	q := make([][]int, n)
+	for i := range q {
+		q[i] = make([]int, n)
+		for j := 0; j < n; j++ {
+			q[i][j] = int((data[i] >> uint(ncols+j)) & 1)
+		}
+	}
+	return q
+}
+
+// qAsymPairs returns every (i,j) with j<i where the
+// raw stored Q is asymmetric: Q[i][j] != Q[j][i].
+// Row 0's diagonal Q[0][0] is excluded (qsCheck
+// clears it). Mirrors the err-accumulation loop in
+// qsCheck (qstate.go:164-170).
+func qAsymPairs(ncols int, data []uint64) [][2]int {
+	q := qMatrix(ncols, data)
+	var out [][2]int
+	for i := 1; i < len(data); i++ {
+		for j := 0; j < i; j++ {
+			if q[i][j] != q[j][i] {
+				out = append(out, [2]int{i, j})
+			}
+		}
+	}
+	return out
+}
+
+// qsCheckMirror applies qsCheck's normalization
+// (clear Q[0,0], copy Q[0,i] into Q[i,0]) to a copy
+// of data and returns it, WITHOUT panicking. This is
+// the lower-triangle->upper repair qsCheck does in
+// qstate.go:162-166 before the symmetry test.
+func qsCheckMirror(ncols int, data []uint64) []uint64 {
+	out := make([]uint64, len(data))
+	copy(out, data)
+	if len(out) == 0 {
+		return out
+	}
+	c := uint(ncols)
+	out[0] &^= uint64(1) << c
+	for i := 1; i < len(out); i++ {
+		out[i] &^= uint64(1) << c
+		out[i] |= (out[0] >> uint(i)) & (uint64(1) << c)
+	}
+	return out
+}
+
+// qsWouldPanic reports whether qsCheck(data) panics:
+// after mirroring row 0, is any Q[i][j] (i,j>=1)
+// asymmetric? Returns the offending pairs.
+func qsWouldPanic(ncols int, data []uint64) [][2]int {
+	m := qsCheckMirror(ncols, data)
+	return qAsymPairs(ncols, m)
+}
+
+// TestMatMulInputSymmetry checks whether each raw
+// input fixture in TestMatMul satisfies the Q-symmetry
+// invariant that NewQState(mode=0)/qsCheck enforces.
+// This isolates whether the panic comes from a bad
+// INPUT fixture vs. the MatMul OUTPUT.
+func TestMatMulInputSymmetry(t *testing.T) {
+	type named struct {
+		label string
+		c     tcase
+	}
+	fixtures := []named{
+		{"case1.a", tcase{2, 2, [2]int{0, 0}, []uint64{0b110_10_01, 0b101_01_11, 0b011_01_00}}},
+		{"case1.b", tcase{2, 2, [2]int{0, 0}, []uint64{0b101_01_11, 0b110_10_01, 0b011_01_00}}},
+		{"case2.a", tcase{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}}},
+		{"case2.b", tcase{1, 1, [2]int{0, 0}, []uint64{0b10_1, 0b01_1}}},
+		{"case3.a", tcase{2, 1, [2]int{0, 0}, []uint64{0b000_10, 0b010_01, 0b100_01}}},
+		{"case3.b", tcase{1, 2, [2]int{0, 0}, []uint64{0b00_001, 0b01_010, 0b10_100}}},
+	}
+	for _, f := range fixtures {
+		ncols := f.c.rows + f.c.cols
+		qRaw := qMatrix(ncols, f.c.data)
+		rawPairs := qAsymPairs(ncols, f.c.data)
+		mirrored := qsCheckMirror(ncols, f.c.data)
+		qMir := qMatrix(ncols, mirrored)
+		panicPairs := qsWouldPanic(ncols, f.c.data)
+		t.Logf("%s: ncols=%d data=%v\n  rawQ      =%v rawAsym=%v\n  mirroredQ =%v panicPairs=%v",
+			f.label, ncols, f.c.data, qRaw, rawPairs, qMir, panicPairs)
+		for _, p := range panicPairs {
+			// Diagnostic only (not an assertion against
+			// qstate.go): records that these fixtures
+			// store Q strictly lower-triangular, which
+			// qsCheck (and mmgroup) correctly reject.
+			t.Logf("%s: AFTER qsCheck mirror, Q[%d][%d]=%d != Q[%d][%d]=%d -> qsCheck would PANIC (malformed fixture)",
+				f.label, p[0], p[1], qMir[p[0]][p[1]], p[1], p[0], qMir[p[1]][p[0]])
+		}
+	}
+}
+
+// qsImport builds a Python expression string that
+// constructs a QStateMatrix from raw (rows,cols,data)
+// at the given mode, then evaluates <expr> with the
+// matrix bound to m. mode 1 symmetrizes Q from its
+// lower triangle, mode 0 requires Q already symmetric.
+func qsImport(rows, cols, mode int, data []uint64, expr string) string {
+	parts := make([]string, len(data))
+	for i, d := range data {
+		parts[i] = fmt.Sprintf("%d", d)
+	}
+	return fmt.Sprintf(
+		"(lambda m: %s)(__import__('mmgroup.structures.qs_matrix',fromlist=['QStateMatrix']).QStateMatrix(%d,%d,[%s],%d))",
+		expr, rows, cols, strings.Join(parts, ","), mode)
+}
+
+// TestMatMulOracleData asks the Python mmgroup oracle
+// directly. The case3 fixtures store Q strictly lower-
+// triangular, so they are only valid under mode 1
+// (symmetrize from lower triangle), NOT mode 0. We
+// build them with mode 1 and read back the canonical
+// SYMMETRIC raw_data — that symmetric data is what the
+// fixture should contain so tcase.state()'s mode-0
+// NewQState accepts it.
+func TestMatMulOracleData(t *testing.T) {
+	type named struct {
+		label      string
+		rows, cols int
+		data       []uint64
+	}
+	fixtures := []named{
+		{"case3.a", 2, 1, []uint64{0b000_10, 0b010_01, 0b100_01}},
+		{"case3.b", 1, 2, []uint64{0b00_001, 0b01_010, 0b10_100}},
+	}
+	for _, f := range fixtures {
+		// mode 1: build Q from lower triangle, then
+		// read the canonical symmetric raw_data.
+		sym := oracleInts(t, qsImport(f.rows, f.cols, 1, f.data,
+			"list(m.raw_data)"))
+		// the normalized data slow_complex expands.
+		checked := oracleInts(t, qsImport(f.rows, f.cols, 1, f.data,
+			"list(m.copy().check().raw_data)"))
+		t.Logf("%s: rows=%d cols=%d lowerTriInput=%v\n  symmetric raw_data (mode1)=%v\n  checked raw_data         =%v",
+			f.label, f.rows, f.cols, f.data, sym, checked)
+	}
+}
+
+// oracleFloats evaluates a Python expression that
+// yields a flat JSON list of floats.
+func oracleFloats(t *testing.T, pyExpr string) []float64 {
+	t.Helper()
+	s := oracle(t, pyExpr)
+	var v []float64
+	if err := json.Unmarshal([]byte(s), &v); err != nil {
+		t.Fatalf("oracleFloats(%q): unmarshal %q: %v", pyExpr, s, err)
+	}
+	return v
+}
+
+func floatsToComplex(p []float64) []complex128 {
+	out := make([]complex128, len(p)/2)
+	for i := range out {
+		out[i] = complex(p[2*i], p[2*i+1])
+	}
+	return out
+}
+
+// TestMatMulFixedSymmetric proves the fix: with the
+// corrected SYMMETRIC fixture data (mode 0), MatMul
+// matches mmgroup's @ product. This shows qsMatmul /
+// qsProductInto are correct; the failure was the
+// malformed (lower-triangular) input fixtures.
+func TestMatMulFixedSymmetric(t *testing.T) {
+	cases := []struct {
+		label          string
+		ar, ac, br, bc int
+		// symmetric data (mode-0 valid):
+		aData, bData []uint64
+		// original lower-tri data (mode-1):
+		aLower, bLower []uint64
+	}{
+		{"case3", 2, 1, 1, 2,
+			[]uint64{18, 41, 17}, []uint64{17, 42, 20},
+			[]uint64{0b000_10, 0b010_01, 0b100_01}, []uint64{0b00_001, 0b01_010, 0b10_100}},
+	}
+	for _, c := range cases {
+		// Sanity: Go mode-1 (lower) must equal Go
+		// mode-0 (symmetric) for the SAME matrix.
+		aLowerM := NewQState(c.ar, c.ac, c.aLower, 1).Matrix()
+		aSymM := NewQState(c.ar, c.ac, c.aData, 0).Matrix()
+		cmpComplex(t, c.label+":a mode1==mode0", aLowerM, aSymM)
+		bLowerM := NewQState(c.br, c.bc, c.bLower, 1).Matrix()
+		bSymM := NewQState(c.br, c.bc, c.bData, 0).Matrix()
+		cmpComplex(t, c.label+":b mode1==mode0", bLowerM, bSymM)
+
+		// Go MatMul on the corrected symmetric inputs.
+		a := NewQState(c.ar, c.ac, c.aData, 0)
+		b := NewQState(c.br, c.bc, c.bData, 0)
+		got := a.MatMul(b).Matrix()
+
+		// Oracle: build a,b with mode 1 and multiply.
+		aPy := qsImport(c.ar, c.ac, 1, c.aLower, "m")
+		bPy := qsImport(c.br, c.bc, 1, c.bLower, "m")
+		expr := fmt.Sprintf(
+			"[x for z in (%s @ %s)[:,:].reshape(-1) for x in (float(z.real), float(z.imag))]",
+			aPy, bPy)
+		want := floatsToComplex(oracleFloats(t, expr))
+		t.Logf("%s: want=%v\n got=%v", c.label, want, got)
+		cmpComplex(t, c.label+":MatMul", want, got)
+	}
+}
+
+// newQStateOK reports whether NewQState(mode=0)
+// succeeds (no panic) on the given fixture.
+func newQStateOK(rows, cols int, data []uint64) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	NewQState(rows, cols, data, 0)
+	return true
+}
+
+// TestMatMulPerFixture classifies every raw input
+// fixture of TestMatMul: does mode-0 NewQState accept
+// it? This pins down exactly which fixtures are
+// malformed (the source of the panic).
+func TestMatMulPerFixture(t *testing.T) {
+	type named struct {
+		label      string
+		rows, cols int
+		data       []uint64
+	}
+	fixtures := []named{
+		{"case1.a", 2, 2, []uint64{0b110_10_01, 0b101_01_11, 0b011_01_00}},
+		{"case1.b", 2, 2, []uint64{0b101_01_11, 0b110_10_01, 0b011_01_00}},
+		{"case2.a", 1, 1, []uint64{0b00_1, 0b11_1}},
+		{"case2.b", 1, 1, []uint64{0b10_1, 0b01_1}},
+		{"case3.a", 2, 1, []uint64{0b000_10, 0b010_01, 0b100_01}},
+		{"case3.b", 1, 2, []uint64{0b00_001, 0b01_010, 0b10_100}},
+	}
+	for _, f := range fixtures {
+		ok := newQStateOK(f.rows, f.cols, f.data)
+		status := "ACCEPTED"
+		if !ok {
+			status = "PANIC (asymmetric Q)"
+		}
+		t.Logf("%s: NewQState(mode=0) -> %s", f.label, status)
+	}
+}
+
+// TestMatMulCase3Corrected runs the EXACT TestMatMul
+// body for case 3 but with the corrected symmetric
+// fixture data. It exercises the test's own pure-Go
+// reference (oracleComplex + matMulRef) AND Go MatMul,
+// proving the one-line data swap makes TestMatMul pass
+// with no change to qstate.go or the test logic.
+func TestMatMulCase3Corrected(t *testing.T) {
+	// Corrected symmetric encodings (mmgroup mode-1
+	// raw_data of the original lower-triangular data):
+	//   case3.a {2,9,17}  -> {18,41,17}
+	//   case3.b {1,10,20} -> {17,42,20}
+	a := tcase{2, 1, [2]int{0, 0}, []uint64{18, 41, 17}}
+	b := tcase{1, 2, [2]int{0, 0}, []uint64{17, 42, 20}}
+
+	ca := oracleComplex(a.rows, a.cols, a.factor, a.data)
+	cb := oracleComplex(b.rows, b.cols, b.factor, b.data)
+	want := matMulRef(ca, cb, a.rows, a.cols, b.cols)
+	got := a.state().MatMul(b.state()).Matrix()
+	t.Logf("case3 corrected: want=%v\n got=%v", want, got)
+	cmpComplex(t, "matmul-case3-corrected", want, got)
 }

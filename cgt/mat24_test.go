@@ -1,6 +1,7 @@
 package cgt
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -209,10 +210,23 @@ func TestCocodeToBitList(t *testing.T) {
 }
 
 func TestCocodeToSextet(t *testing.T) {
-	for _, c := range []uint32{1, 0x55, 0xabc} {
-		t.Run(fmt.Sprintf("%d", c), func(t *testing.T) {
+	for _, c := range []uint32{0x55, 0x155, 0x2aa} {
+		t.Run(fmt.Sprintf("valid_%#x", c), func(t *testing.T) {
+			if CocodeWeight(c) != 4 {
+				t.Fatalf("cocode %#x has weight %d, not 4 — bad test value", c, CocodeWeight(c))
+			}
 			eqInts(t, "CocodeToSextet", bytesToInts(CocodeToSextet(c)),
 				oracleInts(t, fmt.Sprintf("mat24.cocode_to_sextet(%d)", c)))
+		})
+	}
+	for _, c := range []uint32{1, 0xabc} {
+		t.Run(fmt.Sprintf("panic_%#x", c), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Errorf("CocodeToSextet(%#x) did not panic on non-tetrad input", c)
+				}
+			}()
+			CocodeToSextet(c)
 		})
 	}
 }
@@ -665,7 +679,7 @@ func TestPermFromMap(t *testing.T) {
 		h1, h2 []byte
 	}{
 		{[]byte{0, 1, 2, 3, 4}, []byte{0, 1, 2, 3, 4}},
-		{[]byte{0, 1, 2, 3, 4, 5, 6}, []byte{0, 1, 2, 3, 4, 5, 8}},
+		{[]byte{0, 1, 2, 3, 4, 5, 6}, []byte{0, 1, 2, 3, 4, 5, 6}},
 		{[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8}, []byte{0, 1, 2, 3, 4, 5, 6, 7, 8}},
 	}
 	for i, c := range cases {
@@ -693,6 +707,25 @@ func TestPermFromMapRejection(t *testing.T) {
 	dest := []byte{1, 2, 3, 4, 5, 6, 7}
 	if _, _, err := PermFromMap(nomap, dest); err == nil {
 		t.Errorf("PermFromMap(no-completion): want error, got nil")
+	}
+	// h1={0..6} lies in octad {0..7}; h2={0..5,8}
+	// is umbral (no octad contains it). M24 preserves
+	// octads, so no permutation realizes this map.
+	// C returns (res=0, stale identity); Go returns
+	// (0, identity, errNoM24Perm).
+	h1 := []byte{0, 1, 2, 3, 4, 5, 6}
+	h2 := []byte{0, 1, 2, 3, 4, 5, 8}
+	res, perm, err := PermFromMap(h1, h2)
+	if !errors.Is(err, errNoM24Perm) {
+		t.Fatalf("PermFromMap(octad→umbral): want errNoM24Perm, got %v", err)
+	}
+	if res != 0 {
+		t.Errorf("PermFromMap(octad→umbral): res = %d, want 0", res)
+	}
+	for i, v := range perm {
+		if v != byte(i) {
+			t.Fatalf("PermFromMap(octad→umbral): perm[%d] = %d, want identity", i, v)
+		}
 	}
 }
 
@@ -803,6 +836,196 @@ func TestMatrixFromModOmega(t *testing.T) {
 			eqInts(t, "MatrixFromModOmega", u32sToInts(m), want)
 		})
 	}
+}
+
+// DIAGNOSTIC tests for the PermFromMap n=7 "bug".
+//
+// ROOT CAUSE: TestPermFromMap case 1 fixture
+//   [0,1,2,3,4,5,6] -> [0,1,2,3,4,5,8]
+// is mathematically UNSOLVABLE. h1={0..6} lies in the
+// octad {0..7} (its syndrome within that octad is the
+// singleton {7}); h2={0,1,2,3,4,5,8} is umbral (minimum
+// syndrome weight 3, contained in no octad). M24 acts on
+// the Steiner system S(5,8,24) and preserves octads, so it
+// cannot map an octad-contained heptad to an umbral heptad.
+//
+// The C function mat24_perm_from_map returns res=0 meaning
+// "no M24 permutation exists" (mat24_functions.c:1936). The
+// Cython wrapper perm_from_map (mat24fast.pyx:395) guards on
+// `if res < 0:` but res is uint32_t, so that check is dead
+// code: it never raises, and returns (0, <stale p_out>),
+// where p_out is the identity left over from the internal
+// perm_from_heptads success. The Go port correctly returns
+// an error for res=0. The FIX belongs in the test fixture,
+// not in mat24.go.
+
+// TestDiagOracleFromMap pins the fact that the case-1
+// fixture is unsolvable: the oracle returns res=0 and the
+// returned permutation does NOT realize h1 -> h2.
+func TestDiagOracleFromMap(t *testing.T) {
+	res := oracleInt(t, "mat24.perm_from_map([0,1,2,3,4,5,6], [0,1,2,3,4,5,8])[0]")
+	if res != 0 {
+		t.Fatalf("expected oracle res=0 (unsolvable), got %d", res)
+	}
+	// res=0 is FAILURE; the returned perm is stale and does
+	// not map h1 -> h2.
+	mapsOK := oracleBool(t,
+		"(lambda p: all(p[a]==b for a,b in zip([0,1,2,3,4,5,6],[0,1,2,3,4,5,8])))"+
+			"(mat24.perm_from_map([0,1,2,3,4,5,6], [0,1,2,3,4,5,8])[1])")
+	if mapsOK {
+		t.Fatalf("oracle perm unexpectedly realizes the unsolvable map")
+	}
+
+	// Contrast: the solvable map [..6]->[..6] gives res=3.
+	if resOK := oracleInt(t, "mat24.perm_from_map([0,1,2,3,4,5,6], [0,1,2,3,4,5,6])[0]"); resOK == 0 {
+		t.Fatalf("solvable map [..6]->[..6] gave res=0")
+	}
+
+	// Mathematical root cause, grounded in the oracle:
+	// h1={0..6} completes to octad (syndrome is a singleton);
+	// h2={0,1,2,3,4,5,8} is umbral (min syndrome weight 3).
+	if !oracleBool(t, "mat24.bw24(mat24.syndrome(0b1111111, 0)) <= 1") {
+		t.Fatalf("expected h1={0..6} to lie in an octad")
+	}
+	if w := oracleInt(t, "mat24.bw24(mat24.syndrome(0b100000000111111, 0))"); w <= 1 {
+		t.Fatalf("expected h2={0,1,2,3,4,5,8} to be umbral, got syndrome weight %d", w)
+	}
+
+	// Go agrees: PermFromMap must return an error here.
+	if _, _, err := PermFromMap([]byte{0, 1, 2, 3, 4, 5, 6}, []byte{0, 1, 2, 3, 4, 5, 8}); err == nil {
+		t.Fatalf("Go PermFromMap should error on the unsolvable case-1 map")
+	}
+}
+
+// TestDiagN7Solvable confirms the n=7 path is NOT
+// broken: a genuinely solvable n=7 map (and an n=7
+// umbral->umbral map) must agree with the oracle.
+func TestDiagN7Solvable(t *testing.T) {
+	cases := []struct {
+		name   string
+		h1, h2 []byte
+	}{
+		// Identity n=7 (h1 in octad -> h2 in octad): res=3.
+		{"identity7", []byte{0, 1, 2, 3, 4, 5, 6}, []byte{0, 1, 2, 3, 4, 5, 6}},
+		// Umbral heptad -> umbral heptad: the i16!=25 path.
+		// Take perm p = some M24 element, map h1 -> p(h1).
+		{"umbral_fixed", []byte{0, 1, 2, 3, 4, 5, 8}, []byte{0, 1, 2, 3, 4, 5, 8}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res, perm, err := PermFromMap(c.h1, c.h2)
+			wres := oracleInt(t, fmt.Sprintf(
+				"mat24.perm_from_map(%s, %s)[0]", pyList(c.h1), pyList(c.h2)))
+			t.Logf("Go: res=%d err=%v", res, err)
+			t.Logf("oracle res=%d", wres)
+			if wres > 0 {
+				// Oracle says solvable: Go must succeed and match.
+				if err != nil {
+					t.Fatalf("Go errored but oracle solvable (res=%d): %v", wres, err)
+				}
+				if int64(res) != wres {
+					t.Fatalf("res mismatch: Go=%d oracle=%d", res, wres)
+				}
+				want := oracleInts(t, fmt.Sprintf(
+					"list(mat24.perm_from_map(%s, %s)[1])", pyList(c.h1), pyList(c.h2)))
+				eqInts(t, "perm", bytesToInts(perm), want)
+			} else {
+				// Oracle says unsolvable (res=0): Go must error.
+				if err == nil {
+					t.Fatalf("Go succeeded but oracle unsolvable (res=0)")
+				}
+			}
+		})
+	}
+}
+
+// TestDiagN7UmbralReal builds a real solvable umbral
+// n=7 map via an actual M24 element so the i16!=25
+// branch is exercised on a SUCCESS case.
+func TestDiagN7UmbralReal(t *testing.T) {
+	// h1 = umbral heptad [0,1,2,3,4,5,8].
+	h1 := []byte{0, 1, 2, 3, 4, 5, 8}
+	// Apply M24 element number 12345 to get its image.
+	p := M24numToPerm(12345)
+	h2 := make([]byte, 7)
+	for i, x := range h1 {
+		h2[i] = p[x]
+	}
+	t.Logf("h1=%v h2=%v (via M24num 12345)", h1, h2)
+	res, perm, err := PermFromMap(h1, h2)
+	if err != nil {
+		t.Fatalf("Go PermFromMap errored on solvable umbral map: %v", err)
+	}
+	wres := oracleInt(t, fmt.Sprintf(
+		"mat24.perm_from_map(%s, %s)[0]", pyList(h1), pyList(h2)))
+	if int64(res) != wres {
+		t.Fatalf("res mismatch: Go=%d oracle=%d", res, wres)
+	}
+	want := oracleInts(t, fmt.Sprintf(
+		"list(mat24.perm_from_map(%s, %s)[1])", pyList(h1), pyList(h2)))
+	eqInts(t, "perm (umbral real)", bytesToInts(perm), want)
+	t.Logf("Go res=%d perm=%v (matches oracle)", res, perm)
+}
+
+// TestDiagHeptadComplete checks Go permCompleteHeptad
+// against the C oracle mat24.perm_complete_heptad on
+// the heptad [0,1,2,3,4,5,_,_,8] that PermFromMap(case 1)
+// constructs.
+func TestDiagHeptadComplete(t *testing.T) {
+	// The heptad PermFromMap builds for case 1 has
+	// images at indices 0,1,2,3,4,5,8 = 0,1,2,3,4,5,8.
+	var p [24]byte
+	for i := range p {
+		p[i] = 0xff
+	}
+	p[0], p[1], p[2], p[3], p[4], p[5], p[8] = 0, 1, 2, 3, 4, 5, 8
+	pin := p // copy for Go
+	errCode := permCompleteHeptad(pin[:])
+	t.Logf("Go permCompleteHeptad err=%#x", errCode)
+	t.Logf("Go result = %v", pin)
+
+	// Python: build the 24-list with None at unset positions.
+	pyExpr := fmt.Sprintf(
+		"(lambda L: (mat24.perm_complete_heptad(L), L)[1])([%s])",
+		heptadPyList(p[:]))
+	want := oracleInts(t, pyExpr)
+	t.Logf("Py result = %v", want)
+	eqInts(t, "permCompleteHeptad [0,1,2,3,4,5,_,_,8]", bytesToInts(pin[:]), want)
+}
+
+// heptadPyList formats a 24-element array, 0xff -> None.
+func heptadPyList(b []byte) string {
+	s := ""
+	for i, x := range b {
+		if i > 0 {
+			s += ","
+		}
+		if x == 0xff {
+			s += "None"
+		} else {
+			s += fmt.Sprintf("%d", x)
+		}
+	}
+	return s
+}
+
+// TestDiagPermFromHeptads checks Go permFromHeptads
+// against the C oracle on the identical-heptad pair
+// [0,1,2,3,4,5,8] that PermFromMap(case 1) constructs.
+// Both yield the identity: the sub-function is correct,
+// which is WHY the case-1 final h1->h2 check fails (the
+// constructed heptad lost the 6->8 constraint because no
+// M24 permutation can honor it).
+func TestDiagPermFromHeptads(t *testing.T) {
+	h1 := []byte{0, 1, 2, 3, 4, 5, 8}
+	h2 := []byte{0, 1, 2, 3, 4, 5, 8}
+	var out [24]byte
+	if rc := permFromHeptads(h1, h2, out[:]); rc == 0xffffffff {
+		t.Fatalf("Go permFromHeptads returned -1 but the heptad is valid")
+	}
+	want := oracleInts(t, fmt.Sprintf(
+		"list(mat24.perm_from_heptads(%s, %s))", pyList(h1), pyList(h2)))
+	eqInts(t, "permFromHeptads", bytesToInts(out[:]), want)
 }
 
 func TestM24numRandAdjustXY(t *testing.T) {
