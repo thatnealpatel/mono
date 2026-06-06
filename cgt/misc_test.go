@@ -3,7 +3,6 @@ package cgt
 import (
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -11,7 +10,7 @@ import (
 func oracleMisc(t *testing.T, setup, expr string) string {
 	t.Helper()
 	script := fmt.Sprintf("import json,mmgroup\n%s\nprint(json.dumps(%s))", setup, expr)
-	out, err := exec.Command("python3", "-c", script).CombinedOutput()
+	out, err := pyCmd(script).CombinedOutput()
 	if err != nil {
 		t.Fatalf("python oracle failed: %v\n%s", err, out)
 	}
