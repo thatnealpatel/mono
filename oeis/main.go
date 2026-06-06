@@ -258,18 +258,22 @@ func oeisSearch(query string) error {
 	bm.Build(names)
 	results := bm.Search(query)
 
-	enc := json.NewEncoder(os.Stdout)
-	for _, r := range results {
-		if err := enc.Encode(struct {
-			ID    string  `json:"id"`
-			Name  string  `json:"name"`
-			Score float64 `json:"score"`
-		}{ids[r.Index], names[r.Index], r.Score}); err != nil {
-			return err
-		}
+	type result struct {
+		ID    string  `json:"id"`
+		Name  string  `json:"name"`
+		Score float64 `json:"score"`
 	}
-	fmt.Fprintf(os.Stderr, "%d results\n", len(results))
-	return nil
+	matches := make([]result, len(results))
+	for i, r := range results {
+		matches[i] = result{ids[r.Index], names[r.Index], r.Score}
+	}
+	out := struct {
+		Query   string   `json:"query"`
+		Results int      `json:"results"`
+		Matches []result `json:"matches"`
+	}{query, len(matches), matches}
+	fmt.Fprintf(os.Stderr, "%d results\n", len(matches))
+	return json.NewEncoder(os.Stdout).Encode(out)
 }
 
 func oeisWalk(fn func(id, path string, q oeisQuick)) error {

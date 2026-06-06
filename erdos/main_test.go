@@ -1,10 +1,39 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestSearchMatchFields(t *testing.T) {
+	p := Problem{
+		Number: "165",
+		Tags:   []string{"combinatorics"},
+		Status: Status{State: "open"},
+	}
+	type match struct {
+		Problem
+		Score float64 `json:"score"`
+	}
+	data, err := json.Marshal(match{p, 1.5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"number", "tags", "score"} {
+		if _, ok := fields[key]; !ok {
+			t.Errorf("match missing top-level %q field", key)
+		}
+	}
+	if _, ok := fields["problem"]; ok {
+		t.Error("match has nested problem wrapper")
+	}
+}
 
 func countPosts(posts []ForumPost) int {
 	n := len(posts)

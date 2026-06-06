@@ -163,8 +163,8 @@ func cmdSearch(query string) error {
 	results := idx.Search(query)
 
 	type match struct {
-		Problem Problem `json:"problem"`
-		Score   float64 `json:"score"`
+		Problem
+		Score float64 `json:"score"`
 	}
 	matches := make([]match, len(results))
 	for i, r := range results {
