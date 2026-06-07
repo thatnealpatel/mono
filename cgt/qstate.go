@@ -2259,37 +2259,7 @@ func HadamardMatrix(nqb int, v uint64) *QState {
 func ColumnMonomialMatrix(data []uint64) *QState {
 	nqb := len(data) - 1
 	s := &qs12{}
-	factor := int64(((data[0] >> uint(nqb)) & 1) << 2)
-	s.nrows = nqb + 1
-	s.ncols = nqb << 1
-	if s.nrows+s.ncols > qsMaxCols || s.nrows > qsMaxRows {
-		panic("cgt: quadratic state too large")
-	}
-	s.grow(s.nrows)
-	m := s.data
-	mask1 := (uint64(1) << uint(nqb)) - 1
-	m[0] = (data[0] & mask1) << uint(nqb)
-	for i := 1; i <= nqb; i++ {
-		mask1 += mask1 + 1
-		m[i] = (uint64(1) << uint(i-1)) | ((data[i] & mask1) << uint(nqb))
-	}
-	// Apply qstate12_set with mode 1 on the
-	// freshly built rows.
-	cm := uint64(1) << uint(2*nqb)
-	for i := 0; i < s.nrows; i++ {
-		if i == 0 {
-			m[0] &= cm - 1
-		} else {
-			m[i] &= (cm << uint(i+1)) - 1
-		}
-	}
-	for i := 0; i < s.nrows; i++ {
-		for j := i + 1; j < s.nrows; j++ {
-			m[i] ^= ((m[j] >> uint(i)) & cm) << uint(j)
-		}
-	}
-	s.shape1 = nqb
-	s.factor = factor
+	qsMonomialColumnMatrix(s, nqb, data)
 	return fromQS12(s)
 }
 
@@ -2647,26 +2617,9 @@ func (q *QState) LbNorm2() int {
 // Trace returns the trace of a square matrix.
 func (q *QState) Trace() complex128 {
 	s := q.toQS12()
-	qsReduce(s)
-	nrows := s.shape1
-	if 2*nrows != s.ncols {
-		panic("cgt: matrix shape mismatch")
-	}
-	qs1 := s.copy()
-	for i := 0; i < nrows; i++ {
-		qsGateCtrlNot(qs1, uint64(1)<<uint(i), uint64(1)<<uint(nrows+i))
-	}
-	qsRestrict(qs1, nrows, nrows)
-	qsSumCols(qs1, 0, nrows)
-	qsReduce(qs1)
-	if qs1.ncols != 0 {
-		panic("cgt: internal parameter error computing trace")
-	}
+	v := factorToComplex(qsMatTraceFactor(s))
 	q.store(s)
-	if qs1.nrows == 0 {
-		return 0
-	}
-	return factorToComplex(int64(uint64(qs1.factor) & factorMask))
+	return v
 }
 
 // Inv returns the inverse matrix. It panics if q
