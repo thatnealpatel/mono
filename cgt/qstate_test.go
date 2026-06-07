@@ -120,6 +120,7 @@ var baseCases = []tcase{
 }
 
 func TestMatrix(t *testing.T) {
+	t.Parallel()
 	for i, c := range baseCases {
 		got := c.state().Matrix()
 		cmpComplex(t, "matrix", c.oracle(), got)
@@ -137,6 +138,7 @@ func gateNotRef(c []complex128, v uint64) []complex128 {
 }
 
 func TestGateNot(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c tcase
 		v uint64
@@ -164,6 +166,7 @@ func gateCtrlNotRef(c []complex128, vc, v uint64) []complex128 {
 }
 
 func TestGateCtrlNot(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c     tcase
 		vc, v uint64
@@ -196,6 +199,7 @@ func gatePhiRef(c []complex128, v uint64, phi int) []complex128 {
 }
 
 func TestGatePhi(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c   tcase
 		v   uint64
@@ -228,6 +232,7 @@ func gateCtrlPhiRef(c []complex128, v1, v2 uint64) []complex128 {
 }
 
 func TestGateCtrlPhi(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c      tcase
 		v1, v2 uint64
@@ -275,6 +280,7 @@ func gateHRef(c []complex128, v uint64) []complex128 {
 }
 
 func TestGateH(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c tcase
 		v uint64
@@ -312,6 +318,7 @@ func rotRef(c []complex128, rot, nrot, n0 int) []complex128 {
 }
 
 func TestRotBits(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c             tcase
 		rot, nrot, n0 int
@@ -343,6 +350,7 @@ func xchRef(c []complex128, sh int, mask uint64) []complex128 {
 }
 
 func TestXchBits(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c    tcase
 		sh   int
@@ -383,6 +391,7 @@ func extendRef(c []complex128, j, nqb int, zero bool) []complex128 {
 }
 
 func TestExtend(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c      tcase
 		j, nqb int
@@ -440,6 +449,7 @@ func sumupRef(c []complex128, j, nqb int) []complex128 {
 }
 
 func TestRestrict(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c      tcase
 		j, nqb int
@@ -480,6 +490,7 @@ func matMulRef(a, b []complex128, ra, ca, cb int) []complex128 {
 }
 
 func TestMatMul(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		a, b tcase
 	}{
@@ -500,6 +511,7 @@ func TestMatMul(t *testing.T) {
 }
 
 func TestQNotSymmetricPanic(t *testing.T) {
+	t.Parallel()
 	// Q stored lower-triangular: Q[2][1]=1 but
 	// Q[1][2]=0. NewQState(mode=0) must panic
 	// with errQNotSymmetric.
@@ -517,6 +529,7 @@ func TestQNotSymmetricPanic(t *testing.T) {
 }
 
 func TestMulElementwise(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		a, b tcase
 	}{
@@ -540,6 +553,7 @@ func TestMulElementwise(t *testing.T) {
 }
 
 func TestProduct(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		a, b    tcase
 		nqb, nc int
@@ -585,6 +599,7 @@ func productRef(a, b []complex128, nqb, nc int) []complex128 {
 }
 
 func TestReduceMatrix(t *testing.T) {
+	t.Parallel()
 	for _, c := range baseCases {
 		want := c.oracle()
 		q := c.state()
@@ -595,6 +610,7 @@ func TestReduceMatrix(t *testing.T) {
 }
 
 func TestReduceEchelon(t *testing.T) {
+	t.Parallel()
 	for _, c := range baseCases {
 		want := c.oracle()
 		cmpComplex(t, "echelon", want, c.state().Echelon().Matrix())
@@ -603,6 +619,7 @@ func TestReduceEchelon(t *testing.T) {
 }
 
 func TestConjugateTranspose(t *testing.T) {
+	t.Parallel()
 	for _, c := range baseCases {
 		base := c.oracle()
 		conjWant := make([]complex128, len(base))
@@ -624,6 +641,7 @@ func TestConjugateTranspose(t *testing.T) {
 }
 
 func TestToSigns(t *testing.T) {
+	t.Parallel()
 	cases := []tcase{
 		{0, 4, [2]int{0, 0}, []uint64{0, 8, 4, 2, 1}},
 		{0, 5, [2]int{0, 0}, []uint64{0, 16, 8, 4, 2, 1}},
@@ -655,6 +673,7 @@ func TestToSigns(t *testing.T) {
 }
 
 func TestCompareSigns(t *testing.T) {
+	t.Parallel()
 	for _, c := range baseCases[1:] {
 		q := c.state()
 		bm := q.ToSigns()
@@ -682,6 +701,7 @@ func unitOracle(nqb int) []complex128 {
 }
 
 func TestUnitMatrix(t *testing.T) {
+	t.Parallel()
 	for _, nqb := range []int{0, 1, 2, 3} {
 		want := unitOracle(nqb)
 		got := UnitMatrix(nqb).Matrix()
@@ -690,6 +710,7 @@ func TestUnitMatrix(t *testing.T) {
 }
 
 func TestPower(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c tcase
 		e int
@@ -769,6 +790,7 @@ func matInvRef(m []complex128, n int) []complex128 {
 }
 
 func TestTrace(t *testing.T) {
+	t.Parallel()
 	cases := []tcase{
 		{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}},
 		{2, 2, [2]int{0, 0}, []uint64{0b110_10_01, 0b101_01_11, 0b011_01_00}},
@@ -789,6 +811,7 @@ func TestTrace(t *testing.T) {
 }
 
 func TestPauliVectorMul(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		nqb    int
 		v1, v2 uint64
@@ -810,6 +833,7 @@ func TestPauliVectorMul(t *testing.T) {
 }
 
 func TestPauliVectorExp(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		nqb int
 		v   uint64
@@ -833,6 +857,7 @@ func TestPauliVectorExp(t *testing.T) {
 }
 
 func TestPauliConjugate(t *testing.T) {
+	t.Parallel()
 	// {0b110_10_01, ...} is singular (det=0);
 	// Inv correctly panics on it.
 	t.Run("singular_panics", func(t *testing.T) {
@@ -889,6 +914,7 @@ func TestPauliConjugate(t *testing.T) {
 }
 
 func TestToSymplectic(t *testing.T) {
+	t.Parallel()
 	// Build invertible matrices; the original
 	// (2,2) fixtures were singular (det=0).
 	inv1 := tcase{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}}.state()
@@ -926,6 +952,7 @@ func TestToSymplectic(t *testing.T) {
 }
 
 func TestOrder(t *testing.T) {
+	t.Parallel()
 	cases := []tcase{
 		{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}},
 		{2, 2, [2]int{0, 0}, []uint64{0b110_10_01, 0b101_01_11, 0b011_01_00}},
@@ -1011,6 +1038,7 @@ func qsWouldPanic(ncols int, data []uint64) [][2]int {
 // This isolates whether the panic comes from a bad
 // INPUT fixture vs. the MatMul OUTPUT.
 func TestMatMulInputSymmetry(t *testing.T) {
+	t.Parallel()
 	type named struct {
 		label string
 		c     tcase
@@ -1067,6 +1095,7 @@ func qsImport(rows, cols, mode int, data []uint64, expr string) string {
 // fixture should contain so tcase.state()'s mode-0
 // NewQState accepts it.
 func TestMatMulOracleData(t *testing.T) {
+	t.Parallel()
 	type named struct {
 		label      string
 		rows, cols int
@@ -1115,6 +1144,7 @@ func floatsToComplex(p []float64) []complex128 {
 // qsProductInto are correct; the failure was the
 // malformed (lower-triangular) input fixtures.
 func TestMatMulFixedSymmetric(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		label          string
 		ar, ac, br, bc int
@@ -1171,6 +1201,7 @@ func newQStateOK(rows, cols int, data []uint64) (ok bool) {
 // it? This pins down exactly which fixtures are
 // malformed (the source of the panic).
 func TestMatMulPerFixture(t *testing.T) {
+	t.Parallel()
 	type named struct {
 		label      string
 		rows, cols int
@@ -1201,6 +1232,7 @@ func TestMatMulPerFixture(t *testing.T) {
 // proving the one-line data swap makes TestMatMul pass
 // with no change to qstate.go or the test logic.
 func TestMatMulCase3Corrected(t *testing.T) {
+	t.Parallel()
 	// Corrected symmetric encodings (mmgroup mode-1
 	// raw_data of the original lower-triangular data):
 	//   case3.a {2,9,17}  -> {18,41,17}

@@ -1267,6 +1267,20 @@ func xsp2co1ToVectMod3(x uint64) uint64 {
 	return x
 }
 
+// xsp2co1FromVectMod3 converts a vector in the
+// (Z/3)^24 encoding used by mm_op to Leech-mod-3
+// encoding. Inverse of xsp2co1ToVectMod3.
+// C xsp2co1_from_vect_mod3.
+func xsp2co1FromVectMod3(x uint64) uint64 {
+	x = shiftMasked(x, 0x2222222222222222, 1)
+	x = shiftMasked(x, 0x0C0C0C0C0C0C0C0C, 2)
+	x = shiftMasked(x, 0x00F000F000F000F0, 4)
+	x = shiftMasked(x, 0x0000FF000000FF00, 8)
+	x = shiftMasked(x, 0x00000000FFFF0000, 16)
+	x = (x & 0xffffff) + ((x & 0xffffff00000000) >> 8)
+	return short3Reduce(x)
+}
+
 // shiftMasked implements the SHIFT_MASKED macro:
 // exchange bits in mask with bits in mask<<sh.
 func shiftMasked(a, mask uint64, sh uint) uint64 {
@@ -1318,6 +1332,31 @@ func xsp2co1AddShort3Leech(x uint64, factor int8, src, dest []int8) {
 	for i := 0; i < 24; i++ {
 		dest[i] = src[i] + f[(xv>>uint(i<<1))&3]
 	}
+}
+
+// short3ToLeech writes the integer coordinates of
+// the short Leech-mod-3 vector x into pdest (length
+// 24), normalized to norm 32. It panics if x is not
+// a short Leech-mod-3 vector.
+// C xsp2co1_short_3_to_leech.
+func short3ToLeech(x uint64, pdest []int8) {
+	for i := 0; i < 24; i++ {
+		pdest[i] = 0
+	}
+	xsp2co1AddShort3Leech(x, 1, pdest, pdest)
+}
+
+// short2ToLeech writes the integer coordinates of
+// the short Leech-mod-2 vector x into pdest (length
+// 24), normalized to norm 32; the sign is arbitrary.
+// It panics if x is not a short Leech-mod-2 vector.
+// C xsp2co1_short_2_to_leech.
+func short2ToLeech(x uint32, pdest []int8) {
+	x3 := Leech2To3Short(x & 0xffffff)
+	if x3 == 0 {
+		panic("cgt: short2ToLeech: vector is not short")
+	}
+	short3ToLeech(x3, pdest)
 }
 
 // xsp2co1ElemToLeechOp computes the 24x24 integer

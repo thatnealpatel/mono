@@ -189,14 +189,66 @@ func FromSparse(p int, sparse []uint32) *MMVector {
 	return v
 }
 
-// RandVector is not implemented: the deterministic
-// oracle does not exercise it and the C version
-// depends on gen_random.c's RNG state.
+// RandVector returns a uniformly random vector modulo
+// p, drawing entropy from crypto/rand. C/Python
+// mm_aux_random_mmv with a system-seeded generator.
 //
-// RandVector always panics.
+// RandVector panics if p is not a supported modulus.
 func RandVector(p int) *MMVector {
 	checkP(p)
-	panic("cgt: RandVector not implemented (no deterministic oracle)")
+	v := &MMVector{p: p, data: newData(p)}
+	randomMMV(p, NewRng(), v.data)
+	return v
+}
+
+// RandVectorSeed returns a uniformly random vector
+// modulo p from a generator seeded deterministically
+// by seedNo. The byte stream matches mmgroup's
+// gen_rng_seed_no + mm_aux_random_mmv, so the result
+// is bit-exact against the oracle for a fixed seed.
+//
+// RandVectorSeed panics if p is not a supported
+// modulus.
+func RandVectorSeed(p int, seedNo uint64) *MMVector {
+	checkP(p)
+	v := &MMVector{p: p, data: newData(p)}
+	randomMMV(p, NewRngSeed(seedNo), v.data)
+	return v
+}
+
+// randomMMV fills the internal-representation vector
+// mv modulo p with uniform random entries drawn from
+// rng. C mm_aux_random_mmv.
+func randomMMV(p int, rng *Rng, mv []uint64) {
+	// b1 doubles as the per-block byte scratch and as
+	// the expand target for the tag-A/B/C block; C uses
+	// uint8_t b1[3072].
+	b1 := make([]uint8, 3072)
+
+	// Small part: tags A, B, C (852 = 24 + 3*276
+	// coefficients, expanded to three 24x24 matrices).
+	// C writes the raw bytes over mv, expands into b1,
+	// then overwrites internal rows 0..71 (entries
+	// [0, MM_AUX_OFS_T)). We use a separate scratch
+	// since those mv bytes are fully overwritten.
+	small := make([]uint8, 24+3*276)
+	rng.BytesModP(p, small)
+	small24Expand(small, b1)
+	writeMMV24(p, b1, mv, 0, 72)
+
+	// Tags T: the 759*64 block, with 759 = 11*69, done
+	// in 22 chunks of 69 rows of 32 entries.
+	for i := uint32(0); i < 22; i++ {
+		rng.BytesModP(p, b1[:69*32])
+		writeMMV32(p, b1, mv, mmAuxOfsT/32+i*69, 69)
+	}
+
+	// Tags X, Z, Y: the 6144*24 block, done in 48
+	// chunks of 128 rows of 24 entries.
+	for i := uint32(0); i < 48; i++ {
+		rng.BytesModP(p, b1[:3072])
+		writeMMV24(p, b1, mv, mmAuxOfsX/32+i*128, 128)
+	}
 }
 
 // P returns the modulus of the vector.

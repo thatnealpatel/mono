@@ -1,5 +1,7 @@
 package cgt
 
+import "strconv"
+
 // This file ports the evaluation helpers for the
 // tag-A matrix and the 98280_x part: norm_A,
 // eval_A, eval_X_count_abs, load_leech3matrix and
@@ -168,15 +170,32 @@ func (v *MMVector) EvalA(v2 uint64, e int) int {
 	return evalA15(work, uint32(v2))
 }
 
-// AxisType returns a short string describing the 2A
-// axis type of v (after applying tau^e). The full
-// disambiguation depends on the reduction engine in
-// mm_reduce.c, which is out of scope here.
+// AxisType returns a short string naming the 2A axis
+// type of v after applying tau^e, e.g. "2A", "6F",
+// "12C". The product x*z of the 2A involution x of v
+// with the central involution z of G_x0 has one of
+// the classes 2A, 2B, 4A, 4B, 4C, 6A, 6C, 6F, 8B,
+// 10A, 10B, 12C; the result names that class.
+// C mm_reduce_2A_axis_type via axis_type (axis.py).
 //
-// AxisType panics: it is not implemented.
+// AxisType panics if v.p != 15 or if v is not a 2A
+// axis.
 func (v *MMVector) AxisType(e int) string {
 	if v.p != 15 {
 		panic("cgt: AxisType supported for p = 15 only")
 	}
-	panic("cgt: AxisType not implemented (requires mm_reduce engine)")
+	// Apply the triality A-part (mm_op_t_A) before
+	// disambiguation, as in axis_type's sym_part.
+	work := make([]uint64, len(v.data))
+	OpTA(v.p, v.data, ((e%3)+3)%3, work)
+	// reduce2AAxisType encodes the class as
+	// n*2^28 + k*2^24 + leech2; the high byte holds
+	// n in the upper nibble and the letter k (A=1,
+	// B=2, ...) in the lower nibble.
+	b := reduce2AAxisType(work) >> 24
+	n, k := b>>4, b&0xf
+	if n == 0 || k == 0 {
+		panic("cgt: AxisType: vector is not a 2A axis")
+	}
+	return strconv.Itoa(int(n)) + string(rune('A'+k-1))
 }

@@ -211,6 +211,7 @@ func TestOctadStruct(t *testing.T) {
 }
 
 func TestParityType(t *testing.T) {
+	t.Parallel()
 	p0 := NewParity(0)
 	p1 := NewParity(1)
 	if p0.Int() != 0 || p1.Int() != 1 {

@@ -10,6 +10,7 @@
 //	go run -C _gen . -out ../mat24_gen.go
 //	go run -C _gen . -out ../mm_op_xi_gen.go
 //	go run -C _gen . -out ../mm_op_p_gen.go
+//	go run -C _gen . -out ../monster_order_gen.go
 //
 // -out names both the generator to run (selected by
 // the file's basename) and the path to write. The
@@ -35,9 +36,10 @@ import (
 // so generators that verify against golden files can
 // locate them; mm_op_p_gen.go ignores it.
 var generators = map[string]func(w io.Writer, cgtDir string) error{
-	"mat24_gen.go":    genMat24Tables,
-	"mm_op_xi_gen.go": genXiTables,
-	"mm_op_p_gen.go":  genMMOpP,
+	"mat24_gen.go":         genMat24Tables,
+	"mm_op_xi_gen.go":      genXiTables,
+	"mm_op_p_gen.go":       genMMOpP,
+	"monster_order_gen.go": genOrderVector,
 }
 
 func main() {
@@ -45,7 +47,8 @@ func main() {
 	log.SetFlags(0)
 
 	out := flag.String("out", "", "output file to generate "+
-		"(mat24_gen.go, mm_op_xi_gen.go or mm_op_p_gen.go)")
+		"(mat24_gen.go, mm_op_xi_gen.go, mm_op_p_gen.go or "+
+		"monster_order_gen.go)")
 	flag.Parse()
 
 	if *out == "" {
@@ -57,7 +60,7 @@ func main() {
 	gen, ok := generators[filepath.Base(*out)]
 	if !ok {
 		log.Fatalf("unknown -out %q (want one of mat24_gen.go, "+
-			"mm_op_xi_gen.go, mm_op_p_gen.go)", *out)
+			"mm_op_xi_gen.go, mm_op_p_gen.go, monster_order_gen.go)", *out)
 	}
 
 	var buf bytes.Buffer

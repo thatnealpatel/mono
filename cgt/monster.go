@@ -813,15 +813,20 @@ const (
 
 // MMRand returns a random monster element of the
 // form g0 t1 g1 ... ti gi with gj random in G_x0
-// and tj equal to tau^{+-1}.
+// and tj equal to tau^{+-1}. The implementation is
+// in monster_random.go.
 func MMRand(rounds int) *MM {
-	panic("not implemented: random words (gen_random, xsp2co1_rand_word)")
+	return mmRand(rounds)
 }
 
 // MMRandIn returns a random element of the named
-// subgroup of the monster.
+// subgroup of the monster. The implementation is
+// in monster_random.go.
+//
+// MMRandIn panics if sub is not a known subgroup
+// description.
 func MMRandIn(sub Subgroup) *MM {
-	panic("not implemented: random words (gen_random, iter_random_mm)")
+	return mmRandIn(sub)
 }
 
 // MMFromInt reconstructs a monster element from the
@@ -1287,23 +1292,12 @@ func orderVector15() *MMVector {
 //////////////////////////////////////////////////
 
 // loadOrderVector returns the precomputed order
-// vector v_1 of the representation mod 15.
-func loadOrderVector() *MMVector {
-	panic("not implemented: order vector (mm_order_vector)")
-}
+// vector v_1 of the representation mod 15. It is
+// implemented in monster_order.go.
 
-// mmCompressAsInt maps the reduced word to its
-// 255-bit integer identifier (GtWord.as_int).
-func mmCompressAsInt(w []uint32) uint64 {
-	panic("not implemented: word compression (mm_compress)")
-}
-
-// mmExpandInt reconstructs an atom word from a
-// 255-bit integer identifier
-// (mm_compress_pc_expand_int).
-func mmExpandInt(n uint64) ([]uint32, error) {
-	panic("not implemented: word expansion (mm_compress)")
-}
+// mmCompressAsInt (GtWord.as_int) and mmExpandInt
+// (mm_compress_pc_expand_int) are implemented in
+// monster_compress.go.
 
 //////////////////////////////////////////////////
 // 2A axes (mmgroup.tests.axes.axis)
@@ -1372,9 +1366,5 @@ func (a *Axis) Equal(b *Axis) bool {
 }
 
 // rebaseAxis returns a G_x0 element g0 with
-// v^+ . g0 == v15, or nil on failure. It mirrors
-// axis.rebase_axis, which uses the order-vector
-// reducer.
-func rebaseAxis(v15 *MMVector) *MM {
-	panic("not implemented: axis rebasing (mm_reduce_vector_vp)")
-}
+// v^+ . g0 == v15, or nil on failure. It is
+// implemented in monster_order.go.

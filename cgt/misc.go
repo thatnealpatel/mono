@@ -383,10 +383,10 @@ func P3IsCollinear(points []int) bool {
 	for _, p := range points {
 		bitmap |= 1 << uint(p3Obj(p))
 	}
-	if findCollinear(bitList(bitmap & 0x1fff)) != nil {
+	if findCollinear(bitList(bitmap&0x1fff)) != nil {
 		return true
 	}
-	if findCollinear(bitList(bitmap >> 13)) != nil {
+	if findCollinear(bitList(bitmap>>13)) != nil {
 		return true
 	}
 	return false
@@ -1326,86 +1326,88 @@ func XchParity(v []int) []int {
 	return out
 }
 
-// ConjugateInvolutionType is not implemented:
-// it depends on the monster group (Phase 3).
+// ConjugateInvolutionType returns (I, h) where h
+// conjugates the monster involution g to a standard
+// representative z (h^-1 g h = z): I = 0 for the
+// identity, 1 for a 2A involution (z the involution
+// in Q_{x0} with cocode word {2,3}), and 2 for a 2B
+// involution (z the central involution of G_{x0}).
+//
+// ConjugateInvolutionType panics if g is not an
+// involution, or if no conjugating element is found
+// within the trial budget. It mirrors
+// mm_conjugate_involution.
 func ConjugateInvolutionType(g *MM) (int, *MM) {
-	panic("not implemented")
+	g.Reduce()
+	z := MMGen("x", 0x1000)
+	one := MMIdentity()
+	if !g.Mul(g).Equal(one) {
+		panic("cgt: element is not an involution in the monster")
+	}
+	if h := g.checkInGx0(); h != nil {
+		elem := NewXsp2Co1(atomsFromWord(h)...)
+		it, hx := elem.ConjugateInvolution()
+		return it, &MM{data: hx.Mmdata()}
+	}
+	const ntrials = 20
+	for i := 0; i < ntrials; i++ {
+		var s *MM
+		if i == 0 {
+			s = one
+		} else {
+			rounds := 3
+			if r := i >> 2; r > rounds {
+				rounds = r
+			}
+			s = MMRand(1 + rounds)
+		}
+		x := s.Inv().Mul(g).Mul(s)
+		o, y := x.Mul(z).HalfOrder()
+		if o == 0 || o&1 != 0 || y == nil {
+			continue
+		}
+		// y = (x z)^(o/2) is an involution in G_x0
+		// commuting with x and z.
+		hy := y.checkInGx0()
+		if hy == nil {
+			continue
+		}
+		itype, h1, ok := conjugateInvolutionGx0(hy)
+		if !ok || itype != 2 {
+			continue
+		}
+		// x1 = x^h1 commutes with y^h1 = z, so x1 is in
+		// G_x0.
+		x1 := h1.Inv().Mul(x).Mul(h1)
+		hx1 := x1.checkInGx0()
+		if hx1 == nil {
+			continue
+		}
+		itype2, h2, ok := conjugateInvolutionGx0(hx1)
+		if !ok {
+			continue
+		}
+		// x1^h2 = g^(s h1 h2) = z.
+		t := s.Mul(h1).Mul(h2)
+		t.Reduce()
+		return itype2, t
+	}
+	panic("cgt: conjugation of element to central involution failed")
 }
 
-type BiMM struct {
-	m1    *MM
-	m2    *MM
-	alpha int
-}
-
-// NewBiMM is not implemented: BiMM depends on
-// the monster group (Phase 3).
-func NewBiMM(m1, m2 *MM, e int) *BiMM {
-	panic("not implemented")
-}
-
-// BiMMIdentity is not implemented: BiMM depends
-// on the monster group (Phase 3).
-func BiMMIdentity() *BiMM {
-	panic("not implemented")
-}
-
-// Mul is not implemented: BiMM depends on the
-// monster group (Phase 3).
-func (b *BiMM) Mul(other *BiMM) *BiMM {
-	panic("not implemented")
-}
-
-// Pow is not implemented: BiMM depends on the
-// monster group (Phase 3).
-func (b *BiMM) Pow(e int) *BiMM {
-	panic("not implemented")
-}
-
-// Inv is not implemented: BiMM depends on the
-// monster group (Phase 3).
-func (b *BiMM) Inv() *BiMM {
-	panic("not implemented")
-}
-
-// Order is not implemented: BiMM depends on the
-// monster group (Phase 3).
-func (b *BiMM) Order() int {
-	panic("not implemented")
-}
-
-// Orders is not implemented: BiMM depends on
-// the monster group (Phase 3).
-func (b *BiMM) Orders() (int, int, int) {
-	panic("not implemented")
-}
-
-// Equal is not implemented: BiMM depends on the
-// monster group (Phase 3).
-func (b *BiMM) Equal(other *BiMM) bool {
-	panic("not implemented")
-}
-
-// P3BiMM is not implemented: BiMM depends on
-// the monster group (Phase 3).
-func P3BiMM(word []int) *BiMM {
-	panic("not implemented")
-}
-
-// AutP3BiMM is not implemented: BiMM depends on
-// the monster group (Phase 3).
-func AutP3BiMM(g *AutP3) *BiMM {
-	panic("not implemented")
-}
-
-// BiMMCoxeterExp is not implemented: it belongs
-// to the Phase 3 BiMM construction.
-func BiMMCoxeterExp(x1, x2 int) int {
-	panic("not implemented")
-}
-
-// Decompose is not implemented: BiMM depends on
-// the monster group (Phase 3).
-func (b *BiMM) Decompose() (*MM, *MM, int) {
-	panic("not implemented")
+// conjugateInvolutionGx0 conjugates the G_x0
+// involution given by the word w (in G_x0 atoms) to
+// its standard representative, returning the type, a
+// conjugating monster element, and ok=false if the
+// element is not an involution conjugable inside
+// G_x0 (mirroring the caught exception in mmgroup).
+func conjugateInvolutionGx0(w []uint32) (itype int, h *MM, ok bool) {
+	defer func() {
+		if recover() != nil {
+			itype, h, ok = 0, nil, false
+		}
+	}()
+	elem := NewXsp2Co1(atomsFromWord(w)...)
+	it, hx := elem.ConjugateInvolution()
+	return it, &MM{data: hx.Mmdata()}, true
 }

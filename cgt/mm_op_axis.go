@@ -206,13 +206,49 @@ func mulStdAxisXYZ(p int, v []uint64) {
 
 // OpStoreAxis stores the 2A axis corresponding to the
 // short Leech-mod-2 vector x into dst (modulo p). C
-// mm_op*_store_axis. This depends on
-// xsp2co1_short_2_to_leech from the G_x0 package,
-// which is provided by xsp2.go.
+// mm_op*_store_axis. x must be an element of Q_x0
+// mapping to a short Leech lattice vector, given in
+// Leech-lattice encoding.
 //
-// OpStoreAxis panics: it is not implemented here
-// because the short-vector-to-Leech routine lives in
-// the in-flight xsp2 layer.
+// It panics if x is not a short Leech-mod-2 vector
+// (via short2ToLeech). The C source uses p=15; here
+// the modulus is the field parameter p.
 func OpStoreAxis(p int, x uint32, dst []uint64) {
-	panic("cgt: OpStoreAxis not implemented (needs xsp2 short_2_to_leech)")
+	zeroMMV(p, dst)
+
+	// Short Leech coordinates, norm 32, arbitrary sign.
+	var a [24]int8
+	short2ToLeech(x, a[:])
+
+	// Reduce each biased, scaled coordinate mod p. The
+	// bias (p << 8) keeps the value non-negative before
+	// the modulo, since a[i] is signed. The scale shift
+	// is P_BITS-2 (the coordinate is divided by 4 in
+	// units of the field width); for p=15 this is 2.
+	pBits := uint((mmvConst(p) >> 15) & 15)
+	var ua [24]uint32
+	for i := 0; i < 24; i++ {
+		entry := uint32(int32(a[i])+int32(p)<<8) << (pBits - 2)
+		ua[i] = entry % uint32(p)
+	}
+
+	// Outer product ua x ua, mod p, written row by row.
+	var b [32]uint8
+	for i := 0; i < 24; i++ {
+		uai := ua[i]
+		for j := 0; j < 24; j++ {
+			b[j] = uint8(uai * ua[j] % uint32(p))
+		}
+		// C: mm_aux_write_mmv24(p, b, mv + 2*i, 0, 1).
+		// Passing row index i with the full dst slice is
+		// equivalent: writeMMV24 advances to row i.
+		writeMMV24(p, b[:], dst, uint32(i), 1)
+	}
+
+	// Add the central diagonal entry for the axis.
+	ind := IndexLeech2ToSparse(x) + 2
+	if x&0x1000000 == 0 {
+		ind ^= uint32(p)
+	}
+	mmvSetSparse(p, dst, []uint32{ind}, 1)
 }

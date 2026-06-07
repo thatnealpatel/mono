@@ -539,57 +539,160 @@ func OpOmega(p int, v []uint64, x int) {
 
 // OpPi applies x_delta * x_pi to src, storing the
 // result in dst. It is a monomial operation built
-// from mm_sub_prep_pi. A faithful field-generic port
-// of mm_op*_do_pi (which permutes rows of 24 and 64
-// entries with signs) is not reproduced here.
+// from mm_sub_prep_pi: tags X, Z, Y and the diagonal
+// A are permuted as rows of 24 with signs, and tag T
+// is permuted as rows of 64. C mm{p}_op_pi.
 //
-// OpPi panics: it is not implemented.
+// OpPi panics if p is not a supported modulus.
 func OpPi(p int, src []uint64, delta, pi int, dst []uint64) {
-	panic("cgt: OpPi not implemented")
+	genOpPi(p, src, delta, pi, dst)
 }
 
 // OpXY applies y_f * x_e * x_eps to src, storing the
 // result in dst. It is monomial, built from
-// mm_sub_prep_xy and the tag-T permutation tables. A
-// faithful field-generic port is not reproduced here.
+// mm_sub_prep_xy and the tag-T permutation tables.
+// C mm{p}_op_xy.
 //
-// OpXY panics: it is not implemented.
+// OpXY panics if p is not a supported modulus.
 func OpXY(p int, src []uint64, f, e, eps int, dst []uint64) {
-	panic("cgt: OpXY not implemented")
+	genOpXY(p, src, f, e, eps, dst)
 }
 
 // OpWord applies g^e to v in place, using work as
-// scratch. C mm_op*_word. It orchestrates xi, tau,
-// xy and pi via the mm_group iterator, which lives in
-// the in-flight monster.go layer.
+// scratch. C mm_op*_word. It runs the mm_group word
+// iterator and, per group element, dispatches the
+// xi, tau, xy and pi/delta blocks.
 //
-// OpWord panics: it is not implemented.
+// OpWord panics if p is not a supported modulus.
 func OpWord(p int, v []uint64, g []uint32, length, e int, work []uint64) error {
-	panic("cgt: OpWord not implemented")
+	return genOpWord(p, v, g, length, e, work)
 }
 
 // OpWordTagA applies g^e to the tag-A part of v in
 // place. C mm_op*_word_tag_A.
 //
-// OpWordTagA panics: it is not implemented.
+// OpWordTagA panics if p is not a supported modulus.
+// It returns a non-nil error if the word contains a
+// nonzero tau power (which does not fix tag A).
 func OpWordTagA(p int, v []uint64, g []uint32, length, e int) error {
-	panic("cgt: OpWordTagA not implemented")
+	return genOpWordTagA(p, v, g, length, e)
 }
 
 // OpWordABC computes the tags A, B, C of v * g into
-// dst. C mm_op*_word_ABC. It relies on the
-// gen_leech2 subframe machinery in the in-flight
-// xsp2 layer.
+// dst. C mm_op*_word_ABC. PrepareOpABC (below)
+// supplies its word-preprocessing front end.
 //
-// OpWordABC panics: it is not implemented.
+// OpWordABC panics: the general path is blocked on the
+// gen_leech2 subframe machinery (gen_leech2_prefix_Gx0,
+// gen_leech2_map_std_subframe, the extract_BC subframe
+// extraction) and the tag-ABC tau/delta restricted ops
+// (mm_op*_t_ABC, mm_op*_delta_tag_ABC), none of which
+// are ported. Its word front end (PrepareOpABC) and the
+// tag-ABC xy/pi/xi ops are available.
 func OpWordABC(p int, src []uint64, g []uint32, length int, dst []uint64) error {
-	panic("cgt: OpWordABC not implemented")
+	return genOpWordABC(p, src, g, length, dst)
 }
 
-// PrepareOpABC preprocesses the word g for OpWordABC.
-// C mm_group_prepare_op_ABC.
+// PrepareOpABC preprocesses the word g (of length
+// length) for OpWordABC, writing the result to out
+// (which must hold at least 11 atoms). C
+// mm_group_prepare_op_ABC.
 //
-// PrepareOpABC panics: it is not implemented.
+// It returns a negative value on failure. On success
+// the low 8 bits hold the output word length; bit 8
+// (0x100) is set iff g lies in N_0, in which case a
+// terminating zero atom is appended and out holds a
+// word of at most 5 atoms with tags t,y,x,d,p in that
+// order. If bit 8 is clear, out holds a word in the
+// generators of G_{x0}, possibly followed by a single
+// tag-t atom.
+//
+// Every prefix of g must lie in G_{x0} * N_0.
 func PrepareOpABC(g []uint32, length int, out []uint32) int {
-	panic("cgt: PrepareOpABC not implemented")
+	g = g[:length]
+	hasT := false   // a tag-t atom has occurred
+	hasL := false   // a tag-l atom has occurred
+	reduce := false // g must be reduced
+
+	for _, atom := range g {
+		// If a tag-t atom has previously occurred then
+		// a tag-l atom forces a reduction.
+		if hasT {
+			reduce = true
+		}
+		switch (atom >> 28) & 7 {
+		case 5: // tag t
+			if atom&0xfffffff != 0 {
+				hasT = true
+			}
+		case 6: // tag l
+			if atom&0xfffffff != 0 {
+				hasL = true
+			}
+		case 7: // illegal tag
+			return -1001
+		}
+	}
+
+	if !hasL {
+		// No tag l: compute the whole word in N_0.
+		var a [5]uint32
+		nClear(a[:])
+		if int(nMulWordScan(a[:], g)) < length {
+			return -1002
+		}
+		lenA := nToWord(a[:], out)
+		return int(lenA) + 0x100
+	}
+
+	if !reduce && length <= 11 {
+		// Return g unchanged.
+		copy(out[:length], g)
+		return length
+	}
+
+	// Reduce g into a product elem * gn with elem in
+	// G_{x0} and gn in N_0.
+	var elem [26]uint64
+	pos := xsp2co1SetElemWordScan(elem[:], g, false)
+	if pos < 0 || pos > length {
+		return -0x1009
+	}
+	var gn [5]uint32
+	nClear(gn[:])
+	scan := int(nMulWordScan(gn[:], g[pos:]))
+	if pos+scan != length {
+		return -1003
+	}
+	// Here g = elem * gn.
+
+	if xsp2co1ElemSubtype(elem[:]) == 0x48 {
+		// elem is in N_x0: store g as an element of N_x0.
+		if xsp2co1ElemToN0(elem[:], out[:5]) != nil {
+			return -1004
+		}
+		nMulElement(out[:5], gn[:], out[:5])
+		lenA := nToWord(out[:5], out)
+		return int(lenA) + 0x100
+	}
+
+	// Otherwise store a word equal to g. Split off the
+	// tag-t power so that gn lands in N_x0.
+	e := nRightCosetNx0(gn[:])
+	lenA := int(nToWord(gn[:], gn[:]))
+	if xsp2co1MulElemWord(elem[:], gn[:lenA]) != nil {
+		return -1005
+	}
+	lenA = xsp2co1ElemToWord(elem[:], out)
+	if lenA < 0 {
+		return -1006
+	}
+	if lenA > 10 {
+		return -1007
+	}
+	if e != 0 {
+		out[lenA] = 0x50000000 + e
+		lenA++
+	}
+	return lenA
 }
