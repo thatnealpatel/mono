@@ -1569,15 +1569,19 @@ func OpGcodePerm(v uint32, p []byte) uint32 {
 
 // OpCocodePerm applies permutation p to cocode
 // element c and returns the result in cocode
-// representation.
+// representation. p is padded to 32 internally;
+// see bytePerm (ploop.go) for why index 24 is
+// reachable from the syndrome table.
 func OpCocodePerm(c uint32, p []byte) uint32 {
+	var pp [32]byte
+	copy(pp[:], p)
 	res := 0 - (((c >> 11) + 1) & 1)
 	c ^= mat24RecipBasis[0] & res
-	res &= mat24RecipBasis[p[0]&31]
+	res &= mat24RecipBasis[pp[0]&31]
 	c = uint32(mat24SyndromeTable[c&0x7ff])
-	res ^= mat24RecipBasis[p[c&31]&31] ^
-		mat24RecipBasis[p[(c>>5)&31]&31] ^
-		mat24RecipBasis[p[(c>>10)&31]&31]
+	res ^= mat24RecipBasis[pp[c&31]&31] ^
+		mat24RecipBasis[pp[(c>>5)&31]&31] ^
+		mat24RecipBasis[pp[(c>>10)&31]&31]
 	return res & 0xfff
 }
 
