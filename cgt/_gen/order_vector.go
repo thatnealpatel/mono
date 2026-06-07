@@ -38,11 +38,29 @@ import (
 //go:embed order_vector_data.txt
 var orderVectorData string
 
+// orderTagData holds the verbatim
+// MM_ORDER_VECTOR_TAG_DATA words (file
+// mm_order_vector.c) as whitespace- and
+// comma-separated 0x... hex tokens. These describe
+// how to recover a G_x0 element from the image of the
+// order vector under that element.
+//
+//go:embed order_tag_data.txt
+var orderTagData string
+
 // ovEntries is the expected number of words in
 // orderVectorTable: 72 tag-(A,B,C) rows of 3 words,
 // 759 tag-T rows of 8 words and 6144 tag-X rows of 3
 // words. C OFS_X + 6144*3.
 const ovEntries = 72*3 + 759*8 + 6144*3
+
+// ovTagEntries is the expected number of words in
+// orderTagTable. C sizeof(MM_ORDER_VECTOR_TAG_DATA).
+// Layout (C VECTOR_LENGTHS): WATERMARK_PERM 24,
+// TAGS_X 24, SOLVE_X 24, TAGS_Y 11, SOLVE_Y 11,
+// TAG_SIGN 1, NORM_A 1, then 43 words of xsp2co1
+// element data unused by the membership test.
+const ovTagEntries = 24 + 24 + 24 + 11 + 11 + 1 + 1 + 43
 
 // genOrderVector parses the embedded ORDER_VECTOR
 // words and writes monster_order_gen.go to w.
@@ -56,13 +74,21 @@ const ovEntries = 72*3 + 759*8 + 6144*3
 // is malformed, if it does not hold exactly ovEntries
 // words, or if the emitted source does not gofmt.
 func genOrderVector(w io.Writer, _ string) error {
-	vals, err := parseOrderVector(orderVectorData)
+	vals, err := parseHexWords(orderVectorData)
 	if err != nil {
 		return err
 	}
 	if len(vals) != ovEntries {
 		return fmt.Errorf("order vector has %d words, want %d",
 			len(vals), ovEntries)
+	}
+	tagVals, err := parseHexWords(orderTagData)
+	if err != nil {
+		return err
+	}
+	if len(tagVals) != ovTagEntries {
+		return fmt.Errorf("order tag data has %d words, want %d",
+			len(tagVals), ovTagEntries)
 	}
 
 	var buf bytes.Buffer
@@ -72,9 +98,15 @@ func genOrderVector(w io.Writer, _ string) error {
 	buf.WriteString("// rho_15, a verbatim copy of the C table ORDER_VECTOR\n")
 	buf.WriteString("// in mm_order_vector.c (ORDER_VECTOR_DATA). The layout\n")
 	buf.WriteString("// is 72 rows of 3 words (tags A,B,C), then 759 rows of\n")
-	buf.WriteString("// 8 words (tag T), then 6144 rows of 3 words (tag X).\n\n")
+	buf.WriteString("// 8 words (tag T), then 6144 rows of 3 words (tag X).\n")
+	buf.WriteString("//\n")
+	buf.WriteString("// orderTagTable is a verbatim copy of the C table\n")
+	buf.WriteString("// MM_ORDER_VECTOR_TAG_DATA in the same file; it drives\n")
+	buf.WriteString("// recovery of a G_x0 element from the image of the\n")
+	buf.WriteString("// order vector under that element.\n\n")
 	buf.WriteString("package cgt\n")
 	writeHexTable(&buf, "orderVectorTable", "...", "uint32", 8, valsPerLine, vals)
+	writeHexTable(&buf, "orderTagTable", "...", "uint32", 8, valsPerLine, tagVals)
 
 	src, err := format.Source(buf.Bytes())
 	if err != nil {
@@ -86,19 +118,19 @@ func genOrderVector(w io.Writer, _ string) error {
 	return nil
 }
 
-// parseOrderVector splits data into 0x... hex tokens
+// parseHexWords splits data into 0x... hex tokens
 // (whitespace- and comma-separated) and parses each as
 // a uint32, returning the words as []uint64 for
 // writeHexTable.
-func parseOrderVector(data string) ([]uint64, error) {
+func parseHexWords(data string) ([]uint64, error) {
 	fields := strings.FieldsFunc(data, func(r rune) bool {
 		return r == ',' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
 	})
-	vals := make([]uint64, 0, ovEntries)
+	vals := make([]uint64, 0, len(fields))
 	for _, f := range fields {
 		v, err := strconv.ParseUint(strings.TrimPrefix(f, "0x"), 16, 32)
 		if err != nil {
-			return nil, fmt.Errorf("parse order vector word %q: %w", f, err)
+			return nil, fmt.Errorf("parse hex word %q: %w", f, err)
 		}
 		vals = append(vals, v)
 	}

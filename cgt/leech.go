@@ -462,11 +462,11 @@ func Leech3OpVectorWord(v3 uint64, g []uint32) uint64 {
 		case 8, 0, 8 + 1, 1, 8 + 3, 3:
 			// no operation
 		case 8 + 2:
-			copy(perm, M24numToPerm(v))
+			copy(perm, m24numToPermSafe(v))
 			copy(permI, InvPerm(perm))
 			v3 = leech3OpPi(v3, permI)
 		case 2:
-			copy(perm, M24numToPerm(v))
+			copy(perm, m24numToPermSafe(v))
 			v3 = leech3OpPi(v3, perm)
 		case 8 + 4, 4:
 			v3 = leech3OpY(v3, v&0x1fff)
@@ -572,14 +572,14 @@ func Leech2OpAtom(x, g uint32) uint32 {
 		if v == 0 {
 			break
 		}
-		iPerm := M24numToPerm(v)
+		iPerm := m24numToPermSafe(v)
 		perm, autpl = PermToIautpl(0, iPerm)
 		q0 = opDeltaPi(q0, perm, autpl)
 	case 0x20000000: // p
 		if v == 0 {
 			break
 		}
-		copy(perm, M24numToPerm(v))
+		copy(perm, m24numToPermSafe(v))
 		autpl = PermToAutpl(0, perm)
 		q0 = opDeltaPi(q0, perm, autpl)
 	case 0x30000000, 0xb0000000: // x, Ix

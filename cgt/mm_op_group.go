@@ -68,10 +68,10 @@ func opScalarMul(p, factor int, mv []uint64) {
 // zero (treating an all-ones field as zero). C
 // mm_op_checkzero (returns 0 if zero); here true
 // means zero.
+//
+// OpCheckzero panics if p is not a supported modulus.
 func OpCheckzero(p int, v []uint64) bool {
-	if mmAuxBadP(p) {
-		return false
-	}
+	checkP(p)
 	n := MMVSize(p)
 	fw := fieldWidth(p)
 	nf := uint(64) / fw
@@ -636,12 +636,11 @@ func PrepareOpABC(g []uint32, length int, out []uint32) int {
 
 	if !hasL {
 		// No tag l: compute the whole word in N_0.
-		var a [5]uint32
-		nClear(a[:])
-		if int(nMulWordScan(a[:], g)) < length {
+		var a N0Elem
+		if int(nMulWordScan(&a, g)) < length {
 			return -1002
 		}
-		lenA := nToWord(a[:], out)
+		lenA := nToWord(&a, out)
 		return int(lenA) + 0x100
 	}
 
@@ -658,9 +657,8 @@ func PrepareOpABC(g []uint32, length int, out []uint32) int {
 	if pos < 0 || pos > length {
 		return -0x1009
 	}
-	var gn [5]uint32
-	nClear(gn[:])
-	scan := int(nMulWordScan(gn[:], g[pos:]))
+	var gn N0Elem
+	scan := int(nMulWordScan(&gn, g[pos:]))
 	if pos+scan != length {
 		return -1003
 	}
@@ -671,15 +669,15 @@ func PrepareOpABC(g []uint32, length int, out []uint32) int {
 		if xsp2co1ElemToN0(elem[:], out[:5]) != nil {
 			return -1004
 		}
-		nMulElement(out[:5], gn[:], out[:5])
-		lenA := nToWord(out[:5], out)
+		nMulElement((*N0Elem)(out[:5]), &gn, (*N0Elem)(out[:5]))
+		lenA := nToWord((*N0Elem)(out[:5]), out)
 		return int(lenA) + 0x100
 	}
 
 	// Otherwise store a word equal to g. Split off the
 	// tag-t power so that gn lands in N_x0.
 	e := nRightCosetNx0(gn[:])
-	lenA := int(nToWord(gn[:], gn[:]))
+	lenA := int(nToWord(&gn, gn[:]))
 	if xsp2co1MulElemWord(elem[:], gn[:lenA]) != nil {
 		return -1005
 	}

@@ -117,14 +117,28 @@ func OpLoadLeech3Matrix(p int, v []uint64, a []uint64) {
 		per := rowsPer24(15)
 		for i := 0; i < 24; i++ {
 			off := i * per
-			a[ai] = v[off]
-			a[ai+1] = v[off+1] & 0xffffffff
+			// Fold each 4-bit mod-15 field down to a mod-3
+			// value: sum the two 2-bit halves, then map 4->1
+			// (i.e. reduce the carry). C mm_op15_load_leech3matrix.
+			a[ai] = fold15To3(v[off])
+			a[ai+1] = fold15To3(v[off+1] & 0xffffffff)
 			a[ai+2] = 0
 			ai += 3
 		}
 	default:
 		panic("cgt: OpLoadLeech3Matrix supported for p = 3, 15 only")
 	}
+}
+
+// fold15To3 reduces each 4-bit mod-15 field of w to a
+// mod-3 value held in the same 4-bit field. It sums the
+// two 2-bit halves of each field, then maps a folded
+// value of 4 back to 1. C inline reduction in
+// mm_op15_load_leech3matrix.
+func fold15To3(w uint64) uint64 {
+	w = (w & 0x3333333333333333) + ((w >> 2) & 0x3333333333333333)
+	tmp := w & 0x4444444444444444
+	return w - tmp + (tmp >> 2)
 }
 
 // expand315 expands the lower 16 two-bit fields of a

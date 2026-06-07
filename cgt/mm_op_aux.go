@@ -6,6 +6,7 @@ package cgt
 // getMMV returns entry i (internal index) of vector
 // mv modulo p, reduced. C mm_aux_get_mmv.
 func getMMV(p int, mv []uint64, i uint32) uint8 {
+	// TODO(nealpatel): Verify with 'callgraph' and delete if dead.
 	if mmAuxBadP(p) {
 		return 0
 	}
@@ -24,6 +25,7 @@ func getMMV(p int, mv []uint64, i uint32) uint8 {
 // to value. Writes both twin locations if any. C
 // mm_aux_put_mmv.
 func putMMV(p int, value uint8, mv []uint64, i uint32) {
+	// TODO(nealpatel): Verify with 'callgraph' and delete if dead.
 	if mmAuxBadP(p) {
 		return
 	}
@@ -48,6 +50,7 @@ func putMMV(p int, value uint8, mv []uint64, i uint32) {
 // mv modulo p, updating both twin locations. C
 // mm_aux_add_mmv.
 func addMMV(p int, value uint8, mv []uint64, i uint32) {
+	// TODO(nealpatel): Verify with 'callgraph' and delete if dead.
 	if mmAuxBadP(p) {
 		return
 	}
@@ -132,6 +135,7 @@ func readMMV24(p int, mv []uint64, i uint32, b []uint8, length uint32) {
 	mvi := (i << 5) >> (6 - logF)
 	bi := 0
 	for ; length > 0; length-- {
+		rowStart := mvi
 		got := uint32(0)
 		for w := uint32(0); w < v24 && got < 24; w++ {
 			src := mv[mvi]
@@ -143,6 +147,12 @@ func readMMV24(p int, mv []uint64, i uint32, b []uint8, length uint32) {
 				got++
 			}
 		}
+		// Advance by the full v24 stride to skip the
+		// padding word the 24-entry read may leave
+		// untouched (8-bit fields, LOG_FIELD_BITS=3).
+		// Matches writeMMV24 and the mv += (8<<LOG_F)/
+		// INT_BITS adjustment in C mm_aux_read_mmv24.
+		mvi = rowStart + v24
 	}
 }
 
@@ -233,6 +243,7 @@ func small24Compress(bSrc, bDest []uint8) {
 // external byte representation b (length 196884),
 // reduced modulo p. C mm_aux_mmv_to_bytes.
 func mmvToBytes(p int, mv []uint64, b []uint8) {
+	// TODO(nealpatel): Verify with 'callgraph' and delete if dead.
 	if mmAuxBadP(p) {
 		return
 	}
@@ -248,6 +259,7 @@ func mmvToBytes(p int, mv []uint64, b []uint8) {
 // (internal). Each entry must satisfy 0 <= x <= p. C
 // mm_aux_bytes_to_mmv.
 func bytesToMMV(p int, b []uint8, mv []uint64) {
+	// TODO(nealpatel): Verify with 'callgraph' and delete if dead.
 	if mmAuxBadP(p) {
 		return
 	}
@@ -261,6 +273,7 @@ func bytesToMMV(p int, b []uint8, mv []uint64) {
 // zeroMMV zeros the first MMVSize(p) entries of mv. C
 // mm_aux_zero_mmv.
 func zeroMMV(p int, mv []uint64) {
+	// TODO(nealpatel): Verify with 'callgraph' and delete if dead.
 	if mmAuxBadP(p) {
 		return
 	}
@@ -275,6 +288,7 @@ func zeroMMV(p int, mv []uint64) {
 // C mm_aux_reduce_mmv_fields. Returns 0 on success,
 // -1 for bad p, -2 for a stray bit.
 func reduceMMVFields(p int, mv []uint64, nfields uint32) int {
+	// TODO(nealpatel): Verify with 'callgraph' and delete if dead.
 	if mmAuxBadP(p) {
 		return -1
 	}
@@ -505,6 +519,7 @@ func mmvToSparse(p int, mv []uint64, sp []uint32) int {
 // corresponding coordinate of mv. C
 // mm_aux_mmv_extract_sparse.
 func mmvExtractSparse(p int, mv []uint64, sp []uint32, length int) {
+	// TODO(nealpatel): Verify with 'callgraph' and delete if dead.
 	if mmAuxBadP(p) {
 		return
 	}
@@ -529,6 +544,7 @@ func mmvGetSparse(p int, mv []uint64, sp uint32) uint32 {
 // mmvAddSparse adds the sparse vector sp to mv. C
 // mm_aux_mmv_add_sparse.
 func mmvAddSparse(p int, sp []uint32, length int, mv []uint64) {
+	// TODO(nealpatel): Verify with 'callgraph' and delete if dead.
 	if mmAuxBadP(p) {
 		return
 	}
@@ -541,6 +557,7 @@ func mmvAddSparse(p int, sp []uint32, length int, mv []uint64) {
 // mmvSetSparse sets entries of mv from sparse vector
 // sp. C mm_aux_mmv_set_sparse.
 func mmvSetSparse(p int, mv []uint64, sp []uint32, length int) {
+	// TODO(nealpatel): Verify with 'callgraph' and delete if dead.
 	if mmAuxBadP(p) {
 		return
 	}
@@ -584,15 +601,15 @@ func doHash(mv []uint64, n uint32, p int, mask1 uint64, h *[4]uint64) {
 // Hash returns a hash value of vector data modulo p.
 // If bit i of skip is set, entries with the i-th tag
 // in "ABCTXZY" are ignored. C mm_aux_hash.
+//
+// Hash panics if p is not a supported modulus.
 func Hash(p int, data []uint64, skip int) uint64 {
+	checkP(p)
 	var h [4]uint64
 	h[0] = hashCH + (uint64(p) << 4) + ((uint64(skip) & 0x7f) << 12)
 	h[1] = h[0] * hashCH
 	h[2] = h[1] * hashCH
 	h[3] = h[2] * hashCH
-	if mmAuxBadP(p) {
-		return 0
-	}
 	c := mmvConst(p)
 	pb := uint((c >> 15) & 15)
 	lif := uint(c & 7)
@@ -623,10 +640,15 @@ func Hash(p int, data []uint64, skip int) uint64 {
 // a (here we return the updated sparse signs as a new
 // slice). C mm_aux_mmv_extract_sparse_signs returns a
 // bitmask, but the Go signature returns []uint32.
+//
+// MmAuxExtractSparseSigns panics if p is not a
+// supported modulus. It returns nil if a has more
+// than 31 entries.
 func MmAuxExtractSparseSigns(p int, v []uint64, a []uint32) []uint32 {
+	checkP(p)
 	n := len(a)
 	out := make([]uint32, n)
-	if mmAuxBadP(p) || n > 31 {
+	if n > 31 {
 		return nil
 	}
 	sp1 := make([]uint32, n)

@@ -399,14 +399,14 @@ func assertBytes(t *testing.T, name string, p int, got []uint8, want []int64) {
 }
 
 func TestOpNormA(t *testing.T) {
+	// mm_op_norm_A is only defined for p in {3,15};
+	// it returns the -1 error sentinel for p=7,31.
 	cases := []struct {
 		p int
 		v string
 	}{
 		{3, "[('A',2,3),('A',0,0),('A',5,5)]"},
-		{7, "[('A',1,2),('A',3,4),('A',7,7)]"},
 		{15, "[('A',0,0),('A',11,3),('A',18,2)]"},
-		{31, "[('A',2,3),('A',5,6),('A',9,9)]"},
 	}
 	for _, c := range cases {
 		v := NewVector(c.p, parseTuples(t, c.v))
@@ -430,13 +430,17 @@ func TestOpCheckzero(t *testing.T) {
 	for _, c := range cases {
 		v := NewVector(c.p, parseTuples(t, c.v))
 		got := OpCheckzero(c.p, v.Data())
-		want := oracleBool(t, fmt.Sprintf("bool(mmgroup.mm_op.mm_op_checkzero(%d,mmgroup.MMVector(%d,%s).data))", c.p, c.p, c.v))
+		// C mm_op_checkzero returns 1 when non-zero,
+		// 0 when zero; Go's OpCheckzero returns true
+		// when zero. The semantics are inverted, so
+		// negate the oracle result.
+		want := !oracleBool(t, fmt.Sprintf("bool(mmgroup.mm_op.mm_op_checkzero(%d,mmgroup.MMVector(%d,%s).data))", c.p, c.p, c.v))
 		if got != want {
 			t.Fatalf("OpCheckzero(p=%d,%s)=%v want %v", c.p, c.v, got, want)
 		}
 		z := ZeroVector(c.p)
 		gotZ := OpCheckzero(c.p, z.Data())
-		wantZ := oracleBool(t, fmt.Sprintf("bool(mmgroup.mm_op.mm_op_checkzero(%d,mmgroup.MMVector(%d).data))", c.p, c.p))
+		wantZ := !oracleBool(t, fmt.Sprintf("bool(mmgroup.mm_op.mm_op_checkzero(%d,mmgroup.MMVector(%d).data))", c.p, c.p))
 		if gotZ != wantZ {
 			t.Fatalf("OpCheckzero(p=%d,zero)=%v want %v", c.p, gotZ, wantZ)
 		}

@@ -712,6 +712,10 @@ func (b *BiMM) Orders() (int, int, int) {
 // Order returns the order of b in the Bimonster.
 func (b *BiMM) Order() int {
 	o1, o2, s := b.Orders()
+	if o1 == 0 || o2 == 0 {
+		panic("cgt: BiMM.Order: a Monster component order is 0 " +
+			"(order exceeded the search bound in orderElementGx0)")
+	}
 	return s * o1 * o2 / gcdInt(o1, o2)
 }
 

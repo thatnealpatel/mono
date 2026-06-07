@@ -65,6 +65,7 @@ func miscEq(a []int, b []int64) bool {
 const miscBF = "from mmgroup.bitfunctions import bitparity, bitweight"
 
 func TestBitParity(t *testing.T) {
+	t.Parallel()
 	for _, x := range []uint64{0, 0x7, 0x3, 0xfedcba, 0xffffffffff} {
 		want := int(oracleMiscInt(t, miscBF, fmt.Sprintf("bitparity(%d)", x)))
 		if got := BitParity(x); got != want {
@@ -74,6 +75,7 @@ func TestBitParity(t *testing.T) {
 }
 
 func TestBitWeight(t *testing.T) {
+	t.Parallel()
 	for _, x := range []uint64{0, 0xff, 0x1234, 0xfedcba, 0xffffffffff} {
 		want := int(oracleMiscInt(t, miscBF, fmt.Sprintf("bitweight(%d)", x)))
 		if got := BitWeight(x); got != want {
@@ -83,6 +85,7 @@ func TestBitWeight(t *testing.T) {
 }
 
 func TestHadamardSign(t *testing.T) {
+	t.Parallel()
 	cases := [][2]int{{0, 0}, {1, 1}, {3, 5}, {7, 7}, {0x2a, 0x1c}}
 	for _, c := range cases {
 		want := int(oracleMiscInt(t, miscBF, fmt.Sprintf("(-1)**bitparity(%d & %d)", c[0], c[1])))
@@ -93,6 +96,7 @@ func TestHadamardSign(t *testing.T) {
 }
 
 func TestParityHadamardSign(t *testing.T) {
+	t.Parallel()
 	cases := [][2]int{{0, 0}, {1, 2}, {3, 3}, {6, 5}, {0x2a, 0x1c}}
 	for _, c := range cases {
 		expr := fmt.Sprintf("(-1)**(bitparity(%d & %d) ^ (bitparity(%d) & bitparity(%d)))", c[0], c[1], c[0], c[1])
@@ -104,6 +108,7 @@ func TestParityHadamardSign(t *testing.T) {
 }
 
 func TestXchParity(t *testing.T) {
+	t.Parallel()
 	vecs := [][]int{
 		{0, 1, 2, 3},
 		{5, 6, 7, 8, 9, 10, 11, 12},
@@ -120,6 +125,7 @@ func TestXchParity(t *testing.T) {
 }
 
 func TestHadamardTransform(t *testing.T) {
+	t.Parallel()
 	setup := miscBF + "\n" +
 		"def p2(e,p):\n" +
 		" return pow((p+1)>>1,-e,p) if e<0 else pow(2,e,p)\n" +
@@ -178,6 +184,7 @@ func miscUnionFind(t *testing.T, n int, unions [][2]uint32, queries []uint32) {
 }
 
 func TestUFindFind(t *testing.T) {
+	t.Parallel()
 	miscUnionFind(t, 8, [][2]uint32{{0, 1}, {2, 3}, {1, 3}}, []uint32{0, 3, 4})
 	miscUnionFind(t, 16, [][2]uint32{{0, 4}, {4, 8}, {8, 12}, {1, 5}}, []uint32{12, 5, 7})
 	miscUnionFind(t, 8, [][2]uint32{{0, 7}, {1, 6}, {2, 5}, {3, 4}}, []uint32{7, 6, 0})
@@ -186,6 +193,7 @@ func TestUFindFind(t *testing.T) {
 const miscInc = "from mmgroup.bimm import P3_node, P3_incidence, P3_incidences, P3_is_collinear"
 
 func TestP3Incidence(t *testing.T) {
+	t.Parallel()
 	cases := [][2]int{{0, 1}, {0, 3}, {1, 3}, {2, 5}}
 	for _, c := range cases {
 		want := int(oracleMiscInt(t, miscInc, fmt.Sprintf("P3_incidence(%d,%d).ord", c[0], c[1])))
@@ -196,6 +204,7 @@ func TestP3Incidence(t *testing.T) {
 }
 
 func TestP3NodeName(t *testing.T) {
+	t.Parallel()
 	for _, o := range []int{0, 5, 12, 13, 25} {
 		want := strings.Trim(oracleMisc(t, miscInc, fmt.Sprintf("P3_node(%d).name()", o)), "\"")
 		if got := NewP3Node(o).Name(); got != want {
@@ -205,6 +214,7 @@ func TestP3NodeName(t *testing.T) {
 }
 
 func TestP3IsCollinear(t *testing.T) {
+	t.Parallel()
 	cases := [][]int{{0, 1, 2}, {0, 1, 3}, {2, 5, 6}, {1, 3, 9}}
 	for _, c := range cases {
 		want := oracleMiscBool(t, miscInc, fmt.Sprintf("P3_is_collinear(%s)", miscList(c)))
@@ -217,6 +227,7 @@ func TestP3IsCollinear(t *testing.T) {
 const miscBM = "from mmgroup.bimm import P3_BiMM"
 
 func TestBiMMCoxeterExp(t *testing.T) {
+	t.Parallel()
 	ref := "def cox(x,y):\n" +
 		" mi,ma=min(x,y),max(x,y)\n" +
 		" if mi<13 and ma>=13 and (mi+ma)%13 in (0,1,3,9): return 3\n" +
@@ -231,6 +242,7 @@ func TestBiMMCoxeterExp(t *testing.T) {
 }
 
 func TestBiMMOrder(t *testing.T) {
+	t.Parallel()
 	words := [][]int{{}, {0}, {0, 13}}
 	for _, w := range words {
 		got := P3BiMM(w).Order()
@@ -242,6 +254,7 @@ func TestBiMMOrder(t *testing.T) {
 }
 
 func TestBiMMSpiderOrder(t *testing.T) {
+	t.Parallel()
 	got := P3BiMM([]int{0, 14, 15, 0, 16, 17, 0, 18, 19}).Order()
 	want := int(oracleMiscInt(t, miscBM, "P3_BiMM([0,14,15,0,16,17,0,18,19]).order()"))
 	if got != want {
@@ -250,6 +263,7 @@ func TestBiMMSpiderOrder(t *testing.T) {
 }
 
 func TestConjugateInvolutionType(t *testing.T) {
+	t.Parallel()
 	setup := "from mmgroup import MM0\n" +
 		"def conj(zt,zv,ct,cv):\n" +
 		" z=MM0(zt,zv); c=MM0(ct,cv); return c**(-1)*z*c\n" +
@@ -284,6 +298,7 @@ func TestConjugateInvolutionType(t *testing.T) {
 }
 
 func TestAutP3Type(t *testing.T) {
+	t.Parallel()
 	g := NewAutP3Rand()
 	if g.Order() <= 0 {
 		t.Fatalf("AutP3Rand.Order() = %d, want > 0", g.Order())
@@ -300,6 +315,7 @@ func TestAutP3Type(t *testing.T) {
 }
 
 func TestBiMMGroupOps(t *testing.T) {
+	t.Parallel()
 	id := BiMMIdentity()
 	if id.Order() != 1 {
 		t.Fatalf("BiMMIdentity.Order() = %d, want 1", id.Order())
@@ -322,6 +338,7 @@ func TestBiMMGroupOps(t *testing.T) {
 }
 
 func TestP3Incidences(t *testing.T) {
+	t.Parallel()
 	nodes := P3Incidences(0, 1, 3)
 	want := oracleMiscInts(t, miscInc, "[n.ord for n in P3_incidences(0, 1, 3)]")
 	if len(nodes) != len(want) {
@@ -335,6 +352,7 @@ func TestP3Incidences(t *testing.T) {
 }
 
 func TestUFindPartition(t *testing.T) {
+	t.Parallel()
 	tbl := make([]uint32, 8)
 	UFindInit(tbl)
 	UFindUnion(tbl, 0, 1)
@@ -360,6 +378,7 @@ const miscMakeMap = "import numpy as np\n" +
 	" return [int(x) for x in m]"
 
 func TestUFindMakeMap(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		n      int
 		unions [][2]uint32
@@ -403,6 +422,7 @@ func miscEq32(a []uint32, b []int64) bool {
 const miscRemain = "from mmgroup.bimm import P3_node, P3_remaining_nodes"
 
 func TestP3RemainingNodes(t *testing.T) {
+	t.Parallel()
 	cases := [][2]int{{0, 1}, {0, 3}, {1, 3}, {2, 5}, {13, 14}}
 	for _, c := range cases {
 		got := P3RemainingNodes(c[0], c[1])
@@ -419,6 +439,7 @@ func TestP3RemainingNodes(t *testing.T) {
 }
 
 func TestAutP3Inv(t *testing.T) {
+	t.Parallel()
 	id := NewAutP3(nil)
 	for i := 0; i < 5; i++ {
 		g := NewAutP3Rand()
@@ -435,6 +456,7 @@ func TestAutP3Inv(t *testing.T) {
 }
 
 func TestAutP3Pow(t *testing.T) {
+	t.Parallel()
 	id := NewAutP3(nil)
 	for i := 0; i < 5; i++ {
 		g := NewAutP3Rand()
@@ -462,6 +484,7 @@ func miscPerm13(v []int) string {
 }
 
 func TestAutP3PointMap(t *testing.T) {
+	t.Parallel()
 	for i := 0; i < 5; i++ {
 		g := NewAutP3Rand()
 		pm := g.PointMap()
@@ -476,6 +499,7 @@ func TestAutP3PointMap(t *testing.T) {
 }
 
 func TestAutP3LineMap(t *testing.T) {
+	t.Parallel()
 	for i := 0; i < 5; i++ {
 		g := NewAutP3Rand()
 		pm := g.PointMap()
@@ -491,6 +515,7 @@ func TestAutP3LineMap(t *testing.T) {
 }
 
 func TestBiMMDecompose(t *testing.T) {
+	t.Parallel()
 	words := [][]int{{0}, {0, 13}, {0, 14, 15}}
 	for _, w := range words {
 		b := P3BiMM(w)
@@ -524,6 +549,7 @@ func miscEqU32(a []uint32, b []int64) bool {
 }
 
 func TestP3NodeApply(t *testing.T) {
+	t.Parallel()
 	nodes := []int{0, 1, 5, 13, 14, 25}
 	for i := 0; i < 4; i++ {
 		g := NewAutP3Rand()

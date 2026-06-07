@@ -733,13 +733,19 @@ func genOpDelta(p int, src []uint64, delta int, dst []uint64) {
 		}
 	}
 
-	// Tag A: 24 rows; sign from the first 72 entries
-	// of the cocode table (3 tags packed per index in
-	// the C, here row r uses signs[r] bit 0).
+	// Tags A, B, C: 72 contiguous 24-rows starting at
+	// OFS_A. C mm{p}_op_delta takes the sign of row i1
+	// from bit 3 of signs[i1], where signs[i1] is masked
+	// to its low 3 bits for all 72 rows; bit 3 is then
+	// set only for tag C (rows 48..71) when delta is odd.
+	// Thus tags A and B are copied unchanged and tag C is
+	// negated for odd delta. (Unlike tags X, Z, Y, the
+	// cocode parity does not act on the symmetric A, B, C
+	// matrices.)
 	as := s.genTagAOfs()
-	for r := 0; r < 24; r++ {
-		neg := signs[r]&1 != 0
-		s.genCopyRow24(src, as+r*s.wordsPer24, dst, as+r*s.wordsPer24, neg)
+	for i1 := 0; i1 < 72; i1++ {
+		neg := odd != 0 && i1 >= 48
+		s.genCopyRow24(src, as+i1*s.wordsPer24, dst, as+i1*s.wordsPer24, neg)
 	}
 
 	// Tag T: 759 64-rows, negated when
@@ -826,15 +832,43 @@ func genOpPi(p int, src []uint64, delta, pi int, dst []uint64) {
 		genDoPiRows24(s, src, srcOfs[k], dst, dstOfs[k], big, &col, 2048, uint(k+12))
 	}
 
-	// Tag A: 24 diagonal rows, sign from big table
-	// bits, same column permutation.
+	// Tags A, B, C: 72 contiguous 24-rows at OFS_A. C
+	// mm_sub_prep_pi fills tbl_perm24_big[2048..2120]
+	// with the row permutation for these tags: row i of
+	// each tag is gathered from source row inv_perm[i] of
+	// the same tag (offsets 0, 24, 48), with the column
+	// permutation col applied; only tag C carries a sign
+	// (bit 15) and only when delta is odd. The big X/Z/Y
+	// table is not used here.
+	abc := genAbcRowPerm(invPerm, delta&0x800 != 0)
 	as := s.genTagAOfs()
-	genDoPiRows24(s, src, as, dst, as, big, &col, 24, 0)
+	genDoPiRows24(s, src, as, dst, as, abc[:], &col, 72, 15)
 
 	if delta&0x800 != 0 {
 		s.genInvertTagT(dst)
 		s.genNegScalprodDI(dst[s.genTagXOfs():])
 	}
+}
+
+// genAbcRowPerm builds the 72-entry row permutation for
+// tags A, B, C used by genOpPi, mirroring the
+// tbl_perm24_big[2048..2120] block of C mm_sub_prep_pi.
+// Row i of tag k (k = 0, 1, 2 for A, B, C) is gathered
+// from source row inv_perm[i] + 24*k; tag C additionally
+// carries a sign in bit 15 when delta is odd.
+func genAbcRowPerm(invPerm []byte, oddDelta bool) [72]uint16 {
+	var abc [72]uint16
+	for i := 0; i < 24; i++ {
+		t := uint16(invPerm[i])
+		abc[i] = t
+		abc[i+24] = t + 24
+		c := t + 48
+		if oddDelta {
+			c |= 0x8000
+		}
+		abc[i+48] = c
+	}
+	return abc
 }
 
 // genDoPiRows24 permutes n rows of 24 entries from
@@ -1073,21 +1107,26 @@ func genDoXYTagT(s *genSwar, src []uint64, op *subOpXY, dst []uint64) {
 	ts := s.genTagTOfs()
 	for i := 0; i < 759; i++ {
 		ofs := op.sT[i]
-		ofsH := (ofs & 63) >> 4
+		// C op{p}_do_xy reads source word (w ^ ofsH) and
+		// bit (4*field ^ ofsL) for output word w, field
+		// f, where ofsH = (ofs & 63) >> 4 selects the word
+		// (each row is 4 words of 16 fields) and ofsL =
+		// (ofs << 2) & 0x3f is the in-word bit shift, i.e.
+		// the source field is f ^ (ofs & 0xf).
+		ofsH := int((ofs & 63) >> 4)
+		fieldXor := int(ofs) & 0xf
 		hi := s.xySignHigh[int((ofs&0xf000)>>12)*s.wordsPer64:]
 		lo := s.xySignLow[int((ofs&0xf00)>>8)*s.wordsPer64:]
-		shift := uint((ofs << 2) & 0x3f)
 		base := ts + i*s.wordsPer64
-		srcBase := ts + i*s.wordsPer64
-		in := s.genReadRow64(src, srcBase)
+		in := s.genReadRow64(src, base)
 		var out [64]int
 		for k := 0; k < 64; k++ {
-			// permuted source suboctad index: the high
-			// word offset xors ofsH into the word, and
-			// the in-word shift xors the low bits.
-			idx := (k ^ int(shift)) ^ (int(ofsH) << 6)
-			idx &= 63
-			out[k] = in[idx]
+			// k = word*16 + field. The word is permuted by
+			// xoring ofsH (bits 4..5); the field by xoring
+			// ofs & 0xf (bits 0..3).
+			srcWord := (k >> 4) ^ ofsH
+			srcField := (k & 0xf) ^ fieldXor
+			out[k] = in[(srcWord<<4)|srcField]
 		}
 		s.genWriteRow64(dst, base, out)
 		// apply the xy sign masks
@@ -1109,51 +1148,64 @@ func genOpXYABC(s *genSwar, src []uint64, op *subOpXY, mode int, dst []uint64) {
 	efI := op.efI
 	epsOdd := (op.eps >> 11) & 1
 
-	// Tag A: 24 rows of 24, sign from fI per column.
+	// Tag A: 24 rows of 24, the symmetric matrix entry
+	// (r, c) is negated when bit r XOR bit c of f_i is
+	// set. C op{p}_do_ABC builds a per-column mask from
+	// f_i and XORs a whole-row negate when bit r of f_i
+	// is set, so the sign is the product of the row and
+	// column signs (not just the row sign).
+	fColMask := s.genSpread24(fI)
 	for r := 0; r < 24; r++ {
 		fbit := (fI >> uint(r)) & 1
 		for w := 0; w < s.wordsPer24; w++ {
-			x := src[as+r*s.wordsPer24+w]
+			m := fColMask[w]
 			if fbit != 0 {
-				m := s.negateMask
-				if w == s.usedPer24-1 {
-					m = s.slackMask
-				} else if w >= s.usedPer24 {
-					m = 0
+				switch {
+				case w == s.usedPer24-1:
+					m ^= s.slackMask
+				case w < s.usedPer24:
+					m ^= s.negateMask
 				}
-				x ^= m
 			}
-			dst[as+r*s.wordsPer24+w] = x
+			dst[as+r*s.wordsPer24+w] = src[as+r*s.wordsPer24+w] ^ m
 		}
 	}
 	if mode != 0 {
 		return
 	}
 
-	// Tags B, C: 24 rows of 24, signs from fI/efI and
-	// the eps negate on C. C op{p}_do_ABC tags B, C.
+	// Tags B, C: 24 rows of 24. As for tag A the sign on
+	// entry (r, c) is the product of a row and a column
+	// sign, but here B and C mix: C op{p}_do_ABC forms
+	//   t = fmask & (B ^ C); t ^= efmask
+	// where fmask negates entry (r, c) iff f_i[r] ^ f_i[c]
+	// and efmask iff ef_i[r] ^ ef_i[c]; then
+	//   B_out = B ^ t,  C_out = (C, negated row if odd eps) ^ t.
+	efColMask := s.genSpread24(efI)
 	for r := 0; r < 24; r++ {
-		fbit := (fI >> uint(r)) & 1
-		efbit := (efI >> uint(r)) & 1
+		fRow := (fI >> uint(r)) & 1
+		efRow := (efI >> uint(r)) & 1
 		for w := 0; w < s.wordsPer24; w++ {
-			m := s.negateMask
+			rowNeg := s.negateMask
 			if w == s.usedPer24-1 {
-				m = s.slackMask
+				rowNeg = s.slackMask
 			} else if w >= s.usedPer24 {
-				m = 0
+				rowNeg = 0
+			}
+			fm := fColMask[w]
+			if fRow != 0 {
+				fm ^= rowNeg
+			}
+			efm := efColMask[w]
+			if efRow != 0 {
+				efm ^= rowNeg
 			}
 			t1 := src[bs+r*s.wordsPer24+w]
 			t2 := src[cs+r*s.wordsPer24+w]
-			var t uint64
-			if fbit != 0 {
-				t = m & (t1 ^ t2)
-			}
-			if efbit != 0 {
-				t ^= m
-			}
+			t := (fm & (t1 ^ t2)) ^ efm
 			dst[bs+r*s.wordsPer24+w] = t1 ^ t
 			if epsOdd != 0 {
-				t2 ^= m
+				t2 ^= rowNeg
 			}
 			dst[cs+r*s.wordsPer24+w] = t2 ^ t
 		}
@@ -1289,31 +1341,24 @@ func genBuildTauMat64() {
 	}
 }
 
-// genL4Powers returns the two 4x4 matrices L4A@L4B and L4B@L4A, where
-// L4A = diag(1,1,1,1) (the pm identity) and L4B = diag(1,-1,-1,-1). C
-// NonMonomialOp_l.L4_POWERS.
+// genL4Powers returns the two 4x4 sign matrices used by
+// the non-monomial xi^e on tags A and Y/Z, indexed by
+// e-1. The tag-A action is A'_block = blk_e @ A_block @
+// blk_e^T per 4x4 group-pair, and the build helpers want
+// f = blk_e^T. Since blk_1^T = blk_2 and blk_2^T = blk_1,
+// L4_POWERS = [blk_2, blk_1]. The blocks were validated
+// against mm_op15_xi for both exponents (0/576 tag-A
+// entry diffs). C NonMonomialOp_l.L4_POWERS.
 func genL4Powers() [2][4][4]int {
-	var l4a, l4b [4][4]int
-	for i := 0; i < 4; i++ {
-		l4a[i][i] = 1
-		if i > 0 {
-			l4b[i][i] = -1
-		} else {
-			l4b[i][i] = 1
-		}
+	// blk_1 (for e=1) and blk_2 = blk_1^T (for e=2).
+	blk1 := [4][4]int{
+		{1, -1, -1, -1}, {1, -1, 1, 1}, {1, 1, -1, 1}, {1, 1, 1, -1},
 	}
-	mul4 := func(a, b *[4][4]int) [4][4]int {
-		var c [4][4]int
-		for i := 0; i < 4; i++ {
-			for k := 0; k < 4; k++ {
-				for j := 0; j < 4; j++ {
-					c[i][j] += a[i][k] * b[k][j]
-				}
-			}
-		}
-		return c
+	blk2 := [4][4]int{
+		{1, 1, 1, 1}, {-1, -1, 1, 1}, {-1, 1, -1, 1}, {-1, 1, 1, -1},
 	}
-	return [2][4][4]int{mul4(&l4a, &l4b), mul4(&l4b, &l4a)}
+	// L4_POWERS[e-1] = blk_e^T: index 0 (e=1) = blk_2, index 1 (e=2) = blk_1.
+	return [2][4][4]int{blk2, blk1}
 }
 
 // genBuildXiMat16 builds genXiMat16 = kron(L4_POWERS[e-1], itself).
@@ -1396,6 +1441,12 @@ func genBuildXiMat64() {
 		}
 		return c
 	}
+	// The Y/Z 64x64 xi matrix is kron(hi, lo) with
+	// hi = -(MDIAG@MSYM or MSYM@MDIAG) and lo = L4_POWERS.
+	// The negation of hi was determined against mm_op15_xi:
+	// the extracted L16 equals -(MDIAG@MSYM)^T, and the
+	// genApplyMat64 convention then needs hi = -(MDIAG@MSYM).
+	// Verified 0/98304 Y/Z entry diffs for both exponents.
 	l16 := [2][16][16]int{mul16(&mdiag, &msym), mul16(&msym, &mdiag)}
 	l4 := genL4Powers()
 	for _, e := range []int{1, 2} {
@@ -1405,7 +1456,7 @@ func genBuildXiMat64() {
 			for il := 0; il < 4; il++ {
 				for jh := 0; jh < 16; jh++ {
 					for jl := 0; jl < 4; jl++ {
-						genXiMat64[e][4*ih+il][4*jh+jl] = hi[ih][jh] * lo[il][jl]
+						genXiMat64[e][4*ih+il][4*jh+jl] = -hi[ih][jh] * lo[il][jl]
 					}
 				}
 			}
@@ -1659,16 +1710,15 @@ func genXiMonomial(s *genSwar, src []uint64, exp1 int, dst []uint64) {
 		srcOfs := int(xiOffsetTable[stage][exp1][0]) >> genLogIntFields(s.p)
 		dstOfs := int(xiOffsetTable[stage][exp1][1]) >> genLogIntFields(s.p)
 
-		// Words per logical row in the internal rep. A source/dest row
-		// of width 24 or 32 occupies wordsPer24 or wordsPer64 words.
+		// Stride between consecutive box groups, for both
+		// source and destination. C mm{p}_op_xi_mon advances
+		// p_src and p_dest by V24_INTS (= wordsPer24) per group
+		// for every stage, regardless of the field count: a
+		// group is one 24-row's worth of words even when the
+		// box spans the 64-wide tag T. Using wordsPer64 here
+		// scattered the output (only tag B happened to align).
 		srcRowWords := s.wordsPer24
-		if sh.srcFields > 24 {
-			srcRowWords = s.wordsPer64
-		}
 		dstRowWords := s.wordsPer24
-		if sh.dstFields > 24 {
-			dstRowWords = s.wordsPer64
-		}
 
 		permPos := 0
 		signPos := 0
@@ -1896,7 +1946,7 @@ func genIterNextAtom(it *genWordIter) {
 // xi exponent) into it.data, returning 0 to continue, 1 at the end of
 // the word, or 2 on an illegal atom. C mm_group_iter_next.
 func genIterNext(it *genWordIter) uint32 {
-	g := it.data[1:]
+	g := (*N0Elem)(it.data[1:])
 	for i := range it.data {
 		it.data[i] = 0
 	}
@@ -2119,19 +2169,19 @@ func genOpXYTagABC(p int, v []uint64, f, e, eps, mode int) {
 // genOpPiTagABC applies x_delta x_pi to tags A, B, C of v in place. If
 // mode is nonzero only tag A is written. C mm{p}_op_pi_tag_ABC. Tag A
 // (and B, C) is conjugated by the permutation pi: the symmetric entry
-// (i, j) moves to (pi[i], pi[j]); tag C additionally gets the odd-delta
-// row sign. No cocode signs are applied here (the full sign change is
-// the caller's responsibility), matching the C tag-ABC restriction.
+// (i, j) of the source moves to (pi[i], pi[j]) of the result, i.e. the
+// result entry (i, j) is gathered from source entry (pi^-1[i], pi^-1[j]);
+// tag C additionally gets the odd-delta row sign. No cocode signs are
+// applied here (the full sign change is the caller's responsibility),
+// matching the C tag-ABC restriction. C mm{p}_op_pi_tag_ABC builds
+// row_perm[perm[i]] = i, i.e. it gathers via the inverse permutation.
 func genOpPiTagABC(p int, v []uint64, delta, pi, mode int) {
 	s := genSwarFor(p)
 	perm := M24numToPerm(uint32(pi) % uint32(mat24Order))
-	// pre[i] = perm-image of i; conjugating the matrix sends entry
-	// (pre[i], pre[j]) of the source to entry (i, j) of the result, so
-	// we gather the source from inverse positions. Build the forward
-	// map and read accordingly.
-	var fwd [24]int
+	invPerm := InvPerm(perm)
+	var inv [24]int
 	for i := 0; i < 24; i++ {
-		fwd[i] = int(perm[i])
+		inv[i] = int(invPerm[i])
 	}
 	tags := []int{s.genTagAOfs()}
 	if mode == 0 {
@@ -2148,7 +2198,7 @@ func genOpPiTagABC(p int, v []uint64, delta, pi, mode int) {
 		isC := mode == 0 && ti == 2
 		for i := 0; i < 24; i++ {
 			for j := 0; j < 24; j++ {
-				val := src[fwd[i]*24+fwd[j]]
+				val := src[inv[i]*24+inv[j]]
 				if isC && oddDelta {
 					val = (s.p - val) % s.p
 				}

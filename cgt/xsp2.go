@@ -886,7 +886,7 @@ func xsp2co1MulQsV3Word(s *qs12, pv3 *uint64, a []uint32, setOne bool) int {
 		case atomTagID, atomTagD:
 			mulQsXspecial(qs, v&0xfff)
 		case atomTagIP:
-			perm := M24numToPerm(v)
+			perm := m24numToPermSafe(v)
 			aut := PermToAutpl(0, perm)
 			permI := InvPerm(perm)
 			autI := InvAutpl(aut)
@@ -894,7 +894,7 @@ func xsp2co1MulQsV3Word(s *qs12, pv3 *uint64, a []uint32, setOne bool) int {
 			v3 = leech3OpPi(v3, permI)
 			multiply = pAtom != qs
 		case atomTagP:
-			perm := M24numToPerm(v)
+			perm := m24numToPermSafe(v)
 			aut := PermToAutpl(0, perm)
 			setQsDeltaPiAut(pAtom, aut)
 			v3 = leech3OpPi(v3, perm)
@@ -1187,28 +1187,97 @@ func genLeech2OpWordMany(q []uint32, g []uint32) int {
 	return len(g)
 }
 
-// genLeech2OpWordLeech2Many applies the word g
-// (or its inverse if back) to every entry of a in
-// place, returning 0 on success or the failing
-// index.
+// opPermNoSign applies the permutation pi to the Leech
+// lattice mod 2 vector v, ignoring the sign. C function
+// op_perm_nosign.
+func opPermNoSign(v uint32, pi []byte) uint32 {
+	xd := (v >> 12) & 0xfff
+	xdelta := (v ^ uint32(mat24ThetaTable[xd&0x7ff])) & 0xfff
+	xd = OpGcodePerm(xd, pi)
+	xdelta = OpCocodePerm(xdelta, pi)
+	return (xd << 12) ^ xdelta ^ (uint32(mat24ThetaTable[xd&0x7ff]) & 0xfff)
+}
+
+// opYNoSign applies x_d to the Leech lattice mod 2
+// vector q0, ignoring the sign. C function op_y_nosign.
+func opYNoSign(q0, d uint32) uint32 {
+	odd := 0 - ((q0 >> 11) & 1)
+	thetaQ0 := uint32(mat24ThetaTable[(q0>>12)&0x7ff])
+	thetaY := uint32(mat24ThetaTable[d&0x7ff])
+	o := (thetaY & (q0 >> 12)) ^ (q0 & d)
+	o ^= (thetaY >> 12) & 1 & odd
+	o = parity12(o)
+	eps := thetaQ0 ^ (thetaY & ^odd) ^ uint32(mat24ThetaTable[((q0>>12)^d)&0x7ff])
+	q0 ^= (eps & 0xfff) ^ ((d << 12) & 0xfff000 & odd)
+	q0 ^= o << 23
+	return q0
+}
+
+// genLeech2OpWordLeech2Many applies the word g (or its
+// inverse if back) to every entry of a in place,
+// ignoring the sign of each Leech-mod-2 vector. It
+// returns 0 on success or a negative value if any
+// generator in g is not in G_x0. C function
+// gen_leech2_op_word_leech2_many.
+//
+// Unlike genLeech2OpWordMany, this is the sign-free
+// operation: tags x, d and the identity are ignored (they
+// only change signs), tags p/y/l act via the nosign
+// helpers, and a nonzero tau (tag t) or opaque atom
+// (tag 7) makes the word leave G_x0.
 func genLeech2OpWordLeech2Many(a []uint32, g []uint32, back bool) int {
-	gg := g
+	step := 1
+	imask := uint32(0)
+	idx := 0
 	if back {
-		gg = make([]uint32, len(g))
-		for i, v := range g {
-			gg[len(g)-1-i] = v ^ 0x80000000
-		}
+		step = -1
+		imask = 0x80000000
+		idx = len(g) - 1
 	}
-	for i := range a {
-		a[i] &= 0x1ffffff
-	}
-	for k, atom := range gg {
-		for j := range a {
-			r := Leech2OpAtom(a[j], atom)
-			if r == 0xffffffff {
-				return k
+	for n := len(g); n > 0; n-- {
+		v := g[idx] ^ imask
+		idx += step
+		tag := v & 0xf0000000
+		v &= 0xfffffff
+		switch tag {
+		case 0xa0000000: // Ip
+			perm := m24numToPermSafe(v)
+			perm = InvPerm(perm)
+			for j := range a {
+				a[j] = opPermNoSign(a[j], perm)
 			}
-			a[j] = r
+		case 0x20000000: // p
+			perm := m24numToPermSafe(v)
+			for j := range a {
+				a[j] = opPermNoSign(a[j], perm)
+			}
+		case 0xc0000000: // Iy
+			y := uint32(mat24ThetaTable[v&0x7ff]) & 0x1000
+			y ^= v & 0x1fff
+			for j := range a {
+				a[j] = opYNoSign(a[j], y&0x1fff)
+			}
+		case 0x40000000: // y
+			y := v & 0x1fff
+			for j := range a {
+				a[j] = opYNoSign(a[j], y&0x1fff)
+			}
+		case 0xe0000000, 0x60000000: // Il, l
+			if tag == 0xe0000000 {
+				v ^= 3
+			}
+			for j := range a {
+				a[j] = XiOpXiNoSign(a[j], int(v))
+			}
+		case 0xd0000000, 0x50000000: // It, t
+			if (v-1)&2 == 0 {
+				return -1
+			}
+		case 0x70000000, 0xf0000000:
+			if v != 0 {
+				return -1
+			}
+		default: // 1, I1, d, Id, x, Ix: no effect on sign-free image
 		}
 	}
 	return 0

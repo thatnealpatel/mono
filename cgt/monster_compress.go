@@ -218,15 +218,14 @@ func nReduceElementY(g []uint32) uint32 {
 // allowed. It may be applied only to an empty
 // structure. Mirrors C mm_compress_pc_add_nx.
 func mmCompressPCAddNx(pc *mmCompress, m []uint32) int {
-	var g [5]uint32
-	nClear(g[:])
+	var g N0Elem
 	i := uint32(0)
 	for ; i < uint32(len(m)); i++ {
 		if (m[i]>>28)&7 > 4 {
 			break
 		}
 	}
-	if nMulWordScan(g[:], m[:i]) != i {
+	if nMulWordScan(&g, m[:i]) != i {
 		return -0x1001
 	}
 	if nReduceElementY(g[:]) == 0 {
@@ -393,15 +392,15 @@ func mmCompressPCExpandInt(pN *[4]uint64) ([]uint32, error) {
 	}
 	p := uint32(pN[0] & 0xfffffff)
 	if p < Mat24Order {
-		var g [5]uint32
+		var g N0Elem
 		g[0] = 0
 		g[1] = uint32((pN[0] >> 28) & 0x7ff)
 		g[2] = uint32((pN[0] >> 39) & 0x1fff)
 		g[3] = uint32((pN[0] >> 52) & 0xfff)
 		g[4] = p
-		if nReduceElement(g[:]) != 0 {
+		if nReduceElement(&g) != 0 {
 			var w [5]uint32
-			n := nToWord(g[:], w[:])
+			n := nToWord(&g, w[:])
 			m = append(m, w[:n]...)
 		}
 		posN = 64
@@ -420,6 +419,13 @@ func mmCompressPCExpandInt(pN *[4]uint64) ([]uint32, error) {
 			if sp == 0 {
 				return nil, compressError(-3)
 			}
+			// TODO(nealpatel): re-evaluate after porting;
+			// IndexSparseToLeech2 returns 0 on failure.
+			// Unlike the other two call sites, this input
+			// derives from untrusted decompressed data, so
+			// the zero check is required. The sentinel is
+			// unambiguous: 0 is the zero vector (type 0),
+			// never a valid short/type-2 result.
 			v := IndexSparseToLeech2(sp)
 			if v == 0 {
 				return nil, compressError(-4)
@@ -612,15 +618,15 @@ func (g *gtWord) appendSubPart(a []uint32) int {
 	imgOmegaLen := uint32(len(w))
 	e := g.node[cur].tExp
 	i := uint32(0)
-	var gn [5]uint32
+	var gn N0Elem
 
 	for {
-		nClear(gn[:])
+		gn = N0Elem{}
 		gn[0] = e
-		i += nMulWordScan(gn[:], a[i:])
+		i += nMulWordScan(&gn, a[i:])
 		e = nRightCosetNx0(gn[:])
 		var wbuf [5]uint32
-		j := nToWord(gn[:], wbuf[:])
+		j := nToWord(&gn, wbuf[:])
 		w = append(w, wbuf[:j]...)
 		reduced = reduced && j == 0
 		if e != 0 || i >= n {
@@ -1040,6 +1046,33 @@ func (g *gtWord) toMmCompress(pc *mmCompress) int {
 		}
 	}
 	return 0
+}
+
+// gtWordStore writes the word held in g to out and
+// returns its length, or a negative value if out is
+// too small (capacity maxlen). Each subword
+// contributes its reduced G_x0 word followed by a tau
+// atom 0x50000000 + tExp when tExp is nonzero. Mirrors
+// C gt_word_store.
+func (g *gtWord) gtWordStore(out []uint32, maxlen int) int {
+	n := 0
+	for cur := g.node[g.end].next; !g.node[cur].eof; cur = g.node[cur].next {
+		data := g.node[cur].data
+		e := g.node[cur].tExp
+		k := len(data)
+		if n+k > maxlen {
+			return gtErr(4, 1)
+		}
+		n += copy(out[n:], data)
+		if e != 0 {
+			if n+1 > maxlen {
+				return gtErr(4, 1)
+			}
+			out[n] = 0x50000000 + e
+			n++
+		}
+	}
+	return n
 }
 
 //////////////////////////////////////////////////

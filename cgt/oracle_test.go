@@ -19,12 +19,14 @@ func pyCmd(script string) *exec.Cmd {
 
 func oracle(t *testing.T, pyExpr string) string {
 	t.Helper()
-	// complete_import() forces ploop.py's lazy
-	// globals (mat24, AutPL, XLeech2) to bind.
-	// Without it, PLoop.__mul__ etc. hit
-	// NameError because the lazy init only
-	// triggers on non-integer PLoop construction.
-	script := fmt.Sprintf("import json,mmgroup;from mmgroup import mat24;from mmgroup.structures.ploop import complete_import;complete_import();print(json.dumps(%s))", pyExpr)
+	// complete_import() forces lazy module globals
+	// to bind. ploop.py binds its own (mat24, AutPL,
+	// XLeech2); gcode.py separately binds PLoop into
+	// its namespace (gcode.py complete_import). The
+	// latter is required because GCode.__abs__ uses
+	// module-global PLoop unguarded by import_pending,
+	// so abs(PLoop(...)) hits NameError otherwise.
+	script := fmt.Sprintf("import json,mmgroup;from mmgroup import mat24;from mmgroup.structures.ploop import complete_import as _ci_ploop;_ci_ploop();from mmgroup.structures.gcode import complete_import as _ci_gcode;_ci_gcode();print(json.dumps(%s))", pyExpr)
 	out, err := pyCmd(script).CombinedOutput()
 	if err != nil {
 		t.Fatalf("python oracle failed: %v\n%s", err, out)

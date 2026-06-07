@@ -1257,6 +1257,20 @@ func M24numToPerm(num uint32) []byte {
 	return out
 }
 
+// m24numToPermSafe is like M24numToPerm but, instead
+// of panicking, substitutes the identity permutation
+// (number 0) when num is out of range. This matches
+// the C macro mat24_m24num_to_perm, which masks an
+// illegal permutation number to 0; the C word
+// operations apply it while ignoring the error flag,
+// so an out-of-range permutation atom acts as the
+// identity.
+func m24numToPermSafe(num uint32) []byte {
+	out := make([]byte, 24)
+	m24numToPerm(num, out)
+	return out
+}
+
 // PermToM24num returns the number of permutation
 // p in M24. The result is garbage if p is not in
 // M24.

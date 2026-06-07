@@ -7,7 +7,7 @@ package cgt
 // form. Ported here alongside xsp2.go.
 
 // The N_0 word algebra (mm_group_n.c) lives in
-// monster.go: nClear, nCopy, nMul, nMulElement,
+// monster.go: the N0Elem type, nMul, nMulElement,
 // nConjugateElement, nMulWordScan, nReduceElement,
 // nToWord, nConjToQx0 and the index constants
 // iT..iPi are reused here.
@@ -22,8 +22,9 @@ package cgt
 func xsp2co1ElemToN0(elem []uint64, g []uint32) error {
 	var a [10]uint32
 	lenA := xsp2co1ElemToWord(elem, a[:])
-	nClear(g)
-	if int(nMulWordScan(g, a[:lenA])) < lenA {
+	ng := (*N0Elem)(g)
+	*ng = N0Elem{}
+	if int(nMulWordScan(ng, a[:lenA])) < lenA {
 		return errNotInGx0
 	}
 	return nil
@@ -34,11 +35,11 @@ func xsp2co1ElemToN0(elem []uint64, g []uint32) error {
 // if g is not in G_{x0}.
 func xsp2co1ElemFromN0(elem []uint64, g []uint32) error {
 	var g1 [5]uint32
-	nReduceElement(g)
+	nReduceElement((*N0Elem)(g))
 	if g[0] != 0 {
 		return errNotInGx0
 	}
-	lenG := nToWord(g, g1[:])
+	lenG := nToWord((*N0Elem)(g), g1[:])
 	return xsp2co1SetElemWord(elem, g1[:lenG])
 }
 
@@ -63,19 +64,18 @@ func xsp2co1ConjugateElem(elem []uint64, a []uint32) error {
 				break
 			}
 		}
-		var aN [5]uint32
-		nClear(aN[:])
-		k = int(nMulWordScan(aN[:], a))
+		var aN N0Elem
+		k = int(nMulWordScan(&aN, a))
 		if k == 0 {
 			return errNotInGx0
 		}
 		a = a[k:]
-		if nReduceElement(aN[:]) == 0 {
+		if nReduceElement(&aN) == 0 {
 			continue
 		}
 		if aN[0] == 0 {
 			var aNword [5]uint32
-			lenANword := int(nToWord(aN[:], aNword[:]))
+			lenANword := int(nToWord(&aN, aNword[:]))
 			if xsp2co1SetElemWordScan(elemA[:], aNword[:lenANword], aPending) != lenANword {
 				return errNotInGx0
 			}
@@ -86,11 +86,11 @@ func xsp2co1ConjugateElem(elem []uint64, a []uint32) error {
 			xsp2co1ConjElem(elem, elemA[:], elem)
 			aPending = false
 		}
-		var eN [5]uint32
+		var eN N0Elem
 		if err := xsp2co1ElemToN0(elem, eN[:]); err != nil {
 			return err
 		}
-		nConjugateElement(eN[:], aN[:], eN[:])
+		nConjugateElement(&eN, &aN, &eN)
 		if err := xsp2co1ElemFromN0(elem, eN[:]); err != nil {
 			return err
 		}

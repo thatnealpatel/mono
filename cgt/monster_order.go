@@ -438,6 +438,14 @@ convert:
 	}
 	total := pstart + rev
 
+	// TODO(nealpatel): re-evaluate after porting;
+	// mmAuxIndexInternToLeech2 returns 0 on failure.
+	// Inputs come from emit() which only enqueues
+	// valid B/C lower-triangle (col<row, both <24)
+	// and contiguous T/X internal indices, so the
+	// conversion never fails. C origin find_short_all
+	// (mm15_op_eval_X.c:168) also masks in the result
+	// unconditionally with no zero check.
 	for j := 0; j < total; j++ {
 		leech2 := mmAuxIndexInternToLeech2(out[j] & 0xffffff)
 		out[j] = (out[j] & 0xff000000) | (leech2 & 0xffffff)
@@ -866,7 +874,261 @@ func ovChecksum(r []uint32) uint32 {
 }
 
 //////////////////////////////////////////////////
-// Part 9: rebase a 2A axis (axis.rebase_axis).
+// Part 9: map a 2A axis under a monster word
+// (mm_reduce_map_axis).
+//////////////////////////////////////////////////
+
+// vPlus and vMinus are the standard 2A axes v^+ and
+// v^- in Leech lattice encoding. C macros V_PLUS,
+// V_MINUS.
+const (
+	vPlus  = 0x200
+	vMinus = 0x1000200
+)
+
+// mmReduceMapAxis transforms the 2A axis encoded by
+// (*vt, v) under the monster word a in place. If *vt
+// is nonzero it is a short element of Q_x0 (a type-2
+// Leech-mod-2 vector) tracked by conjugation as far as
+// possible; once an atom can no longer act on it, the
+// axis is stored as a rep vector in v, *vt is cleared,
+// and the remaining atoms act in the representation.
+// It returns 0 on success and a negative value on
+// failure. The work buffer must hold a p=15 vector. C
+// function mm_reduce_map_axis.
+//
+// mmReduceMapAxis panics if OpWord reports an error
+// while acting on v.
+func mmReduceMapAxis(vt *uint32, v []uint64, a []uint32, n int, work []uint64) int {
+	if *vt != 0 {
+		if Leech2Type(*vt) != 2 {
+			return -1
+		}
+		q := [1]uint32{*vt}
+		n0 := genLeech2OpWordMany(q[:], a[:n])
+		*vt = q[0]
+		if n0 == n {
+			return 0
+		}
+		OpStoreAxis(15, *vt, v)
+		*vt = 0
+		a = a[n0:]
+		n -= n0
+	}
+	if err := OpWord(15, v, a, n, 1, work); err != nil {
+		panic("cgt: mmReduceMapAxis OpWord: " + err.Error())
+	}
+	return 0
+}
+
+//////////////////////////////////////////////////
+// Part 10: reduce a pair of orthogonal 2A axes
+// (reduce_v_baby_axis, mm_reduce_vector_vm).
+//////////////////////////////////////////////////
+
+// reduceVBabyAxisFinal appends the closing atoms once
+// the baby axis has reached type 2A. Here vp and vn are
+// the type-2 Leech-mod-2 vectors of the two axes; the
+// product vp*vn is reduced to v^- by a type-4
+// transformation and a tau power. It stores the word in
+// r at offset lenR and returns the new length, or a
+// negative value on error. C function
+// reduce_v_baby_axis_final.
+func reduceVBabyAxisFinal(vp, vn uint32, r []uint32, lenR int) int {
+	v4 := Leech2Mul(vp, vn)
+	if v4&0xffffff != 0 {
+		lenR1 := genLeech2ReduceType4(v4, r[lenR:])
+		if lenR1 < 0 {
+			return -20012
+		}
+		v4 = Leech2OpWord(v4, r[lenR:lenR+lenR1])
+		vn = Leech2OpWord(vn, r[lenR:lenR+lenR1])
+		lenR += lenR1
+		if v4&0xffffff != 0x800000 {
+			return -20013
+		}
+		e := 1 + ((v4 >> 24) & 1)
+		r[lenR] = 0xD0000003 - e
+		v4 = Leech2OpWord(v4, r[lenR:lenR+1])
+		vn = Leech2OpWord(vn, r[lenR:lenR+1])
+		lenR++
+	}
+	if v4 != 0x1000000 {
+		return -20014
+	}
+	r[lenR] = 0x86000000 + (vn & 0x1ffffff)
+	lenR++
+	return lenR
+}
+
+// reduceVBabyAxis reduces the 2A axis v (the image of
+// v^- under the partially reduced element), keeping the
+// already-standardized axis v^+ fixed, to the standard
+// axis v^-. Parameter axis tracks v^+ under the
+// transformations applied. If vt is nonzero it is the
+// Q_x0 element of the (already type-2A) axis. It stores
+// the transforming word in r and returns its length, or
+// a negative value on error. C function
+// reduce_v_baby_axis. The work buffer must hold a p=15
+// vector.
+func reduceVBabyAxis(vt uint32, v []uint64, axis uint32, r []uint32, work []uint64) int {
+	lenR := 0
+
+	if vt != 0 {
+		return reduceVBabyAxisFinal(axis, vt, r, lenR)
+	}
+
+	var i int
+	for i = 0; i < 5; i++ {
+		var ax ovAxesReduce
+		if status := analyzeAxis(v, &ax); status < 0 {
+			return -21000 + status
+		}
+		targetAxes := ax.targetAxes
+		axType := ax.axisType
+
+		if axType == 0x21 {
+			vt = reduce2AAxisType(v) & 0xffffff
+			vt = vLeech2AdjustSign(v, vt)
+			return reduceVBabyAxisFinal(axis, vt, r, lenR)
+		}
+
+		v4 := findType4(&ax, axis)
+		if v4 == 0 {
+			return -20015
+		}
+		lenR1 := transformV4(v, v4, targetAxes, r[lenR:], work)
+		if lenR1 < 0 {
+			return -23000 + lenR1
+		}
+		if opAxis(&axis, r[lenR:lenR+lenR1]) {
+			return -20008
+		}
+		lenR += lenR1
+	}
+	return -24000 - i
+}
+
+// opAxis conjugates the Q_x0 element *axis by the
+// monster word w in place, leaving it unchanged when it
+// equals v^+. It returns true on failure. C function
+// op_axis.
+func opAxis(axis *uint32, w []uint32) bool {
+	if *axis == vPlus {
+		return false
+	}
+	q := [1]uint32{*axis}
+	if genLeech2OpWordMany(q[:], w) != len(w) {
+		return true
+	}
+	*axis = q[0]
+	return false
+}
+
+// ovMarkMask masks the marker nibble in r[0]. C macro
+// MM_REDUCE_MARK_MASK.
+const ovMarkMask = 0xffffff00
+
+// ovMarkVMDone marks a successful v^- reduction in
+// r[0]. C macro MM_REDUCE_MARK_VM_DONE.
+const ovMarkVMDone = 0x8FED5A00
+
+// mmReduceVectorVm computes a word h with v.h == v^-
+// for the 2A axis encoded by (vt, v), appending h to
+// the word already in r (produced by mmReduceVectorVP)
+// and returning the total word length. The element h
+// preserves the axis v^+. A negative return value
+// indicates a fatal error. C function
+// mm_reduce_vector_vm. The work buffer must hold a p=15
+// vector.
+func mmReduceVectorVm(vt *uint32, v []uint64, r []uint32, work []uint64) int {
+	lenStart := int(r[0] &^ ovMarkMask)
+	if r[0]&ovMarkMask != ovMarkVPDone {
+		res := -int(r[1])
+		if r[0] == ovMarkError && res < 0 {
+			return res
+		}
+		return -0x20000
+	}
+	if lenStart < 2 || lenStart > 40 ||
+		r[lenStart-1]&^0x1ffffff != 0x84000000 ||
+		ovChecksum(r[:lenStart]) != r[lenStart] {
+		return -0x20000
+	}
+
+	axis := r[lenStart-1] & 0x1ffffff
+
+	res := mmReduceMapAxis(vt, v, r, lenStart, work)
+	if res >= 0 {
+		res = reduceVBabyAxis(*vt, v, axis, r[lenStart:], work)
+	}
+	if res > 0 && res <= 40 {
+		res += lenStart
+		r[0] = ovMarkVMDone + uint32(res)
+		r[res] = ovChecksum(r[:res])
+		return res
+	}
+
+	if res >= 0 {
+		res = -20001
+	}
+	r[0] = ovMarkError
+	r[1] = uint32(-res)
+	return res
+}
+
+//////////////////////////////////////////////////
+// Part 11: reduce to G_x0 via the order vector
+// (mm_reduce_vector_v1).
+//////////////////////////////////////////////////
+
+// mmReduceVectorV1 finishes the reduction. Here v is
+// the image of the precomputed order vector v_1 under
+// the same element g being reduced. The function
+// appends to r a word h with v.h == v_1, recovering the
+// residual G_x0 element from the image, then inverts
+// the whole accumulated word in r so that it equals g.
+// It returns the final word length, or a negative value
+// on error. C function mm_reduce_vector_v1. The work
+// buffer must hold a p=15 vector.
+//
+// mmReduceVectorV1 panics if OpWord reports an error.
+func mmReduceVectorV1(v []uint64, r []uint32, work []uint64) int {
+	lenStart := int(r[0] &^ ovMarkMask)
+	if r[0]&ovMarkMask != ovMarkVMDone {
+		res := -int(r[1])
+		if r[0] == ovMarkError && res < 0 {
+			return res
+		}
+		return -0x30000
+	}
+	if lenStart < 2 || lenStart > 80 ||
+		r[lenStart-1]&^0x1ffffff != 0x86000000 ||
+		ovChecksum(r[:lenStart]) != r[lenStart] {
+		return -0x20000
+	}
+
+	if err := OpWord(15, v, r, lenStart, 1, work); err != nil {
+		panic("cgt: mmReduceVectorV1 OpWord: " + err.Error())
+	}
+	res := orderCheckInGx0Mode1(v, r[lenStart:], work)
+	if res >= 0 && res <= 12 {
+		res += lenStart
+		r[0] = 0
+		invertWord(r[:res])
+		return res
+	}
+
+	if res >= 0 {
+		res = -30001
+	}
+	r[0] = ovMarkError
+	r[1] = uint32(-res)
+	return res
+}
+
+//////////////////////////////////////////////////
+// Part 12: rebase a 2A axis (axis.rebase_axis).
 //////////////////////////////////////////////////
 
 // rebaseAxis returns a G_x0 element g0 with

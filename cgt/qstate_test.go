@@ -581,14 +581,14 @@ func productRef(a, b []complex128, nqb, nc int) []complex128 {
 	bw := 1 << nb
 	la := len(a) / (cw * bw)
 	lb := len(b) / (cw * bw)
-	out := make([]complex128, cw*la*lb)
-	for k := 0; k < cw; k++ {
+	out := make([]complex128, bw*la*lb)
+	for k := 0; k < bw; k++ {
 		for i := 0; i < la; i++ {
 			for j := 0; j < lb; j++ {
 				var s complex128
-				for m := 0; m < bw; m++ {
-					ai := k*bw*la + m*la + i
-					bj := k*bw*lb + m*lb + j
+				for m := 0; m < cw; m++ {
+					ai := m*bw*la + k*la + i
+					bj := m*bw*lb + k*lb + j
 					s += a[ai] * b[bj]
 				}
 				out[k*la*lb+i*lb+j] = s
@@ -642,11 +642,24 @@ func TestConjugateTranspose(t *testing.T) {
 
 func TestToSigns(t *testing.T) {
 	t.Parallel()
+	// {2,0,...} has phi=2 (pure imaginary phase);
+	// ToSigns requires a real matrix and correctly
+	// panics. C returns ERR_QSTATE12_DOMAIN; Python
+	// raises ValueError. Go panics per CLAUDE.md
+	// precondition convention.
+	t.Run("non_real_panics", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("ToSigns on non-real matrix did not panic")
+			}
+		}()
+		s := tcase{2, 0, [2]int{0, 0}, []uint64{0b000_10, 0b010_01, 0b100_01}}
+		s.state().ToSigns()
+	})
 	cases := []tcase{
 		{0, 4, [2]int{0, 0}, []uint64{0, 8, 4, 2, 1}},
 		{0, 5, [2]int{0, 0}, []uint64{0, 16, 8, 4, 2, 1}},
 		{2, 2, [2]int{0, 0}, []uint64{0b110_10_01, 0b101_01_11, 0b011_01_00}},
-		{2, 0, [2]int{0, 0}, []uint64{0b000_10, 0b010_01, 0b100_01}},
 	}
 	for _, c := range cases {
 		a := c.oracle()
@@ -953,19 +966,27 @@ func TestToSymplectic(t *testing.T) {
 
 func TestOrder(t *testing.T) {
 	t.Parallel()
-	cases := []tcase{
-		{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}},
-		{2, 2, [2]int{0, 0}, []uint64{0b110_10_01, 0b101_01_11, 0b011_01_00}},
+	cases := []*QState{
+		tcase{1, 1, [2]int{0, 0}, []uint64{0b00_1, 0b11_1}}.state(),
+		UnitMatrix(2).GateH(0x1),
+		UnitMatrix(2).GateH(0x1).GateCtrlNot(0x1, 0x2),
 	}
-	for _, c := range cases {
-		m := c.state()
+	for _, m := range cases {
+		n, _ := m.Shape()
 		order := m.Order(1 << 20)
 		if order <= 0 {
 			t.Fatalf("order: expected positive, got %d", order)
 		}
-		if !m.Power(order).Equal(UnitMatrix(c.rows)) {
+		if !m.Power(order).Equal(UnitMatrix(n)) {
 			t.Fatalf("order: m^%d is not unit", order)
 		}
+	}
+	// Exercise the giant-step branch: maxOrder=4
+	// forces baby-table size < true order (8).
+	gs := UnitMatrix(2).GateH(0x1).GateCtrlNot(0x1, 0x2)
+	order := gs.Order(4)
+	if order != 8 {
+		t.Fatalf("giant-step: want order 8, got %d", order)
 	}
 }
 

@@ -144,21 +144,19 @@ func Characteristics() []int {
 // MMVSize returns the number of uint64 entries
 // required to store a vector modulo p in internal
 // representation (excluding the guard). C function
-// mm_aux_mmv_size. Returns 0 for an illegal p.
+// mm_aux_mmv_size.
+//
+// MMVSize panics if p is not a supported modulus.
 func MMVSize(p int) int {
-	if mmAuxBadP(p) {
-		return 0
-	}
+	checkP(p)
 	return 247488 >> (mmvConst(p) & 7)
 }
 
 // mmAuxV24Ints returns the number of uint64 entries
 // needed to hold 24 entries of a vector modulo p. C
-// function mm_aux_v24_ints.
+// function mm_aux_v24_ints. The caller must pass a
+// supported modulus p.
 func mmAuxV24Ints(p int) int {
-	if mmAuxBadP(p) {
-		return 0
-	}
 	return 32 >> (mmvConst(p) & 7)
 }
 

@@ -322,6 +322,16 @@ func randCo2CosetNo() uint32 {
 	for {
 		ve := 300 + rand.IntN(98579-300+1) // randint(300, 98579)
 		vs := IndexExternToSparse(ve)
+		// TODO(nealpatel): re-evaluate after porting;
+		// IndexSparseToLeech2 returns 0 on failure.
+		// Input ve ∈ [300, 98579] is always a valid
+		// extern index for tags B/C/T/X, so the
+		// extern→sparse→leech2 chain never fails.
+		// Even if it did, v2=0 gives v4=betaLeech2
+		// (type 2), which the Leech2Type==4 guard
+		// rejects and the loop retries. C origin
+		// _rand_Co_2_coset_No (random_mm.py:194)
+		// also ignores the sentinel.
 		v2 := IndexSparseToLeech2(vs)
 		v4 := v2 ^ betaLeech2
 		if Leech2Type(v4) == 4 {

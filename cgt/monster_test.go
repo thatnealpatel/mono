@@ -3,6 +3,7 @@ package cgt
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -28,6 +29,18 @@ func mmExpr(spec string) string {
 	return fmt.Sprintf("mmgroup.MM(%q)", spec)
 }
 
+// stripMM normalizes a Python MM string for
+// comparison against Go's MM.String(): it drops a
+// surrounding JSON quote pair (when present) and
+// the "M<...>" wrapper. "M<1>" becomes "1", which
+// matches MM.String() for the neutral element.
+func stripMM(s string) string {
+	s = strings.Trim(s, "\"")
+	s = strings.TrimPrefix(s, "M<")
+	s = strings.TrimSuffix(s, ">")
+	return s
+}
+
 func TestMonsterMul(t *testing.T) {
 	cases := [][2]string{
 		{"M<x_1h>", "M<y_2h>"},
@@ -40,7 +53,7 @@ func TestMonsterMul(t *testing.T) {
 		g := mustMM(t,c[0])
 		h := mustMM(t,c[1])
 		got := g.Mul(h).String()
-		want := oracle(t, fmt.Sprintf("str((%s*%s).reduce())", mmExpr(c[0]), mmExpr(c[1])))
+		want := stripMM(oracle(t, fmt.Sprintf("str((%s*%s).reduce())", mmExpr(c[0]), mmExpr(c[1]))))
 		if got != want {
 			t.Errorf("Mul(%q,%q)=%q want %q", c[0], c[1], got, want)
 		}
@@ -61,7 +74,7 @@ func TestMonsterInv(t *testing.T) {
 			t.Errorf("g*g^-1 != 1 for %q", c)
 		}
 		got := g.Inv().String()
-		want := oracle(t, fmt.Sprintf("str((%s**-1).reduce())", mmExpr(c)))
+		want := stripMM(oracle(t, fmt.Sprintf("str((%s**-1).reduce())", mmExpr(c))))
 		if got != want {
 			t.Errorf("Inv(%q)=%q want %q", c, got, want)
 		}
@@ -97,6 +110,7 @@ func TestMonsterHalfOrder(t *testing.T) {
 		wantO, wantH := oraclePair(t, fmt.Sprintf(
 			"(lambda r: [r[0], None if r[1] is None else str(r[1].reduce())])(%s.half_order())",
 			mmExpr(c)))
+		wantH = stripMM(wantH)
 		if int64(o) != wantO {
 			t.Errorf("HalfOrder(%q) order=%d want %d", c, o, wantO)
 		}
@@ -136,7 +150,7 @@ func TestMonsterReduce(t *testing.T) {
 	}
 	for _, c := range cases {
 		got := mustMM(t,c).Reduce().String()
-		want := oracle(t, fmt.Sprintf("str(%s.reduce())", mmExpr(c)))
+		want := stripMM(oracle(t, fmt.Sprintf("str(%s.reduce())", mmExpr(c))))
 		if got != want {
 			t.Errorf("Reduce(%q)=%q want %q", c, got, want)
 		}
@@ -155,7 +169,11 @@ func TestMonsterAsIntRoundTrip(t *testing.T) {
 		{"l", 1},
 	}
 	for _, c := range cases {
-		spec := fmt.Sprintf("M<%s_%dh>", c.tag, c.i)
+		// No "h" suffix: the index is decimal here, so
+		// it must match c.i parsed as a Go int. With "h"
+		// the parser would read it as hex (e.g. p_100h
+		// = 0x100 = 256, not 100).
+		spec := fmt.Sprintf("M<%s_%d>", c.tag, c.i)
 		n := MMGen(c.tag, c.i).AsInt()
 		want := oracleUint(t, fmt.Sprintf("%s.as_int()", mmExpr(spec)))
 		if n != want {
@@ -219,8 +237,8 @@ func TestMonsterAxisType(t *testing.T) {
 	}
 	for _, spec := range specs {
 		got := AxisFor(mustMM(t,spec)).Type()
-		want := oracle(t, fmt.Sprintf(
-			"__import__('mmgroup.tests.axes.axis',fromlist=['Axis']).Axis(%s).axis_type()", mmExpr(spec)))
+		want := strings.Trim(oracle(t, fmt.Sprintf(
+			"__import__('mmgroup.tests.axes.axis',fromlist=['Axis']).Axis(%s).axis_type()", mmExpr(spec))), "\"")
 		if got != want {
 			t.Errorf("AxisType(%q)=%q want %q", spec, got, want)
 		}
@@ -240,7 +258,7 @@ func TestMonsterPow(t *testing.T) {
 	}
 	for _, c := range cases {
 		got := mustMM(t,c.spec).Pow(c.e).String()
-		want := oracle(t, fmt.Sprintf("str((%s**%d).reduce())", mmExpr(c.spec), c.e))
+		want := stripMM(oracle(t, fmt.Sprintf("str((%s**%d).reduce())", mmExpr(c.spec), c.e)))
 		if got != want {
 			t.Errorf("Pow(%q,%d)=%q want %q", c.spec, c.e, got, want)
 		}
@@ -344,6 +362,12 @@ func TestMonsterChiGx0(t *testing.T) {
 	}
 }
 
+// TODO(phase2): This test is self-contradictory. The oracle's
+// MM.is_reduced() compares self.length == self.reduced (length vs a
+// 0/1 flag), so it returns False even after reduce(). Line 376 checks
+// got == want (want=false from oracle), but line 378 requires got=true.
+// Both cannot pass. Resolve jointly with IsReduced semantics and
+// comment-atom stripping (PLAN step 9 / Phase 2).
 func TestMonsterIsReduced(t *testing.T) {
 	specs := []string{
 		"M<t_1*t_1*t_1>",
@@ -375,9 +399,9 @@ func TestMonsterAxisMul(t *testing.T) {
 	for _, c := range cases {
 		ax := AxisFor(mustMM(t,c.spec)).Mul(mustMM(t,c.gspec))
 		got := ax.Type()
-		want := oracle(t, fmt.Sprintf(
+		want := strings.Trim(oracle(t, fmt.Sprintf(
 			"(__import__('mmgroup.tests.axes.axis',fromlist=['Axis']).Axis(%s)*%s).axis_type()",
-			mmExpr(c.spec), mmExpr(c.gspec)))
+			mmExpr(c.spec), mmExpr(c.gspec))), "\"")
 		if got != want {
 			t.Errorf("Axis(%q).Mul(%q).Type()=%q want %q", c.spec, c.gspec, got, want)
 		}
