@@ -8,6 +8,7 @@ import (
 )
 
 func TestMat24OrderConst(t *testing.T) {
+	t.Parallel()
 	want := oracleUint(t, "mat24.MAT24_ORDER")
 	if uint64(Mat24Order) != want {
 		t.Fatalf("Mat24Order = %d want %d", Mat24Order, want)
@@ -57,6 +58,7 @@ func eqInts(t *testing.T, label string, got, want []int64) {
 }
 
 func TestGcodeToVect(t *testing.T) {
+	t.Parallel()
 	for _, n := range []uint32{0, 1, 0x800, 0xabc, 0xfff} {
 		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
 			got := uint64(GcodeToVect(n))
@@ -69,6 +71,7 @@ func TestGcodeToVect(t *testing.T) {
 }
 
 func TestGcode(t *testing.T) {
+	t.Parallel()
 	for _, n := range []uint32{0, 1, 0x123, 0x800, 0xfff} {
 		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
 			vect := GcodeToVect(n)
@@ -88,6 +91,7 @@ func TestGcode(t *testing.T) {
 }
 
 func TestBw24(t *testing.T) {
+	t.Parallel()
 	for _, v := range []uint32{0, 1, 0xffffff, 0x801, 0xdb1235} {
 		t.Run(fmt.Sprintf("%d", v), func(t *testing.T) {
 			if got, want := uint64(Bw24(v)), oracleUint(t, fmt.Sprintf("mat24.bw24(%d)", v)); got != want {
@@ -98,6 +102,7 @@ func TestBw24(t *testing.T) {
 }
 
 func TestVectToBitList(t *testing.T) {
+	t.Parallel()
 	for _, v := range []uint32{0, 1, 0xff, 0x800001, 0xffffff} {
 		t.Run(fmt.Sprintf("%d", v), func(t *testing.T) {
 			ln, lst := VectToBitList(v)
@@ -112,6 +117,7 @@ func TestVectToBitList(t *testing.T) {
 }
 
 func TestLsbit24(t *testing.T) {
+	t.Parallel()
 	for _, v := range []uint32{1, 2, 0x80000, 0, 0xffffff} {
 		t.Run(fmt.Sprintf("%d", v), func(t *testing.T) {
 			if got, want := uint64(Lsbit24(v)), oracleUint(t, fmt.Sprintf("mat24.lsbit24(%d)", v)); got != want {
@@ -122,6 +128,7 @@ func TestLsbit24(t *testing.T) {
 }
 
 func TestSpread(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ x, mask uint32 }{
 		{7, 0},
 		{0x311111, 0x101ffe},
@@ -142,6 +149,7 @@ func TestSpread(t *testing.T) {
 }
 
 func TestVintern(t *testing.T) {
+	t.Parallel()
 	for _, v := range []uint32{0, 1, 0xabcdef, 0xffffff, 0x55} {
 		t.Run(fmt.Sprintf("%d", v), func(t *testing.T) {
 			ve := VectToVintern(v)
@@ -156,6 +164,7 @@ func TestVintern(t *testing.T) {
 }
 
 func TestCocode(t *testing.T) {
+	t.Parallel()
 	for _, v := range []uint32{1, 0x401, 0xd07, 0x3, 0xfff} {
 		t.Run(fmt.Sprintf("%d", v), func(t *testing.T) {
 			c := VectToCocode(v)
@@ -170,6 +179,7 @@ func TestCocode(t *testing.T) {
 }
 
 func TestSyndrome(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ v, t uint32 }{
 		{2, 3},
 		{0x401, 0},
@@ -186,6 +196,7 @@ func TestSyndrome(t *testing.T) {
 }
 
 func TestCocodeSyndrome(t *testing.T) {
+	t.Parallel()
 	for _, c := range []uint32{0, 1, 0x401, 0x55, 0xabc} {
 		t.Run(fmt.Sprintf("%d", c), func(t *testing.T) {
 			if got, want := uint64(CocodeSyndrome(c, 0)), oracleUint(t, fmt.Sprintf("mat24.cocode_syndrome(%d, 0)", c)); got != want {
@@ -196,6 +207,7 @@ func TestCocodeSyndrome(t *testing.T) {
 }
 
 func TestCocodeToBitList(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ c, t uint32 }{
 		{1, 0},
 		{0x55, 3},
@@ -210,6 +222,7 @@ func TestCocodeToBitList(t *testing.T) {
 }
 
 func TestCocodeToSextet(t *testing.T) {
+	t.Parallel()
 	for _, c := range []uint32{0x55, 0x155, 0x2aa} {
 		t.Run(fmt.Sprintf("valid_%#x", c), func(t *testing.T) {
 			if CocodeWeight(c) != 4 {
@@ -232,6 +245,7 @@ func TestCocodeToSextet(t *testing.T) {
 }
 
 func TestAllSyndromes(t *testing.T) {
+	t.Parallel()
 	for _, v := range []uint32{0x401 ^ 2, 0x80 ^ 0xf, 1, 0xff0, 0x33} {
 		t.Run(fmt.Sprintf("%d", v), func(t *testing.T) {
 			got := u32sToInts(AllSyndromes(v))
@@ -245,6 +259,7 @@ func TestAllSyndromes(t *testing.T) {
 }
 
 func TestCocodeWeight(t *testing.T) {
+	t.Parallel()
 	for _, c := range []uint32{0, 1, 0xabc, 0x55, 0xfff} {
 		t.Run(fmt.Sprintf("%d", c), func(t *testing.T) {
 			if got, want := uint64(CocodeWeight(c)), oracleUint(t, fmt.Sprintf("mat24.cocode_weight(%d)", c)); got != want {
@@ -255,6 +270,7 @@ func TestCocodeWeight(t *testing.T) {
 }
 
 func TestVectType(t *testing.T) {
+	t.Parallel()
 	for _, v := range []uint32{0, 0xff, 0xffffff, 0xdb1235, 0x123456} {
 		t.Run(fmt.Sprintf("%d", v), func(t *testing.T) {
 			if got, want := uint64(VectType(v)), oracleUint(t, fmt.Sprintf("mat24.vect_type(%d)", v)); got != want {
@@ -265,12 +281,10 @@ func TestVectType(t *testing.T) {
 }
 
 func TestOctads(t *testing.T) {
-	for _, c := range []uint32{1, 0x800, 0x903, 0xfff} {
+	t.Parallel()
+	for _, c := range []uint32{3, 5, 6, 7} {
 		t.Run(fmt.Sprintf("%d", c), func(t *testing.T) {
 			v := GcodeToVect(c)
-			if Bw24(v) != 8 {
-				t.Skipf("gcode %d is not an octad", c)
-			}
 			oct := GcodeToOctad(c, 1)
 			if got, want := uint64(oct), oracleUint(t, fmt.Sprintf("mat24.gcode_to_octad(%d)", c)); got != want {
 				t.Fatalf("GcodeToOctad = %d want %d", got, want)
@@ -286,9 +300,20 @@ func TestOctads(t *testing.T) {
 			}
 		})
 	}
+	for _, c := range []uint32{1, 0x800, 0x903, 0xfff} {
+		t.Run(fmt.Sprintf("non_octad_%d", c), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Fatalf("GcodeToOctad(%d) should panic for non-octad", c)
+				}
+			}()
+			GcodeToOctad(c, 1)
+		})
+	}
 }
 
 func TestGcodeToOctadNonStrict(t *testing.T) {
+	t.Parallel()
 	for _, c := range []uint32{1, 0x800, 0x903, 0xfff} {
 		v := GcodeToVect(c)
 		if Bw24(v) == 16 {
@@ -302,6 +327,7 @@ func TestGcodeToOctadNonStrict(t *testing.T) {
 }
 
 func TestSuboctads(t *testing.T) {
+	t.Parallel()
 	for _, oct := range []uint32{0, 1, 100, 758} {
 		t.Run(fmt.Sprintf("%d", oct), func(t *testing.T) {
 			g := OctadToGcode(oct)
@@ -325,6 +351,7 @@ func TestSuboctads(t *testing.T) {
 }
 
 func TestSuboctadScalarProd(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ a, b uint32 }{{0, 0}, {0x2a, 0x15}, {0x3f, 0x3f}, {7, 0x38}}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d_%d", c.a, c.b), func(t *testing.T) {
@@ -336,6 +363,7 @@ func TestSuboctadScalarProd(t *testing.T) {
 }
 
 func TestScalarProd(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ v, c uint32 }{{0, 0}, {0xfff, 0x555}, {0x800, 1}, {0xabc, 0xdef}}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d_%d", c.v, c.c), func(t *testing.T) {
@@ -347,6 +375,7 @@ func TestScalarProd(t *testing.T) {
 }
 
 func TestIntersectOctadTetrad(t *testing.T) {
+	t.Parallel()
 	for _, oct := range []uint32{0, 50, 200} {
 		t.Run(fmt.Sprintf("%d", oct), func(t *testing.T) {
 			o := OctadToVect(oct)
@@ -365,6 +394,7 @@ func TestIntersectOctadTetrad(t *testing.T) {
 }
 
 func TestPloopTheta(t *testing.T) {
+	t.Parallel()
 	for _, v := range []uint32{0, 1, 0x401, 0xfff, 0x123} {
 		t.Run(fmt.Sprintf("%d", v), func(t *testing.T) {
 			if got, want := uint64(PloopTheta(v)), oracleUint(t, fmt.Sprintf("mat24.ploop_theta(%d)", v)); got != want {
@@ -375,6 +405,7 @@ func TestPloopTheta(t *testing.T) {
 }
 
 func TestParkerLoop(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ v1, v2, v3 uint32 }{
 		{0x111, 0x222, 0x444},
 		{0x1abc, 0x1def, 0x123},
@@ -407,6 +438,7 @@ func TestParkerLoop(t *testing.T) {
 }
 
 func TestPloopSolve(t *testing.T) {
+	t.Parallel()
 	arrays := [][]uint32{
 		{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048},
 		{0x1001, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048},
@@ -437,6 +469,7 @@ func TestPloopSolve(t *testing.T) {
 }
 
 func TestMat24Num(t *testing.T) {
+	t.Parallel()
 	for _, k := range []uint32{0, 115873693, 244823040 - 1, 1} {
 		t.Run(fmt.Sprintf("%d", k), func(t *testing.T) {
 			p := M24numToPerm(k)
@@ -450,6 +483,7 @@ func TestMat24Num(t *testing.T) {
 }
 
 func TestMat24Lex(t *testing.T) {
+	t.Parallel()
 	for _, n := range []uint32{0, 1, 2, 244823040 - 1, 123456789} {
 		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
 			p := M24numToPerm(n)
@@ -463,6 +497,7 @@ func TestMat24Lex(t *testing.T) {
 }
 
 func TestPermCheck(t *testing.T) {
+	t.Parallel()
 	good := M24numToPerm(115873693)
 	if err := PermCheck(good); err != nil {
 		t.Fatalf("PermCheck(valid) returned error: %v", err)
@@ -475,6 +510,7 @@ func TestPermCheck(t *testing.T) {
 }
 
 func TestMatGroup(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ k1, k2 uint32 }{
 		{115873693, 12345},
 		{0, 244823040 - 1},
@@ -494,6 +530,7 @@ func TestMatGroup(t *testing.T) {
 }
 
 func TestOpVectPerm(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		v uint32
 		k uint32
@@ -513,6 +550,7 @@ func TestOpVectPerm(t *testing.T) {
 }
 
 func TestMatrixOps(t *testing.T) {
+	t.Parallel()
 	for _, k := range []uint32{0, 115873693, 1000000} {
 		t.Run(fmt.Sprintf("%d", k), func(t *testing.T) {
 			p := M24numToPerm(k)
@@ -536,6 +574,7 @@ func TestMatrixOps(t *testing.T) {
 }
 
 func TestAutpl(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c uint32
 		k uint32
@@ -569,6 +608,7 @@ func TestAutpl(t *testing.T) {
 }
 
 func TestMulAutpl(t *testing.T) {
+	t.Parallel()
 	c1, k1 := uint32(0x55), uint32(567234)
 	c2, k2 := uint32(0x356), uint32(1000000)
 	a1 := fmt.Sprintf("mat24.perm_to_autpl(%d, mat24.m24num_to_perm(%d))", c1, k1)
@@ -580,6 +620,7 @@ func TestMulAutpl(t *testing.T) {
 }
 
 func TestPermToIautpl(t *testing.T) {
+	t.Parallel()
 	c, k := uint32(0x356), uint32(1000000)
 	p := M24numToPerm(k)
 	pi, ai := PermToIautpl(c, p)
@@ -590,6 +631,7 @@ func TestPermToIautpl(t *testing.T) {
 }
 
 func TestOpAllAutpl(t *testing.T) {
+	t.Parallel()
 	c, k := uint32(1), uint32(0)
 	m := PermToAutpl(c, M24numToPerm(k))
 	got := u16sToInts(OpAllAutpl(m))
@@ -601,6 +643,7 @@ func TestOpAllAutpl(t *testing.T) {
 }
 
 func TestOpAllCocode(t *testing.T) {
+	t.Parallel()
 	for _, c := range []uint32{0, 1, 0xabc} {
 		t.Run(fmt.Sprintf("%d", c), func(t *testing.T) {
 			got := bytesToInts(OpAllCocode(c))
@@ -614,6 +657,7 @@ func TestOpAllCocode(t *testing.T) {
 }
 
 func TestHeptadCompleter(t *testing.T) {
+	t.Parallel()
 	for _, k := range []uint32{0, 115873693, 1000000} {
 		t.Run(fmt.Sprintf("%d", k), func(t *testing.T) {
 			full := M24numToPerm(k)
@@ -633,6 +677,7 @@ func TestHeptadCompleter(t *testing.T) {
 }
 
 func TestPermCompleteOctad(t *testing.T) {
+	t.Parallel()
 	for _, k := range []uint32{0, 115873693, 1000000} {
 		t.Run(fmt.Sprintf("%d", k), func(t *testing.T) {
 			full := M24numToPerm(k)
@@ -665,6 +710,7 @@ func pyOctadIn(first6 []byte) string {
 }
 
 func TestPermFromHeptads(t *testing.T) {
+	t.Parallel()
 	p1 := M24numToPerm(115873693)
 	p2 := M24numToPerm(1000000)
 	h1 := []byte{p1[0], p1[1], p1[2], p1[3], p1[4], p1[5], p1[8]}
@@ -675,6 +721,7 @@ func TestPermFromHeptads(t *testing.T) {
 }
 
 func TestPermFromMap(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		h1, h2 []byte
 	}{
@@ -699,6 +746,7 @@ func TestPermFromMap(t *testing.T) {
 }
 
 func TestPermFromMapRejection(t *testing.T) {
+	t.Parallel()
 	bad := []byte{0, 0, 2, 3, 4}
 	if _, _, err := PermFromMap(bad, bad); err == nil {
 		t.Errorf("PermFromMap(duplicate): want error, got nil")
@@ -730,6 +778,7 @@ func TestPermFromMapRejection(t *testing.T) {
 }
 
 func TestPermFromDodecads(t *testing.T) {
+	t.Parallel()
 	d1 := oracleInts(t, "list(mat24.vect_to_bit_list(mat24.gcode_to_vect([g for g in range(0x1000) if mat24.gcode_weight(g)==3][0]))[1])[:12]")
 	d2 := oracleInts(t, "list(mat24.vect_to_bit_list(mat24.gcode_to_vect([g for g in range(0x1000) if mat24.gcode_weight(g)==3][3]))[1])[:12]")
 	b1 := intsToBytes(d1[:9])
@@ -748,6 +797,7 @@ func intsToBytes(v []int64) []byte {
 }
 
 func TestMat24Rand(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []uint32{0, 1, 2, 4, 64} {
 		t.Run(fmt.Sprintf("mode%d", mode), func(t *testing.T) {
 			if got, want := uint64(CompleteRandMode(mode)), oracleUint(t, fmt.Sprintf("mat24.complete_rand_mode(%d)", mode)); got != want {
@@ -769,6 +819,7 @@ func TestMat24Rand(t *testing.T) {
 }
 
 func TestCocodeAsSubdodecad(t *testing.T) {
+	t.Parallel()
 	dod := oracleInt(t, "[g for g in range(0x1000) if mat24.gcode_weight(g)==3][0]")
 	d := uint32(dod)
 	cocodes := oracleInts(t, fmt.Sprintf("[c for c in range(0x1000) if mat24.scalar_prod(%d ^ 0x800, c) == 0][:4]", d))
@@ -785,6 +836,7 @@ func TestCocodeAsSubdodecad(t *testing.T) {
 }
 
 func TestVectToList(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		v      uint32
 		maxLen int
@@ -806,6 +858,7 @@ func TestVectToList(t *testing.T) {
 }
 
 func TestOctadEntries(t *testing.T) {
+	t.Parallel()
 	for _, oct := range []uint32{0, 1, 100, 758} {
 		t.Run(fmt.Sprintf("%d", oct), func(t *testing.T) {
 			got := OctadEntries(oct)
@@ -816,6 +869,7 @@ func TestOctadEntries(t *testing.T) {
 }
 
 func TestPermToNet(t *testing.T) {
+	t.Parallel()
 	for _, k := range []uint32{0, 115873693, 1000000} {
 		t.Run(fmt.Sprintf("%d", k), func(t *testing.T) {
 			p := M24numToPerm(k)
@@ -827,6 +881,7 @@ func TestPermToNet(t *testing.T) {
 }
 
 func TestMatrixFromModOmega(t *testing.T) {
+	t.Parallel()
 	for _, k := range []uint32{0, 115873693, 1000000} {
 		t.Run(fmt.Sprintf("%d", k), func(t *testing.T) {
 			p := M24numToPerm(k)
@@ -863,6 +918,7 @@ func TestMatrixFromModOmega(t *testing.T) {
 // fixture is unsolvable: the oracle returns res=0 and the
 // returned permutation does NOT realize h1 -> h2.
 func TestDiagOracleFromMap(t *testing.T) {
+	t.Parallel()
 	res := oracleInt(t, "mat24.perm_from_map([0,1,2,3,4,5,6], [0,1,2,3,4,5,8])[0]")
 	if res != 0 {
 		t.Fatalf("expected oracle res=0 (unsolvable), got %d", res)
@@ -901,6 +957,7 @@ func TestDiagOracleFromMap(t *testing.T) {
 // broken: a genuinely solvable n=7 map (and an n=7
 // umbral->umbral map) must agree with the oracle.
 func TestDiagN7Solvable(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name   string
 		h1, h2 []byte
@@ -943,6 +1000,7 @@ func TestDiagN7Solvable(t *testing.T) {
 // n=7 map via an actual M24 element so the i16!=25
 // branch is exercised on a SUCCESS case.
 func TestDiagN7UmbralReal(t *testing.T) {
+	t.Parallel()
 	// h1 = umbral heptad [0,1,2,3,4,5,8].
 	h1 := []byte{0, 1, 2, 3, 4, 5, 8}
 	// Apply M24 element number 12345 to get its image.
@@ -972,6 +1030,7 @@ func TestDiagN7UmbralReal(t *testing.T) {
 // the heptad [0,1,2,3,4,5,_,_,8] that PermFromMap(case 1)
 // constructs.
 func TestDiagHeptadComplete(t *testing.T) {
+	t.Parallel()
 	// The heptad PermFromMap builds for case 1 has
 	// images at indices 0,1,2,3,4,5,8 = 0,1,2,3,4,5,8.
 	var p [24]byte
@@ -1017,6 +1076,7 @@ func heptadPyList(b []byte) string {
 // constructed heptad lost the 6->8 constraint because no
 // M24 permutation can honor it).
 func TestDiagPermFromHeptads(t *testing.T) {
+	t.Parallel()
 	h1 := []byte{0, 1, 2, 3, 4, 5, 8}
 	h2 := []byte{0, 1, 2, 3, 4, 5, 8}
 	var out [24]byte
@@ -1029,6 +1089,7 @@ func TestDiagPermFromHeptads(t *testing.T) {
 }
 
 func TestM24numRandAdjustXY(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ mode, v uint32 }{
 		{0, 0},
 		{1, 0x123},

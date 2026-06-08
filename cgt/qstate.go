@@ -556,7 +556,10 @@ func bm64FindLowBit(m []uint64, imin, imax int) int {
 	if v != 0 {
 		return (n << 6) + bits.TrailingZeros64(v)
 	}
-	for n++; n <= nmax; n++ {
+	// C uses n <= nmax, which over-reads one word past the
+	// allocation when imax is a 64-multiple. The trailing word
+	// never contains in-range bits (res < imax discards them).
+	for n++; n < nmax; n++ {
 		if v = m[n]; v != 0 {
 			res := (n << 6) + bits.TrailingZeros64(v)
 			if res < imax {

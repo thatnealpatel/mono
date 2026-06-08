@@ -1170,37 +1170,72 @@ func reduceM(a []uint32) []uint32 {
 	return append([]uint32(nil), r[:res]...)
 }
 
+// stripCommentAtoms returns a copy of w with all
+// tag-0 comment atoms removed. A comment atom acts as
+// the neutral element and carries no group data; the
+// mod-15 axis reducer (reduceM) emits them as padding.
+// They are identified by a zero low-3-bit tag in bits
+// 28-30, i.e. (atom >> 28) & 0x7 == 0, which matches
+// both atomTag1 (0x0) and atomTagI1 (0x8). The result
+// is always a freshly allocated slice (never aliasing
+// w), so callers may store it without copying.
+func stripCommentAtoms(w []uint32) []uint32 {
+	out := make([]uint32, 0, len(w))
+	for _, atom := range w {
+		if (atom>>28)&0x7 == 0 {
+			continue
+		}
+		out = append(out, atom)
+	}
+	return out
+}
+
+// reduceRaw computes the canonical reduced word for the
+// atom word a, before comment-atom stripping. It ports
+// C mm_reduce_M (mode 0): first prereduce shortens
+// elements known to lie in N_0 or G_x0 to a clean word;
+// otherwise the full Seysen22 axis-tracking reducer
+// (reduceM) runs. If the reducer hits an unexpected
+// internal failure it falls back to the N_0-prefix
+// reduction (a port of mm_group_mul_words).
+//
+// The returned word is byte-identical to mmgroup's
+// default mm_reduce_M output (see TestMonsterMmdata's
+// internal tripwire) and may therefore contain tag-0
+// comment atoms when the mod-15 reducer path runs;
+// Reduce strips those before they reach g.data.
+func reduceRaw(a []uint32) []uint32 {
+	if out, status := prereduce(a); status != 2 {
+		if status == 0 {
+			return out
+		}
+		a = out // partial: reduce again below
+	}
+	if r := reduceM(a); r != nil {
+		return r
+	}
+	buf := make([]uint32, 2*len(a)+1)
+	length := mulWords(buf, 0, a, 1)
+	return append([]uint32(nil), buf[:length]...)
+}
+
 // Reduce reduces the element in place to a canonical
 // word of fixed maximum length and returns g. The
 // canonical form depends only on the value of g in the
 // monster group, not on its representation as a word.
 //
-// It ports C mm_reduce_M (mode 0): first prereduce
-// shortens elements known to lie in N_0 or G_x0 to a
-// clean word; otherwise the full Seysen22 axis-tracking
-// reducer (reduceM) runs. If the reducer hits an
-// unexpected internal failure it falls back to the
-// N_0-prefix reduction (a port of mm_group_mul_words).
+// The reduced word is produced by reduceRaw (a port of
+// C mm_reduce_M mode 0) and then has its tag-0 comment
+// atoms stripped, so g.data, Mmdata, and IsReduced all
+// see a clean word. The comment atoms are neutral
+// padding emitted by the mod-15 axis reducer and carry
+// no group data, so removing them does not change the
+// element.
 func (g *MM) Reduce() *MM {
-	l := len(g.data)
-	if l == 0 {
+	if len(g.data) == 0 {
 		return g
 	}
-	a := g.data
-	if out, status := prereduce(a); status != 2 {
-		if status == 0 {
-			g.data = out
-			return g
-		}
-		a = out // partial: reduce again below
-	}
-	if r := reduceM(a); r != nil {
-		g.data = r
-		return g
-	}
-	buf := make([]uint32, 2*len(a)+1)
-	length := mulWords(buf, 0, a, 1)
-	g.data = append([]uint32(nil), buf[:length]...)
+	g.data = stripCommentAtoms(reduceRaw(g.data))
 	return g
 }
 

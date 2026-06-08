@@ -62,6 +62,7 @@ func xspPy(atoms []XspAtom) string {
 }
 
 func TestXLeech2Ord(t *testing.T) {
+	t.Parallel()
 	for _, v := range []uint32{0, 0x800000, 0x1000, 0x800001, 0x1fffff, 0x3ffffff} {
 		got := NewXLeech2(v).Ord()
 		want := oracleUint(t, fmt.Sprintf("mmgroup.XLeech2(%d).ord", v))
@@ -72,6 +73,7 @@ func TestXLeech2Ord(t *testing.T) {
 }
 
 func TestXLeech2Type(t *testing.T) {
+	t.Parallel()
 	for _, v := range []uint32{0, 0x800000, 0x800800, 0x1000, 0x200} {
 		x := NewXLeech2(v)
 		gotT := x.Type()
@@ -100,6 +102,7 @@ func bytesEq(a []byte, b []int64) bool {
 }
 
 func TestXLeech2Bitvector(t *testing.T) {
+	t.Parallel()
 	for _, v := range []uint32{1, 0x800000, 0x123456, 0x1000, 0xabcdef, 0x1800001} {
 		got := NewXLeech2(v).Bitvector()
 		want := oracleInts(t, fmt.Sprintf("[int(x) for x in mmgroup.XLeech2(%d).as_Leech2_bitvector()]", v))
@@ -110,6 +113,7 @@ func TestXLeech2Bitvector(t *testing.T) {
 }
 
 func TestLeech2Scalprod(t *testing.T) {
+	t.Parallel()
 	pairs := [][2]uint32{{1, 0x1000}, {0x800001, 0x100}, {0x1000, 0x1000}, {0x123, 0x456000}, {0x800000, 0x800800}}
 	for _, p := range pairs {
 		got := Leech2Scalprod(p[0], p[1])
@@ -121,6 +125,7 @@ func TestLeech2Scalprod(t *testing.T) {
 }
 
 func TestLeechMod3Short(t *testing.T) {
+	t.Parallel()
 	for _, x2 := range []uint32{0x10001, 0x10020, 0x10022, 0x20000, 0x30000} {
 		x3 := Leech2To3Short(x2)
 		wantX3 := oracleUint(t, fmt.Sprintf("mmgroup.generators.gen_leech2to3_short(%d)", x2))
@@ -142,6 +147,7 @@ const leechBasis = "from mmgroup.clifford12 import leech2_matrix_basis, leech2_m
 	" a=np.array(v2,dtype=np.uint32); o=np.zeros(24,dtype=np.uint64); k=int(leech2_matrix_radical(a,len(a),o,24)); return [int(x) for x in o[:k]]"
 
 func TestLeech2MatrixBasis(t *testing.T) {
+	t.Parallel()
 	cases := [][]uint32{
 		{1, 2, 4},
 		{0x800000, 0x1000, 0x200, 0x800000},
@@ -157,6 +163,7 @@ func TestLeech2MatrixBasis(t *testing.T) {
 }
 
 func TestLeech2MatrixRadical(t *testing.T) {
+	t.Parallel()
 	cases := [][]uint32{
 		{1, 2, 4},
 		{0x800000, 0x1000, 0x200},
@@ -172,6 +179,7 @@ func TestLeech2MatrixRadical(t *testing.T) {
 }
 
 func TestXsp2AsXsp(t *testing.T) {
+	t.Parallel()
 	cases := [][]XspAtom{
 		{{"x", 1}},
 		{{"d", 0x456}},
@@ -188,6 +196,7 @@ func TestXsp2AsXsp(t *testing.T) {
 }
 
 func TestXsp2Order(t *testing.T) {
+	t.Parallel()
 	cases := [][]XspAtom{
 		{{"x", 0x1abc}, {"y", 0x3}, {"d", 0x4}},
 		{{"l", 1}},
@@ -205,6 +214,7 @@ func TestXsp2Order(t *testing.T) {
 }
 
 func TestXsp2XspConjugate(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		atoms []XspAtom
 		v     []uint32
@@ -224,6 +234,7 @@ func TestXsp2XspConjugate(t *testing.T) {
 }
 
 func TestXsp2FromXspRoundTrip(t *testing.T) {
+	t.Parallel()
 	for _, x := range []uint32{1, 0x1000, 0x800001, 0x123, 0x1abc000} {
 		got := Xsp2FromXsp(x).AsXsp()
 		want := oracleUint(t, fmt.Sprintf("mmgroup.Xsp2_Co1.group.from_xsp(%d).as_xsp()", x))
@@ -234,6 +245,7 @@ func TestXsp2FromXspRoundTrip(t *testing.T) {
 }
 
 func TestXsp2Mul(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ a, b []XspAtom }{
 		{[]XspAtom{{"x", 0x1abc}}, []XspAtom{{"d", 0x555}}},
 		{[]XspAtom{{"l", 1}}, []XspAtom{{"l", 2}}},
@@ -257,6 +269,7 @@ func TestXsp2Mul(t *testing.T) {
 }
 
 func TestLeech2OpWord(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		atoms []XspAtom
 		x     uint32
@@ -279,6 +292,7 @@ func TestLeech2OpWord(t *testing.T) {
 }
 
 func TestXsp2Pow(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		atoms []XspAtom
 		e     int
@@ -328,6 +342,7 @@ func TestXsp2Pow(t *testing.T) {
 }
 
 func TestLeech3OpVectorWord(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		atoms []XspAtom
 		x     uint32
@@ -335,6 +350,14 @@ func TestLeech3OpVectorWord(t *testing.T) {
 		{[]XspAtom{{"l", 1}}, 0x800000},
 		{[]XspAtom{{"d", 0x124}}, 0x1f24},
 		{[]XspAtom{{"x", 0x1123}}, 0x123456},
+		// Type-2 (short) inputs: gen_leech2to3_short maps these to
+		// nonzero mod-3 vectors, so the word actually acts on a
+		// short Leech vector rather than the trivial x3=0 case.
+		// 0x200, 0x100, 0x10020 are type 2 (oracle-confirmed); the
+		// l- and p-generators move them to distinct mod-3 vectors.
+		{[]XspAtom{{"l", 1}}, 0x200},
+		{[]XspAtom{{"p", 187654344}}, 0x100},
+		{[]XspAtom{{"x", 0x1123}, {"d", 0xd79}}, 0x10020},
 	}
 	for _, c := range cases {
 		g := NewXsp2Co1(c.atoms...)
@@ -350,6 +373,7 @@ func TestLeech3OpVectorWord(t *testing.T) {
 }
 
 func TestLeech2Pow(t *testing.T) {
+	t.Parallel()
 	for _, x := range []uint32{1, 0x1000, 0x800001, 0x123456, 0x1f24, 0x100} {
 		for _, e := range []uint8{0, 1, 2, 3, 4, 5} {
 			got := Leech2Pow(x, e)
@@ -362,6 +386,7 @@ func TestLeech2Pow(t *testing.T) {
 }
 
 func TestLeech2OpAtom(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		x uint32
 		g uint32

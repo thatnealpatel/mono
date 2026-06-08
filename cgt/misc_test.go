@@ -521,8 +521,13 @@ func TestBiMMDecompose(t *testing.T) {
 		b := P3BiMM(w)
 		m1, m2, e := b.Decompose()
 		setup := miscBM + "\ndef dec(word):\n d=P3_BiMM(word).decompose(); return [list(int(x) for x in d[0].mmdata), list(int(x) for x in d[1].mmdata), int(d[2])]"
-		wantM1 := oracleMiscInts(t, setup, fmt.Sprintf("dec(%s)[0]", miscList(w)))
-		wantM2 := oracleMiscInts(t, setup, fmt.Sprintf("dec(%s)[1]", miscList(w)))
+		// The oracle's .mmdata includes tag-0 comment atoms
+		// for mod-15 axis-reducer outputs (e.g. word
+		// [0,14,15]); Go's Mmdata strips them, so filter the
+		// oracle word to match. For G_x0/N_0 outputs
+		// ([0], [0,13]) the filter is a no-op.
+		wantM1 := filterCommentAtoms(oracleMiscInts(t, setup, fmt.Sprintf("dec(%s)[0]", miscList(w))))
+		wantM2 := filterCommentAtoms(oracleMiscInts(t, setup, fmt.Sprintf("dec(%s)[1]", miscList(w))))
 		wantE := int(oracleMiscInt(t, setup, fmt.Sprintf("dec(%s)[2]", miscList(w))))
 		if e != wantE {
 			t.Errorf("P3BiMM(%v).Decompose() alpha=%d want %d", w, e, wantE)

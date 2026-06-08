@@ -42,6 +42,7 @@ func stripMM(s string) string {
 }
 
 func TestMonsterMul(t *testing.T) {
+	t.Parallel()
 	cases := [][2]string{
 		{"M<x_1h>", "M<y_2h>"},
 		{"M<t_1>", "M<l_1>"},
@@ -61,6 +62,7 @@ func TestMonsterMul(t *testing.T) {
 }
 
 func TestMonsterInv(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"M<x_1h>",
 		"M<t_1>",
@@ -82,6 +84,7 @@ func TestMonsterInv(t *testing.T) {
 }
 
 func TestMonsterOrder(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"M<1>",
 		"M<t_1>",
@@ -99,6 +102,7 @@ func TestMonsterOrder(t *testing.T) {
 }
 
 func TestMonsterHalfOrder(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"M<t_1>",
 		"M<d_2h*d_3h>",
@@ -125,6 +129,7 @@ func TestMonsterHalfOrder(t *testing.T) {
 }
 
 func TestMonsterEqual(t *testing.T) {
+	t.Parallel()
 	cases := [][2]string{
 		{"M<1>", "M<1>"},
 		{"M<d_2h*d_2h>", "M<1>"},
@@ -142,6 +147,7 @@ func TestMonsterEqual(t *testing.T) {
 }
 
 func TestMonsterReduce(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"M<t_1*t_1*t_1>",
 		"M<d_2h*d_2h>",
@@ -158,6 +164,7 @@ func TestMonsterReduce(t *testing.T) {
 }
 
 func TestMonsterAsIntRoundTrip(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		tag string
 		i   int
@@ -186,6 +193,7 @@ func TestMonsterAsIntRoundTrip(t *testing.T) {
 }
 
 func TestMonsterInGx0(t *testing.T) {
+	t.Parallel()
 	cases := map[string]bool{
 		"M<d_2h>":          true,
 		"M<x_0a71h>":       true,
@@ -206,6 +214,7 @@ func TestMonsterInGx0(t *testing.T) {
 }
 
 func TestMonsterEvalA(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		i, j   int
 		c0, c1 int
@@ -229,11 +238,20 @@ func TestMonsterEvalA(t *testing.T) {
 }
 
 func TestMonsterAxisType(t *testing.T) {
+	t.Parallel()
 	specs := []string{
 		"M<x_1h*y_2h>",
 		"M<t_1*l_1*t_2>",
 		"M<d_5h*p_100*l_1*t_2>",
 		"M<l_2*t_1*x_1abh*y_3h>",
+		// Short MM words keep v^+ in its own G_x0 orbit ("2A"). The
+		// following are the canonical per-orbit representatives from
+		// mmgroup's tests/axes/sample_axes.py (g_strings), which land
+		// in the 2B, 4A, 4C, and 6C orbits respectively.
+		"M<y_29bh*x_1e0ch*d_39fh*p_108582478*l_2*p_960*l_2*p_10667712*l_2*p_5197440*t_1>",
+		"M<y_72eh*x_8b5h*d_0ff3h*p_203638538*l_2*p_1394880*l_1*p_10665792*l_1*p_6125760*t_1>",
+		"M<y_175h*x_0bd6h*d_5dfh*p_77235657*l_1*p_1499520*l_2*p_10773794*t_1*l_1*p_1481280*t_2*l_1*p_130560*l_1*t_1>",
+		"M<y_2b8h*x_429h*d_553h*p_237253688*l_2*p_1900800*l_2*p_85835153*l_2*p_21796800*t_2*l_1*p_13326720*l_1*p_11552640*l_1*t_1>",
 	}
 	for _, spec := range specs {
 		got := AxisFor(mustMM(t,spec)).Type()
@@ -246,6 +264,7 @@ func TestMonsterAxisType(t *testing.T) {
 }
 
 func TestMonsterPow(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		spec string
 		e    int
@@ -274,7 +293,26 @@ func TestMonsterPow(t *testing.T) {
 	}
 }
 
+// filterCommentAtoms drops tag-0 comment atoms from an
+// oracle atom word, using the same (atom>>28)&0x7 == 0
+// test as production stripCommentAtoms. mmgroup's
+// default mm_reduce_M leaves these neutral atoms in
+// .mmdata for the mod-15 axis-reducer path; Go's
+// Reduce strips them, so the oracle word must be
+// filtered before comparing against Go's public API.
+func filterCommentAtoms(w []int64) []int64 {
+	out := make([]int64, 0, len(w))
+	for _, atom := range w {
+		if (atom>>28)&0x7 == 0 {
+			continue
+		}
+		out = append(out, atom)
+	}
+	return out
+}
+
 func TestMonsterMmdata(t *testing.T) {
+	t.Parallel()
 	specs := []string{
 		"M<1>",
 		"M<x_1h>",
@@ -283,20 +321,52 @@ func TestMonsterMmdata(t *testing.T) {
 		"M<l_1*t_2*l_2*t_1*x_3abh*d_4h>",
 	}
 	for _, spec := range specs {
-		got := mustMM(t,spec).Mmdata()
 		want := oracleInts(t, fmt.Sprintf("[int(x) for x in %s.mmdata]", mmExpr(spec)))
-		if len(got) != len(want) {
-			t.Fatalf("Mmdata(%q) len=%d want %d", spec, len(got), len(want))
+
+		// Internal tripwire: the raw reduced word (before
+		// comment-atom stripping) must byte-match the
+		// oracle's mm_reduce_M output. This is the reducer
+		// regression detector; it covers both the prereduce
+		// path (G_x0/N_0 specs) and the mod-15 reduceM path
+		// (strategy-3 specs, where comment atoms appear in
+		// both Go and the oracle).
+		g := mustMM(t, spec)
+		raw := reduceRaw(g.data)
+		if len(raw) != len(want) {
+			t.Fatalf("reduceRaw(%q) len=%d want %d\n got=%#x\nwant=%#x",
+				spec, len(raw), len(want), raw, want)
 		}
 		for i := range want {
-			if int64(got[i]) != want[i] {
-				t.Errorf("Mmdata(%q)[%d]=%#x want %#x", spec, i, got[i], want[i])
+			if int64(raw[i]) != want[i] {
+				t.Errorf("reduceRaw(%q)[%d]=%#x want %#x", spec, i, raw[i], want[i])
+			}
+		}
+
+		// Public API check: Mmdata strips comment atoms, so
+		// it must equal the oracle word with comment atoms
+		// filtered out.
+		got := mustMM(t, spec).Mmdata()
+		wantStripped := filterCommentAtoms(want)
+		if len(got) != len(wantStripped) {
+			t.Fatalf("Mmdata(%q) len=%d want %d (stripped from %d)",
+				spec, len(got), len(wantStripped), len(want))
+		}
+		for i := range wantStripped {
+			if int64(got[i]) != wantStripped[i] {
+				t.Errorf("Mmdata(%q)[%d]=%#x want %#x", spec, i, got[i], wantStripped[i])
+			}
+		}
+		// Mmdata must not leak any comment atoms.
+		for i, atom := range got {
+			if (atom>>28)&0x7 == 0 {
+				t.Errorf("Mmdata(%q)[%d]=%#x is a comment atom (should be stripped)", spec, i, atom)
 			}
 		}
 	}
 }
 
 func TestMonsterInNx0(t *testing.T) {
+	t.Parallel()
 	cases := map[string]bool{
 		"M<d_2h>":          true,
 		"M<x_0a71h>":       true,
@@ -319,6 +389,7 @@ func TestMonsterInNx0(t *testing.T) {
 }
 
 func TestMonsterInQx0(t *testing.T) {
+	t.Parallel()
 	cases := map[string]bool{
 		"M<x_0a71h>":   true,
 		"M<d_2h>":      true,
@@ -341,6 +412,7 @@ func TestMonsterInQx0(t *testing.T) {
 }
 
 func TestMonsterChiGx0(t *testing.T) {
+	t.Parallel()
 	specs := []string{
 		"M<1>",
 		"M<d_2h>",
@@ -362,13 +434,17 @@ func TestMonsterChiGx0(t *testing.T) {
 	}
 }
 
-// TODO(phase2): This test is self-contradictory. The oracle's
-// MM.is_reduced() compares self.length == self.reduced (length vs a
-// 0/1 flag), so it returns False even after reduce(). Line 376 checks
-// got == want (want=false from oracle), but line 378 requires got=true.
-// Both cannot pass. Resolve jointly with IsReduced semantics and
-// comment-atom stripping (PLAN step 9 / Phase 2).
+// TestMonsterIsReduced checks that an element is in
+// reduced form after Reduce(). The oracle's
+// is_reduced() compares self.length (an int) to
+// self.reduced (a 0/1 flag), so it returns False for
+// any element of length != 1 even after reduce(); it is
+// not a usable reference. Go has no reduced flag: the
+// word IS the canonical form, so IsReduced reduces a
+// copy and compares word-for-word, and must report true
+// for any already-reduced element.
 func TestMonsterIsReduced(t *testing.T) {
+	t.Parallel()
 	specs := []string{
 		"M<t_1*t_1*t_1>",
 		"M<d_2h*d_2h>",
@@ -376,18 +452,14 @@ func TestMonsterIsReduced(t *testing.T) {
 		"M<l_1*t_2*l_2*t_1*x_3abh*d_4h>",
 	}
 	for _, spec := range specs {
-		got := mustMM(t,spec).Reduce().IsReduced()
-		want := oracleBool(t, fmt.Sprintf("(lambda g:(g.reduce(),g.is_reduced())[1])(%s)", mmExpr(spec)))
-		if got != want {
-			t.Errorf("IsReduced(reduce(%q))=%v want %v", spec, got, want)
-		}
-		if !got {
+		if got := mustMM(t, spec).Reduce().IsReduced(); !got {
 			t.Errorf("reduced element %q reports IsReduced()=false", spec)
 		}
 	}
 }
 
 func TestMonsterAxisMul(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		spec  string
 		gspec string
@@ -409,6 +481,7 @@ func TestMonsterAxisMul(t *testing.T) {
 }
 
 func TestMonsterAxisEqual(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		a, b string
 	}{

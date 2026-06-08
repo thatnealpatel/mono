@@ -6,6 +6,7 @@ import (
 )
 
 func TestGenXiLeech(t *testing.T) {
+	t.Parallel()
 	for _, x := range []uint32{1, 0x1000, 2, 0x100, 0x800001} {
 		x1 := XiOpXi(x, 1)
 		x2 := XiOpXi(x, 2)
@@ -30,6 +31,7 @@ func TestGenXiLeech(t *testing.T) {
 }
 
 func TestGenXiShort(t *testing.T) {
+	t.Parallel()
 	for _, x := range []uint32{0x10001, 0x10020, 0x10022, 0x20000, 0x30000} {
 		xl := XiShortToLeech(x)
 		wantLeech := oracleUint(t, fmt.Sprintf("mmgroup.generators.gen_xi_short_to_leech(%d)", x))
@@ -52,6 +54,7 @@ func TestGenXiShort(t *testing.T) {
 }
 
 func TestGenXiRef(t *testing.T) {
+	t.Parallel()
 	for _, x := range []uint32{1, 0x1000, 2, 0x100, 0x800001} {
 		v := x >> 12
 		c := x & 0xfff
@@ -75,6 +78,7 @@ func TestGenXiRef(t *testing.T) {
 }
 
 func TestLeech2Type(t *testing.T) {
+	t.Parallel()
 	for _, x := range []uint32{0, 0x800000, 0x800800, 0x1000, 0x200} {
 		got := Leech2Subtype(x)
 		want := oracleUint(t, fmt.Sprintf("mmgroup.generators.gen_leech2_subtype(%d)", x))
@@ -100,6 +104,7 @@ func TestLeech2Type(t *testing.T) {
 }
 
 func TestLeech2Mul(t *testing.T) {
+	t.Parallel()
 	pairs := [][2]uint32{{1, 0x1000}, {0x800001, 0x100}, {2, 2}, {0x1000, 0x800000}, {0x100, 0x10001}}
 	for _, p := range pairs {
 		got := Leech2Mul(p[0], p[1])
@@ -111,6 +116,7 @@ func TestLeech2Mul(t *testing.T) {
 }
 
 func TestGenXiOpXiNoSign(t *testing.T) {
+	t.Parallel()
 	for _, x := range []uint32{1, 0x1000, 2, 0x100, 0x800001, 0x123456} {
 		for exp := 1; exp <= 2; exp++ {
 			got := XiOpXiNoSign(x, exp)

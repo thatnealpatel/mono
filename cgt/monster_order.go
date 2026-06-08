@@ -12,7 +12,10 @@ package cgt
 
 //go:generate go run -C _gen . -out ../monster_order_gen.go
 
-import "math/bits"
+import (
+	"math/bits"
+	"sync"
+)
 
 //////////////////////////////////////////////////
 // Part 1: precomputed order vector v_1 mod 15
@@ -67,15 +70,32 @@ func ovLoad64(srcOfs int, dst []uint64, n int) {
 	}
 }
 
+// ovCacheOnce guards the one-time construction of the
+// order-vector data in ovCacheData.
+var ovCacheOnce sync.Once
+
+// ovCacheData holds the populated p=15 order-vector
+// data (including the trailing guard entry) built once
+// by loadOrderVector. Callers receive an independent
+// copy, never this slice, because most mutate the
+// returned vector in place.
+var ovCacheData []uint64
+
 // loadOrderVector returns the precomputed order
 // vector v_1 of the representation mod 15. C
-// mm_order_load_vector.
+// mm_order_load_vector. The table-unpacking work is
+// performed once and cached; each call returns a fresh
+// *MMVector backed by a copy of the cached data, so the
+// result is safe to mutate.
 func loadOrderVector() *MMVector {
-	v := ZeroVector(15)
-	ovLoad24(ovOfsABC, v.data[ovDestA:], 72)
-	ovLoad64(ovOfsT, v.data[ovDestT:], 759)
-	ovLoad24(ovOfsX, v.data[ovDestX:], 3*2048)
-	return v
+	ovCacheOnce.Do(func() {
+		v := ZeroVector(15)
+		ovLoad24(ovOfsABC, v.data[ovDestA:], 72)
+		ovLoad64(ovOfsT, v.data[ovDestT:], 759)
+		ovLoad24(ovOfsX, v.data[ovDestX:], 3*2048)
+		ovCacheData = v.data
+	})
+	return &MMVector{p: 15, data: append([]uint64(nil), ovCacheData...)}
 }
 
 //////////////////////////////////////////////////

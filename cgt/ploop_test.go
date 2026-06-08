@@ -14,6 +14,7 @@ func intsToInts(a []int) []int64 {
 }
 
 func TestPLoop(t *testing.T) {
+	t.Parallel()
 	for _, v := range []int{0x0000, 0x0001, 0x0800, 0x1234, 0x1abc} {
 		p := NewPLoop(v)
 		if got, want := uint64(p.Ord()), oracleUint(t, fmt.Sprintf("mmgroup.PLoop(%d).ord", v)); got != want {
@@ -38,6 +39,7 @@ func TestPLoop(t *testing.T) {
 }
 
 func TestPLoopMul(t *testing.T) {
+	t.Parallel()
 	pairs := [][2]int{{0x1234, 0x0567}, {0x0001, 0x0002}, {0x1abc, 0x0def}, {0x0800, 0x1000}}
 	for _, pr := range pairs {
 		a, b := pr[0], pr[1]
@@ -61,6 +63,7 @@ func TestPLoopMul(t *testing.T) {
 }
 
 func TestPLoopAssoc(t *testing.T) {
+	t.Parallel()
 	triples := [][3]int{{0x1234, 0x0567, 0x0abc}, {0x0001, 0x0002, 0x0004}, {0x1abc, 0x0def, 0x0111}, {0x0800, 0x0fff, 0x0123}}
 	for _, tr := range triples {
 		a, b, c := tr[0], tr[1], tr[2]
@@ -72,6 +75,7 @@ func TestPLoopAssoc(t *testing.T) {
 }
 
 func TestGCodeStruct(t *testing.T) {
+	t.Parallel()
 	for _, v := range []int{0x000, 0x001, 0x800, 0x234, 0xabc} {
 		g := NewGCode(v)
 		if got, want := int64(g.Len()), oracleInt(t, fmt.Sprintf("len(mmgroup.GCode(%d))", v)); got != want {
@@ -95,6 +99,7 @@ func TestGCodeStruct(t *testing.T) {
 }
 
 func TestCocodeStruct(t *testing.T) {
+	t.Parallel()
 	for _, v := range []int{0x000, 0x823, 0x7ef, 0x001, 0xabc} {
 		c := NewCocode(v)
 		if got, want := int64(c.Len()), oracleInt(t, fmt.Sprintf("len(mmgroup.Cocode(%d))", v)); got != want {
@@ -114,6 +119,7 @@ func TestCocodeStruct(t *testing.T) {
 }
 
 func TestParkerLoopGCode(t *testing.T) {
+	t.Parallel()
 	for _, v := range []int{0x0000, 0x1234, 0x0800, 0x1abc} {
 		p := NewPLoop(v)
 		if got, want := uint64(p.Abs().Ord()), oracleUint(t, fmt.Sprintf("abs(mmgroup.PLoop(%d)).ord", v)); got != want {
@@ -133,6 +139,7 @@ func TestParkerLoopGCode(t *testing.T) {
 }
 
 func TestAutPLGroup(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		c1, p1, c2, p2 int
 	}{
@@ -165,6 +172,7 @@ func TestAutPLGroup(t *testing.T) {
 }
 
 func TestAutPLPerm(t *testing.T) {
+	t.Parallel()
 	for _, num := range []int{0, 1, 12345, 1000000, 244823039} {
 		a := NewAutPL(0, num)
 		eqInts(t, fmt.Sprintf("AutPL(0,%d).Perm", num), intsToInts(a.Perm()), oracleInts(t, fmt.Sprintf("mmgroup.AutPL(0, %d).perm", num)))
@@ -178,6 +186,7 @@ func TestAutPLPerm(t *testing.T) {
 }
 
 func TestAutPLAction(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		v, c, p int
 	}{
@@ -199,6 +208,7 @@ func TestAutPLAction(t *testing.T) {
 }
 
 func TestOctadStruct(t *testing.T) {
+	t.Parallel()
 	for _, no := range []int{0, 1, 100, 500, 758} {
 		o := NewOctad(no)
 		if got, want := uint64(o.GCode()), oracleUint(t, fmt.Sprintf("mmgroup.Octad(%d).gcode", no)); got != want {
@@ -226,7 +236,13 @@ func TestParityType(t *testing.T) {
 }
 
 func TestPLoopNonAssociativity(t *testing.T) {
-	triples := [][3]int{{0x1234, 0x0567, 0x0abc}, {0x1abc, 0x0def, 0x0111}}
+	t.Parallel()
+	// These triples have a nonzero Parker-loop associator (oracle-
+	// confirmed via mat24.ploop_assoc), so the body that checks
+	// (a*b)*c != a*(b*c) actually executes. The associator is a sign
+	// flip, so (a*b)*c and a*(b*c) differ by negation and thus have
+	// distinct Ord values.
+	triples := [][3]int{{0x111, 0x222, 0x0f0f}, {0x111, 0x444, 0x033}, {0x111, 0x01f, 0x3e0}}
 	for _, tr := range triples {
 		a, b, c := NewPLoop(tr[0]), NewPLoop(tr[1]), NewPLoop(tr[2])
 		assoc := a.Assoc(b, c)
@@ -241,6 +257,7 @@ func TestPLoopNonAssociativity(t *testing.T) {
 }
 
 func TestGCodeUntested(t *testing.T) {
+	t.Parallel()
 	for _, v := range []int{0x001, 0x234, 0x800, 0xabc} {
 		g := NewGCode(v)
 		if got, want := uint64(g.Invert().Ord()), oracleUint(t, fmt.Sprintf("(~mmgroup.GCode(%d)).ord", v)); got != want {
@@ -262,6 +279,7 @@ func TestGCodeUntested(t *testing.T) {
 }
 
 func TestPLoopSplitOctad(t *testing.T) {
+	t.Parallel()
 	for _, v := range []int{0x0001, 0x0800, 0x1234} {
 		p := NewPLoop(v)
 		es, eo, pp := p.SplitOctad()
@@ -275,6 +293,7 @@ func TestPLoopSplitOctad(t *testing.T) {
 }
 
 func TestAutPLPowEqual(t *testing.T) {
+	t.Parallel()
 	a := NewAutPL(0x123, 6789)
 	a2 := a.Pow(2)
 	aa := a.Mul(a)
@@ -289,6 +308,7 @@ func TestAutPLPowEqual(t *testing.T) {
 }
 
 func TestPLoopZ(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ e1, eo int }{
 		{0, 0},
 		{1, 0},
@@ -306,6 +326,7 @@ func TestPLoopZ(t *testing.T) {
 }
 
 func TestGCodeTheta(t *testing.T) {
+	t.Parallel()
 	for _, v := range []int{0x000, 0x001, 0x234, 0x800, 0xabc} {
 		t.Run(fmt.Sprintf("%#x", v), func(t *testing.T) {
 			if got, want := uint64(NewGCode(v).Theta().Ord()), oracleUint(t, fmt.Sprintf("mmgroup.GCode(%d).theta().ord", v)); got != want {
@@ -316,6 +337,7 @@ func TestGCodeTheta(t *testing.T) {
 }
 
 func TestGCodeThetaWith(t *testing.T) {
+	t.Parallel()
 	pairs := [][2]int{{0x234, 0xabc}, {0x001, 0x002}, {0x800, 0xfff}, {0x123, 0x456}}
 	for _, pr := range pairs {
 		a, b := pr[0], pr[1]
@@ -328,6 +350,7 @@ func TestGCodeThetaWith(t *testing.T) {
 }
 
 func TestGCodeApply(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		v, c, p int
 	}{
@@ -347,6 +370,7 @@ func TestGCodeApply(t *testing.T) {
 }
 
 func TestAutPLCheck(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ c, p int }{
 		{0x000, 0},
 		{0x123, 6789},

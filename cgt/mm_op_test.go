@@ -67,6 +67,7 @@ func parseTuples(t *testing.T, py string) []Tuple {
 }
 
 func TestMMVSize(t *testing.T) {
+	t.Parallel()
 	for _, p := range []int{3, 7, 15, 31, 127} {
 		want := int(oracleInt(t, fmt.Sprintf("mmgroup.mm_op.mm_aux_mmv_size(%d)", p)))
 		if got := MMVSize(p); got != want {
@@ -76,6 +77,7 @@ func TestMMVSize(t *testing.T) {
 }
 
 func TestCharacteristics(t *testing.T) {
+	t.Parallel()
 	want := oracleInts(t, "list(mmgroup.mm_op.characteristics())")
 	got := Characteristics()
 	if len(got) != len(want) {
@@ -89,6 +91,7 @@ func TestCharacteristics(t *testing.T) {
 }
 
 func TestScalprod(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		p      int
 		v1, v2 string
@@ -110,6 +113,7 @@ func TestScalprod(t *testing.T) {
 }
 
 func TestIndexExternSparseRoundtrip(t *testing.T) {
+	t.Parallel()
 	for _, idx := range []int{0, 23, 300, 852, 49428, 196883} {
 		wantSp := oracleUint(t, fmt.Sprintf("int(mmgroup.mm_op.mm_aux_index_extern_to_sparse(%d))", idx))
 		if got := uint64(IndexExternToSparse(idx)); got != wantSp {
@@ -123,6 +127,7 @@ func TestIndexExternSparseRoundtrip(t *testing.T) {
 }
 
 func TestIndexExternToIntern(t *testing.T) {
+	t.Parallel()
 	for _, idx := range []int{0, 24, 300, 853, 49500, 100000} {
 		want := oracleInt(t, fmt.Sprintf("int(mmgroup.mm_op.mm_aux_index_extern_to_intern(%d))", idx))
 		if got := int64(IndexExternToIntern(idx)); got != want {
@@ -132,6 +137,7 @@ func TestIndexExternToIntern(t *testing.T) {
 }
 
 func TestIndexSparseLeech2(t *testing.T) {
+	t.Parallel()
 	for _, idx := range []int{0, 300, 852, 49428, 196883} {
 		sp := IndexExternToSparse(idx)
 		intern := IndexSparseToIntern(sp)
@@ -148,6 +154,7 @@ func TestIndexSparseLeech2(t *testing.T) {
 }
 
 func TestAsBytesEntry(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		p int
 		v string
@@ -169,6 +176,7 @@ func TestAsBytesEntry(t *testing.T) {
 }
 
 func TestOpPiDeltaPerm(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		p     int
 		v     string
@@ -190,6 +198,7 @@ func TestOpPiDeltaPerm(t *testing.T) {
 }
 
 func TestOpXY(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		p         int
 		v         string
@@ -210,6 +219,7 @@ func TestOpXY(t *testing.T) {
 }
 
 func TestOpOmega(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		p int
 		v string
@@ -229,6 +239,7 @@ func TestOpOmega(t *testing.T) {
 }
 
 func TestOpWord(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		p int
 		v string
@@ -262,6 +273,7 @@ func parseMmWord(t *testing.T, py string) []uint32 {
 }
 
 func TestOpWordABC(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		p  int
 		v  string
@@ -286,6 +298,7 @@ func TestOpWordABC(t *testing.T) {
 }
 
 func TestMulStdAxisLinear(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		p      int
 		v1, v2 string
@@ -316,6 +329,7 @@ func TestMulStdAxisLinear(t *testing.T) {
 }
 
 func TestPrepPi64(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		delta int
 		pi    int
@@ -341,12 +355,21 @@ func TestPrepPi64(t *testing.T) {
 }
 
 func TestSubTestPrepXY(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		f, e, eps, mode int
 	}{
 		{0, 0, 0, 0},
 		{567, 1237, 0x12, 0},
 		{34, 0, 0x800, 1},
+		// mode 2 writes op_xy.sign_XYZ (2048 entries); mode 3
+		// writes op_xy.s_T (759 entries, rest of the 2048-wide
+		// buffer stays zero). See mm_tables.c:389-404. Both modes
+		// emit substantial nonzero data for these params.
+		{567, 1237, 0x12, 2},
+		{567, 1237, 0x12, 3},
+		{34, 0, 0x800, 2},
+		{34, 0, 0x800, 3},
 	}
 	for _, c := range cases {
 		expr := fmt.Sprintf("[int(x) for x in (lambda a:(mmgroup.mm_op.mm_sub_test_prep_xy(%d,%d,%d,%d,a),a)[1])(__import__('numpy').zeros(2048,dtype='uint32'))]", c.f, c.e, c.eps, c.mode)
@@ -362,6 +385,7 @@ func TestSubTestPrepXY(t *testing.T) {
 }
 
 func TestTableXi(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		stage, e, j, col int
 	}{
@@ -399,6 +423,7 @@ func assertBytes(t *testing.T, name string, p int, got []uint8, want []int64) {
 }
 
 func TestOpNormA(t *testing.T) {
+	t.Parallel()
 	// mm_op_norm_A is only defined for p in {3,15};
 	// it returns the -1 error sentinel for p=7,31.
 	cases := []struct {
@@ -419,6 +444,7 @@ func TestOpNormA(t *testing.T) {
 }
 
 func TestOpCheckzero(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		p int
 		v string
@@ -448,6 +474,7 @@ func TestOpCheckzero(t *testing.T) {
 }
 
 func TestIndexCheckIntern(t *testing.T) {
+	t.Parallel()
 	for _, ext := range []int{0, 24, 300, 853, 49500, 100000} {
 		intern := IndexExternToIntern(ext)
 		got := IndexCheckIntern(intern)
@@ -459,6 +486,7 @@ func TestIndexCheckIntern(t *testing.T) {
 }
 
 func TestIndexSparseToLeech2(t *testing.T) {
+	t.Parallel()
 	for _, ext := range []int{300, 852, 49428, 196883} {
 		sp := IndexExternToSparse(ext)
 		got := IndexSparseToLeech2(sp)
@@ -470,6 +498,7 @@ func TestIndexSparseToLeech2(t *testing.T) {
 }
 
 func TestIndexLeech2ToSparse(t *testing.T) {
+	t.Parallel()
 	for _, ext := range []int{300, 852, 49428, 196883} {
 		sp := IndexExternToSparse(ext)
 		x := IndexSparseToLeech2(sp)
@@ -482,6 +511,7 @@ func TestIndexLeech2ToSparse(t *testing.T) {
 }
 
 func TestGetOffsetTableXi(t *testing.T) {
+	t.Parallel()
 	for stage := 0; stage < 5; stage++ {
 		for e := 0; e < 2; e++ {
 			for dir := 0; dir < 2; dir++ {
@@ -496,6 +526,7 @@ func TestGetOffsetTableXi(t *testing.T) {
 }
 
 func TestMMVectorAtSet(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		p             int
 		tag           Tag
@@ -522,6 +553,7 @@ func TestMMVectorAtSet(t *testing.T) {
 }
 
 func TestMMVectorCountShort(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"[('A',2,3),('X',5,7),('B',1,2),('T',100,13)]",
 		"[('B',1,2),('C',3,4),('X',0x444,3)]",
