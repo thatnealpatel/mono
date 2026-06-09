@@ -17,9 +17,9 @@
 // golden file each generator verifies against lives
 // in the same directory as the output, so that
 // directory is taken from -out. The //go:generate
-// directives in mat24.go, mm_op.go and mm_op_group.go
-// invoke this command from _gen with -out pointing
-// one level up into the cgt package directory.
+// directives in generate.go invoke this command from
+// _gen with -out pointing one level up into the cgt
+// package directory.
 package main
 
 import (

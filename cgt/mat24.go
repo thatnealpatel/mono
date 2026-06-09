@@ -1,7 +1,5 @@
 package cgt
 
-//go:generate go run -C _gen . -out ../mat24_gen.go
-
 import (
 	"errors"
 	"fmt"

@@ -5,8 +5,6 @@
 // per-modulus mm*_op_*.c files).
 package cgt
 
-//go:generate go run -C _gen . -out ../mm_op_xi_gen.go
-
 // Tag values for basis vectors. The numeric codes
 // match the sparse encoding tag field (bits 27..25
 // of a sparse index, here as the bare 1..7 value).

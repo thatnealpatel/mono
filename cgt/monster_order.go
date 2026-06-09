@@ -10,8 +10,6 @@
 
 package cgt
 
-//go:generate go run -C _gen . -out ../monster_order_gen.go
-
 import (
 	"math/bits"
 	"sync"

@@ -1,0 +1,5650 @@
+# Auto-generated from mmgroup .pxd files. Do not edit.
+#
+# Each entry is a C function exported by mmgroup.
+# Use this manifest to drive oracle-comparison tests
+# and translation-parity checks against cgt.
+
+# clifford12.h (supplement)
+- name: qstate12_del_rows
+  source: clifford12.h (supplement)
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: v
+- name: qstate12_insert_rows
+  source: clifford12.h (supplement)
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: nrows
+- name: qstate12_pivot
+  source: clifford12.h (supplement)
+  return: void
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint64_t
+      name: v
+- name: qstate12_sum_up_kernel
+  source: clifford12.h (supplement)
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: xsp2co1_trace_98280
+  source: clifford12.h (supplement)
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: 
+      name: f_fast
+      gotype: "func([]uint64) int32"
+
+# clifford12.pxd
+- name: bitmatrix64_add_diag
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: j
+- name: bitmatrix64_cap_h
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: m1
+      ptr: true
+    - type: uint64_t
+      name: m2
+      ptr: true
+    - type: uint32_t
+      name: i1
+    - type: uint32_t
+      name: i2
+    - type: uint32_t
+      name: j0
+    - type: uint32_t
+      name: n
+- name: bitmatrix64_echelon_h
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: j0
+    - type: uint32_t
+      name: n
+- name: bitmatrix64_echelon_l
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: j0
+    - type: uint32_t
+      name: n
+- name: bitmatrix64_error_pool
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: dest
+      ptr: true
+    - type: uint32_t
+      name: length
+- name: bitmatrix64_find_low_bit
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: imin
+    - type: uint32_t
+      name: imax
+- name: bitmatrix64_find_masked_row
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint64_t
+      name: mask
+    - type: uint64_t
+      name: v
+- name: bitmatrix64_from_32bit
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: a32
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint64_t
+      name: a64
+      ptr: true
+- name: bitmatrix64_inv
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: i
+- name: bitmatrix64_mask_rows
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint64_t
+      name: mask
+- name: bitmatrix64_mul
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: m1
+      ptr: true
+    - type: uint64_t
+      name: m2
+      ptr: true
+    - type: uint32_t
+      name: i1
+    - type: uint32_t
+      name: i2
+    - type: uint64_t
+      name: m3
+      ptr: true
+- name: bitmatrix64_reverse_bits
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: n0
+- name: bitmatrix64_rot_bits
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: int32_t
+      name: rot
+    - type: uint32_t
+      name: nrot
+    - type: uint32_t
+      name: n0
+- name: bitmatrix64_solve_equation
+  source: clifford12.pxd
+  return: int64_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: j
+- name: bitmatrix64_t
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: m1
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: j
+    - type: uint64_t
+      name: m2
+      ptr: true
+- name: bitmatrix64_to_32bit
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: a32
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint64_t
+      name: a64
+      ptr: true
+- name: bitmatrix64_to_numpy
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: rows
+    - type: uint32_t
+      name: cols
+    - type: uint8_t
+      name: a
+      ptr: true
+- name: bitmatrix64_vmul
+  source: clifford12.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: i
+- name: bitmatrix64_xch_bits
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: sh
+    - type: uint64_t
+      name: mask
+- name: bitvector32_bsearch
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: v
+- name: bitvector32_copy
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: a_src
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: a_dest
+      ptr: true
+- name: bitvector32_heapsort
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: bitvector32_sort
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: bitvector64_bsearch
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint64_t
+      name: v
+- name: bitvector64_copy
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: a_src
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint64_t
+      name: a_dest
+      ptr: true
+- name: bitvector64_heapsort
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: bitvector64_sort
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: bitvector_sort_stat
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: out
+      ptr: true
+    - type: uint32_t
+      name: len_out
+- name: leech2_matrix_basis
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v2
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint64_t
+      name: basis
+      ptr: true
+    - type: uint32_t
+      name: d
+- name: leech2_matrix_expand
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: basis
+      ptr: true
+    - type: uint32_t
+      name: dim
+    - type: uint32_t
+      name: v2
+      ptr: true
+- name: leech2_matrix_orthogonal
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint64_t
+      name: b
+      ptr: true
+    - type: uint32_t
+      name: k
+- name: leech2_matrix_radical
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v2
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint64_t
+      name: basis
+      ptr: true
+    - type: uint32_t
+      name: d
+- name: leech2matrix_add_eqn
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: nrows
+    - type: uint32_t
+      name: ncols
+    - type: uint64_t
+      name: a
+- name: leech2matrix_echelon_eqn
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: nrows
+    - type: uint32_t
+      name: ncols
+    - type: uint64_t
+      name: m1
+      ptr: true
+- name: leech2matrix_prep_eqn
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: nrows
+    - type: uint32_t
+      name: ncols
+    - type: uint32_t
+      name: b
+      ptr: true
+- name: leech2matrix_solve_eqn
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: b
+      ptr: true
+    - type: uint32_t
+      name: nrows
+    - type: uint64_t
+      name: v
+- name: leech2matrix_subspace_eqn
+  source: clifford12.pxd
+  return: int64_t
+  params:
+    - type: uint64_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: nrows
+    - type: uint32_t
+      name: ncols
+    - type: uint64_t
+      name: v
+- name: leech3_vect_mod3_to_signs
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: v
+      ptr: true
+    - type: uint64_t
+      name: mult
+    - type: uint32_t
+      name: n
+    - type: uint64_t
+      name: signs
+      ptr: true
+- name: leech3matrix_compress
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint64_t
+      name: v
+      ptr: true
+- name: leech3matrix_echelon
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+- name: leech3matrix_kernel_image
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+- name: leech3matrix_prep_type4
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint64_t
+      name: w
+      ptr: true
+    - type: uint64_t
+      name: seed
+      ptr: true
+- name: leech3matrix_rand_type4
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: w
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: trials
+    - type: uint64_t
+      name: seed
+      ptr: true
+- name: leech3matrix_rank
+  source: clifford12.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: d
+- name: leech3matrix_reduced_echelon
+  source: clifford12.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: d
+- name: leech3matrix_sub_diag
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint64_t
+      name: diag
+    - type: uint32_t
+      name: offset
+- name: leech3matrix_vmul
+  source: clifford12.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v
+    - type: uint64_t
+      name: a
+      ptr: true
+- name: qstate12_abs
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: qstate12_check
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: qstate12_check_reduced
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: qstate12_compare_signs
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: bmap
+      ptr: true
+- name: qstate12_complex
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: double
+      name: pc
+      ptr: true
+- name: qstate12_conjugate
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: qstate12_copy
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs1
+      ptr: true
+    - type: qstate12_type
+      name: pqs2
+      ptr: true
+- name: qstate12_copy_alloc
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs1
+      ptr: true
+    - type: qstate12_type
+      name: pqs2
+      ptr: true
+    - type: uint64_t
+      name: data
+      ptr: true
+    - type: uint32_t
+      name: size
+- name: qstate12_echelonize
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: qstate12_entries
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: v
+      ptr: true
+    - type: double
+      name: pc
+      ptr: true
+- name: qstate12_equal
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs1
+      ptr: true
+    - type: qstate12_type
+      name: pqs2
+      ptr: true
+- name: qstate12_extend
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: j
+    - type: uint32_t
+      name: nqb
+- name: qstate12_extend_zero
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: j
+    - type: uint32_t
+      name: nqb
+- name: qstate12_factor_to_complex
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: int32_t
+      name: factor
+    - type: double
+      name: pcomplex
+      ptr: true
+- name: qstate12_factor_to_int32
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: int32_t
+      name: factor
+    - type: int32_t
+      name: pi
+      ptr: true
+- name: qstate12_from_signs
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: bmap
+      ptr: true
+    - type: int32_t
+      name: n
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: qstate12_gate_ctrl_not
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: vc
+    - type: uint64_t
+      name: v
+- name: qstate12_gate_ctrl_phi
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: v1
+    - type: uint64_t
+      name: v2
+- name: qstate12_gate_h
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: v
+- name: qstate12_gate_not
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: v
+- name: qstate12_gate_phi
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: v
+    - type: uint32_t
+      name: phi
+- name: qstate12_get_column
+  source: clifford12.pxd
+  return: uint64_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: j
+- name: qstate12_int32
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: int32_t
+      name: pi
+      ptr: true
+- name: qstate12_join_imaginary
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: qstate12_mat_inv
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: qstate12_mat_itrace
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: int32_t
+      name: p_itrace
+      ptr: true
+- name: qstate12_mat_lb_rank
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: qstate12_mat_reshape
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: int32_t
+      name: rows
+    - type: int32_t
+      name: cols
+- name: qstate12_mat_t
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: qstate12_mat_trace
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: double
+      name: p_trace
+      ptr: true
+- name: qstate12_mat_trace_factor
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: int32_t
+      name: pfactor
+      ptr: true
+- name: qstate12_matmul
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs1
+      ptr: true
+    - type: qstate12_type
+      name: pqs2
+      ptr: true
+    - type: qstate12_type
+      name: pqs3
+      ptr: true
+- name: qstate12_monomial_column_matrix
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: nqb
+    - type: uint64_t
+      name: pa
+      ptr: true
+- name: qstate12_monomial_matrix_row_op
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: pa
+      ptr: true
+- name: qstate12_monomial_row_matrix
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: nqb
+    - type: uint64_t
+      name: pa
+      ptr: true
+- name: qstate12_mul_Av
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: v
+    - type: uint64_t
+      name: pw
+      ptr: true
+- name: qstate12_mul_matrix_mod3
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: v
+      ptr: true
+    - type: uint64_t
+      name: w
+- name: qstate12_mul_scalar
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: int32_t
+      name: e
+    - type: uint32_t
+      name: phi
+- name: qstate12_pauli_conjugate
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint64_t
+      name: pv
+      ptr: true
+    - type: uint32_t
+      name: arg
+- name: qstate12_pauli_matrix
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: nqb
+    - type: uint64_t
+      name: v
+- name: qstate12_pauli_vector
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: pv
+      ptr: true
+- name: qstate12_pauli_vector_exp
+  source: clifford12.pxd
+  return: uint64_t
+  params:
+    - type: uint32_t
+      name: nqb
+    - type: uint64_t
+      name: v
+    - type: uint32_t
+      name: e
+- name: qstate12_pauli_vector_mul
+  source: clifford12.pxd
+  return: uint64_t
+  params:
+    - type: uint32_t
+      name: nqb
+    - type: uint64_t
+      name: v1
+    - type: uint64_t
+      name: v2
+- name: qstate12_pivot_rot_rows
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: fst
+    - type: uint32_t
+      name: last
+- name: qstate12_prep_mul
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs1
+      ptr: true
+    - type: qstate12_type
+      name: pqs2
+      ptr: true
+    - type: uint32_t
+      name: nqb
+- name: qstate12_product
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs1
+      ptr: true
+    - type: qstate12_type
+      name: pqs2
+      ptr: true
+    - type: uint32_t
+      name: nqb
+    - type: uint32_t
+      name: nc
+- name: qstate12_reduce
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: qstate12_reduce_matrix
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint8_t
+      name: row_table
+      ptr: true
+- name: qstate12_restrict
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: j
+    - type: uint32_t
+      name: nqb
+- name: qstate12_restrict_zero
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: j
+    - type: uint32_t
+      name: nqb
+- name: qstate12_rot_bits
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: int32_t
+      name: rot
+    - type: uint32_t
+      name: nrot
+    - type: uint32_t
+      name: n0
+- name: qstate12_row_table
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint8_t
+      name: row_table
+      ptr: true
+- name: qstate12_set
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: nqb
+    - type: uint32_t
+      name: nrows
+    - type: uint64_t
+      name: data
+      ptr: true
+    - type: uint32_t
+      name: mode
+- name: qstate12_set_mem
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: data
+      ptr: true
+    - type: uint32_t
+      name: size
+- name: qstate12_std_matrix
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: rows
+    - type: uint32_t
+      name: cols
+    - type: uint32_t
+      name: rk
+- name: qstate12_sum_cols
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: j
+    - type: uint32_t
+      name: nqb
+- name: qstate12_support_adjust
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_support_type
+      name: psup
+      ptr: true
+    - type: uint32_t
+      name: flags
+- name: qstate12_support_init
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: qstate12_support_type
+      name: psup
+      ptr: true
+- name: qstate12_support_next
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_support_type
+      name: psup
+      ptr: true
+- name: qstate12_to_signs
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: bmap
+      ptr: true
+- name: qstate12_to_symplectic
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: pA
+      ptr: true
+- name: qstate12_to_symplectic_row
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: qstate12_unit_matrix
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: nqb
+- name: qstate12_vector_state
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: nqb
+    - type: uint64_t
+      name: v
+- name: qstate12_xch_bits
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: sh
+    - type: uint64_t
+      name: mask
+- name: qstate12_zero
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: nqb
+- name: uint64_bit_len
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: v
+- name: uint64_bit_weight
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: v
+- name: uint64_low_bit
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: v
+- name: uint64_parity
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: v
+- name: uint64_to_bitarray
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: v
+    - type: uint8_t
+      name: bl
+      ptr: true
+- name: xsp2co1_Co1_debug_pool_mapping
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: dest
+      ptr: true
+    - type: uint32_t
+      name: len
+- name: xsp2co1_Co1_get_mapping
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: m1
+      ptr: true
+    - type: uint32_t
+      name: m2
+      ptr: true
+    - type: uint32_t
+      name: m_out
+      ptr: true
+- name: xsp2co1_Co1_matrix_to_word
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: xsp2co1_chain_short_3
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint64_t
+      name: psrc
+      ptr: true
+    - type: uint64_t
+      name: pdest
+      ptr: true
+- name: xsp2co1_check_word_g_x0
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: w
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: xsp2co1_conj_elem
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem1
+      ptr: true
+    - type: uint64_t
+      name: elem2
+      ptr: true
+    - type: uint64_t
+      name: elem3
+      ptr: true
+- name: xsp2co1_conjugate_elem
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: xsp2co1_copy_elem
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: elem1
+      ptr: true
+    - type: uint64_t
+      name: elem2
+      ptr: true
+- name: xsp2co1_elem_check_fix_short
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem1
+      ptr: true
+    - type: uint32_t
+      name: v
+- name: xsp2co1_elem_conj_G_x0_to_Q_x0
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: baby
+- name: xsp2co1_elem_conjugate_involution
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: xsp2co1_elem_conjugate_involution_Gx0
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: guide
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: xsp2co1_elem_find_type4
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: guide
+- name: xsp2co1_elem_from_N0
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: xsp2co1_elem_from_mapping
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: m1
+      ptr: true
+    - type: uint32_t
+      name: m2
+      ptr: true
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: xsp2co1_elem_involution_class
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+- name: xsp2co1_elem_monomial_to_xsp
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: xsp2co1_elem_read_mod3
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: v
+      ptr: true
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: row
+    - type: uint32_t
+      name: column
+- name: xsp2co1_elem_row_mod3
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: column
+    - type: uint64_t
+      name: v
+      ptr: true
+- name: xsp2co1_elem_subtype
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+- name: xsp2co1_elem_to_N0
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: xsp2co1_elem_to_bitmatrix
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint64_t
+      name: pA
+      ptr: true
+- name: xsp2co1_elem_to_leech_op
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: int8_t
+      name: pdest
+      ptr: true
+- name: xsp2co1_elem_to_qs
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: xsp2co1_elem_to_qs_i
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+- name: xsp2co1_elem_to_word
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: xsp2co1_elem_xspecial
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: x
+- name: xsp2co1_error_pool
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: dest
+      ptr: true
+    - type: uint32_t
+      name: length
+- name: xsp2co1_find_chain_short_3
+  source: clifford12.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v3_1
+    - type: uint64_t
+      name: v3_2
+- name: xsp2co1_from_vect_mod3
+  source: clifford12.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: x
+- name: xsp2co1_half_order_elem
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem1
+      ptr: true
+    - type: uint64_t
+      name: elem2
+      ptr: true
+- name: xsp2co1_half_order_word
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a1
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: a2
+      ptr: true
+- name: xsp2co1_inv_elem
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem1
+      ptr: true
+    - type: uint64_t
+      name: elem2
+      ptr: true
+- name: xsp2co1_involution_error_pool
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: dest
+      ptr: true
+    - type: uint32_t
+      name: length
+- name: xsp2co1_involution_find_type4
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: invar
+      ptr: true
+    - type: uint32_t
+      name: guide
+- name: xsp2co1_involution_invariants
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint64_t
+      name: invar
+      ptr: true
+- name: xsp2co1_involution_orthogonal
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: invar
+      ptr: true
+    - type: uint32_t
+      name: col
+- name: xsp2co1_is_unit_elem
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+- name: xsp2co1_isotropic_type4
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: v
+    - type: uint64_t
+      name: pB
+      ptr: true
+    - type: int32_t
+      name: n
+- name: xsp2co1_isotropic_type4_span
+  source: clifford12.pxd
+  return: int64_t
+  params:
+    - type: uint32_t
+      name: v
+    - type: uint32_t
+      name: pB
+      ptr: true
+    - type: int32_t
+      name: n
+- name: xsp2co1_leech2_count_type2
+  source: clifford12.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: xsp2co1_map_involution_class_Gx0
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: iclass
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: xsp2co1_map_short3
+  source: clifford12.pxd
+  return: int64_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: src1
+    - type: uint64_t
+      name: dest1
+    - type: uint64_t
+      name: src2
+- name: xsp2co1_mul_elem
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem1
+      ptr: true
+    - type: uint64_t
+      name: elem2
+      ptr: true
+    - type: uint64_t
+      name: elem3
+      ptr: true
+- name: xsp2co1_mul_elem_atom
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: v
+- name: xsp2co1_mul_elem_word
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: xsp2co1_mul_qs_v3_word
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: pv3
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: s
+- name: xsp2co1_neg_elem
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+- name: xsp2co1_odd_order_bitmatrix
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: bm
+      ptr: true
+- name: xsp2co1_order_elem
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+- name: xsp2co1_order_word
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: xsp2co1_power_elem
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem1
+      ptr: true
+    - type: int64_t
+      name: e
+    - type: uint64_t
+      name: elem2
+      ptr: true
+- name: xsp2co1_power_word
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a1
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: int64_t
+      name: e
+    - type: uint32_t
+      name: a2
+      ptr: true
+- name: xsp2co1_qs_to_elem_i
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: v_g
+    - type: uint64_t
+      name: elem
+      ptr: true
+- name: xsp2co1_rand_word_G_x0
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: w
+      ptr: true
+    - type: uint64_t
+      name: seed
+      ptr: true
+- name: xsp2co1_rand_word_N_0
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: w
+      ptr: true
+    - type: uint32_t
+      name: in_N_x0
+    - type: uint32_t
+      name: even
+    - type: uint64_t
+      name: seed
+      ptr: true
+- name: xsp2co1_reduce_elem
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+- name: xsp2co1_reduce_word
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: a1
+      ptr: true
+- name: xsp2co1_rep_mod3_conv_mm_op
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: p_rep
+      ptr: true
+    - type: uint64_t
+      name: p_wz
+      ptr: true
+- name: xsp2co1_rep_mod3_find_nonzero
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: p_rep
+      ptr: true
+- name: xsp2co1_rep_mod3_from_qs
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: qstate12_type
+      name: pqs
+      ptr: true
+    - type: uint64_t
+      name: v3
+    - type: uint64_t
+      name: p_rep
+      ptr: true
+- name: xsp2co1_rep_mod3_mul_elem
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: p_rep
+      ptr: true
+    - type: uint64_t
+      name: elem
+      ptr: true
+- name: xsp2co1_rep_mod3_mul_word
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: p_rep
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: xsp2co1_rep_mod3_scalprod_mm_op
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: p_rep
+      ptr: true
+    - type: uint64_t
+      name: p_wz
+      ptr: true
+- name: xsp2co1_rep_mod3_unit_vector
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: i
+    - type: uint64_t
+      name: v3
+    - type: uint64_t
+      name: p_rep
+      ptr: true
+- name: xsp2co1_set_elem_atom
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: v
+- name: xsp2co1_set_elem_word
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: xsp2co1_set_elem_word_scan
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: mul
+- name: xsp2co1_short_2_to_leech
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: x
+    - type: int8_t
+      name: pdest
+      ptr: true
+- name: xsp2co1_short_3_to_leech
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: x
+    - type: int8_t
+      name: pdest
+      ptr: true
+- name: xsp2co1_to_vect_mod3
+  source: clifford12.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: x
+- name: xsp2co1_traces_all
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: int32_t
+      name: ptrace
+      ptr: true
+- name: xsp2co1_traces_fast
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: int32_t
+      name: ptrace
+      ptr: true
+- name: xsp2co1_traces_small
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: int32_t
+      name: ptrace
+      ptr: true
+- name: xsp2co1_unit_elem
+  source: clifford12.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+- name: xsp2co1_xspecial_conjugate
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint64_t
+      name: ax
+      ptr: true
+    - type: uint32_t
+      name: sign
+- name: xsp2co1_xspecial_img_omega
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+- name: xsp2co1_xspecial_vector
+  source: clifford12.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: elem
+      ptr: true
+
+# generators.pxd
+- name: apply_perm
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: v
+    - type: uint8_t
+      name: p_src
+      ptr: true
+    - type: uint8_t
+      name: p_dest
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: p_res
+      ptr: true
+- name: find_octad_permutation
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v
+    - type: uint32_t
+      name: p_res
+      ptr: true
+- name: gen_leech2_coarse_subtype
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v2
+- name: gen_leech2_count_type2
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: gen_leech2_find_v4_2xx
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: v2
+    - type: uint32_t
+      name: v3
+    - type: uint64_t
+      name: seed
+      ptr: true
+- name: gen_leech2_map_2xx
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: t
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: gen_leech2_map_std_subframe
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: len_g
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: gen_leech2_mul
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: x1
+    - type: uint32_t
+      name: x2
+- name: gen_leech2_n_type_22
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: n
+- name: gen_leech2_op_atom
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: q0
+    - type: uint32_t
+      name: g
+- name: gen_leech2_op_mul_matrix24
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: a1
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: gen_leech2_op_word
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: q0
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: gen_leech2_op_word_leech2
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: l
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: back
+- name: gen_leech2_op_word_leech2_many
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: m
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: back
+- name: gen_leech2_op_word_many
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: q
+      ptr: true
+    - type: uint32_t
+      name: m
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: gen_leech2_op_word_matrix24
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: back
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: gen_leech2_pair_type
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: v1
+    - type: uint64_t
+      name: v2
+- name: gen_leech2_pow
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: x1
+    - type: uint32_t
+      name: e
+- name: gen_leech2_prefix_Gx0
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: len_g
+- name: gen_leech2_reduce_2xx
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: v2
+    - type: uint32_t
+      name: v3
+    - type: uint32_t
+      name: v4
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: gen_leech2_reduce_n
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: v
+    - type: uint32_t
+      name: pg_out
+      ptr: true
+- name: gen_leech2_reduce_n_rep
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: subtype
+- name: gen_leech2_reduce_type2
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: v
+    - type: uint32_t
+      name: pg_out
+      ptr: true
+- name: gen_leech2_reduce_type2_ortho
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: v
+    - type: uint32_t
+      name: pg_out
+      ptr: true
+- name: gen_leech2_reduce_type4
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: v
+    - type: uint32_t
+      name: pg_out
+      ptr: true
+- name: gen_leech2_scalprod
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: x1
+    - type: uint32_t
+      name: x2
+- name: gen_leech2_start_type24
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: v
+- name: gen_leech2_start_type4
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: v
+- name: gen_leech2_subtype
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: v2
+- name: gen_leech2_type
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: v2
+- name: gen_leech2_type2
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: v2
+- name: gen_leech2_type_selftest
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: start
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: result
+      ptr: true
+- name: gen_leech2_u4_2xx
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: v2
+    - type: uint32_t
+      name: v3
+    - type: uint64_t
+      name: seed
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: gen_leech2to3_abs
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v2
+- name: gen_leech2to3_short
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v2
+- name: gen_leech3_add
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v3_1
+    - type: uint64_t
+      name: v3_2
+- name: gen_leech3_find_tetrad_leech_mod3
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: a
+- name: gen_leech3_neg
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v3
+- name: gen_leech3_op_vector_atom
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v3
+    - type: uint32_t
+      name: g
+- name: gen_leech3_op_vector_word
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v3
+    - type: uint32_t
+      name: pg
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: gen_leech3_op_xi
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v3
+    - type: uint32_t
+      name: e
+- name: gen_leech3_reduce
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v3
+- name: gen_leech3_reduce_leech_mod3
+  source: generators.pxd
+  return: int64_t
+  params:
+    - type: uint64_t
+      name: v3
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: gen_leech3_scalprod
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint64_t
+      name: v3_1
+    - type: uint64_t
+      name: v3_2
+- name: gen_leech3to2
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v3
+- name: gen_leech3to2_short
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v3
+- name: gen_leech3to2_type4
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: v3
+- name: gen_rng_bitfields_modp
+  source: generators.pxd
+  return: uint64_t
+  params:
+    - type: uint64_t
+      name: p
+    - type: uint32_t
+      name: d
+    - type: uint64_t
+      name: seed
+      ptr: true
+- name: gen_rng_bytes_modp
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint8_t
+      name: out
+      ptr: true
+    - type: uint32_t
+      name: len
+    - type: uint64_t
+      name: seed
+      ptr: true
+- name: gen_rng_int_dist
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: seed
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: double
+      name: dist
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: l_a
+- name: gen_rng_modp
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint64_t
+      name: seed
+      ptr: true
+- name: gen_rng_seed
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: seed
+      ptr: true
+- name: gen_rng_seed_init
+  source: generators.pxd
+  return: void
+  params: []
+- name: gen_rng_seed_no
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint64_t
+      name: seed
+      ptr: true
+    - type: uint64_t
+      name: seed_no
+- name: gen_rng_uniform
+  source: generators.pxd
+  return: double
+  params:
+    - type: uint64_t
+      name: seed
+      ptr: true
+- name: gen_rng_uniform_to_dist
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: double
+      name: x
+    - type: uint32_t
+      name: n
+    - type: double
+      name: dist
+      ptr: true
+- name: gen_ufind_find
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: table
+      ptr: true
+    - type: uint32_t
+      name: length
+    - type: uint32_t
+      name: n
+- name: gen_ufind_find_all_min
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: table
+      ptr: true
+    - type: uint32_t
+      name: length
+- name: gen_ufind_init
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: table
+      ptr: true
+    - type: uint32_t
+      name: length
+- name: gen_ufind_lin2_add
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: l_g
+- name: gen_ufind_lin2_check
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: len_a
+- name: gen_ufind_lin2_check_finalized
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: len_a
+- name: gen_ufind_lin2_compress
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: o
+      ptr: true
+    - type: uint32_t
+      name: l_o
+    - type: uint32_t
+      name: c
+      ptr: true
+    - type: uint32_t
+      name: l_c
+- name: gen_ufind_lin2_compressed_size
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: o
+      ptr: true
+    - type: uint32_t
+      name: l_o
+- name: gen_ufind_lin2_dim
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: gen_ufind_lin2_finalize
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: gen_ufind_lin2_gen
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: l_g
+- name: gen_ufind_lin2_get_map
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: map
+      ptr: true
+    - type: uint32_t
+      name: l_map
+- name: gen_ufind_lin2_get_table
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: t
+      ptr: true
+    - type: uint32_t
+      name: l_t
+- name: gen_ufind_lin2_init
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: l_a
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: n_g
+- name: gen_ufind_lin2_len_orbit_v
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: v
+- name: gen_ufind_lin2_map_v
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: v
+    - type: uint8_t
+      name: b
+      ptr: true
+    - type: uint32_t
+      name: l_b
+- name: gen_ufind_lin2_map_v_gen
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: v
+- name: gen_ufind_lin2_mul_affine
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v
+    - type: uint32_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: gen_ufind_lin2_n_gen
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: gen_ufind_lin2_n_max_gen
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: gen_ufind_lin2_n_orbits
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: gen_ufind_lin2_orbit_lengths
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: r
+      ptr: true
+    - type: uint32_t
+      name: l_r
+- name: gen_ufind_lin2_orbit_v
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: v
+    - type: uint32_t
+      name: r
+      ptr: true
+    - type: uint32_t
+      name: l_r
+- name: gen_ufind_lin2_orbits
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: t
+      ptr: true
+    - type: uint32_t
+      name: l_t
+    - type: uint32_t
+      name: x
+      ptr: true
+    - type: uint32_t
+      name: l_x
+- name: gen_ufind_lin2_pad
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: len_a
+    - type: uint32_t
+      name: n_max_g
+- name: gen_ufind_lin2_rep_v
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: v
+- name: gen_ufind_lin2_representatives
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: r
+      ptr: true
+    - type: uint32_t
+      name: l_r
+- name: gen_ufind_lin2_size
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: k
+- name: gen_ufind_lin2_transform_v
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: v
+    - type: uint8_t
+      name: b
+      ptr: true
+    - type: uint32_t
+      name: l_b
+- name: gen_ufind_make_map
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: table
+      ptr: true
+    - type: uint32_t
+      name: length
+    - type: uint32_t
+      name: map
+      ptr: true
+- name: gen_ufind_partition
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: table
+      ptr: true
+    - type: uint32_t
+      name: l_t
+    - type: uint32_t
+      name: map
+      ptr: true
+    - type: uint32_t
+      name: ind
+      ptr: true
+    - type: uint32_t
+      name: l_ind
+- name: gen_ufind_union
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: table
+      ptr: true
+    - type: uint32_t
+      name: length
+    - type: uint32_t
+      name: n1
+    - type: uint32_t
+      name: n2
+- name: gen_ufind_union_affine
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: table
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: b
+- name: gen_xi_g_cocode
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: c
+- name: gen_xi_g_gray
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v
+- name: gen_xi_invert_table
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint16_t
+      name: ptab
+      ptr: true
+    - type: uint32_t
+      name: len
+    - type: uint32_t
+      name: ncols
+    - type: uint16_t
+      name: pres
+      ptr: true
+    - type: uint32_t
+      name: len_res
+- name: gen_xi_leech_to_short
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: x
+- name: gen_xi_make_table
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: b
+    - type: uint32_t
+      name: e
+    - type: uint16_t
+      name: ptab
+      ptr: true
+- name: gen_xi_op_xi
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: x
+    - type: uint32_t
+      name: e
+- name: gen_xi_op_xi_nosign
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: x
+    - type: uint32_t
+      name: e
+- name: gen_xi_op_xi_short
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: x
+    - type: uint32_t
+      name: u
+- name: gen_xi_short_to_leech
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: x
+- name: gen_xi_split_table
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint16_t
+      name: ptab
+      ptr: true
+    - type: uint32_t
+      name: len
+    - type: uint32_t
+      name: mod
+    - type: uint32_t
+      name: psign
+      ptr: true
+- name: gen_xi_w2_cocode
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v
+- name: gen_xi_w2_gray
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v
+- name: mm_group_check_word_n
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: w1
+      ptr: true
+    - type: uint32_t
+      name: l1
+    - type: uint32_t
+      name: g_out
+      ptr: true
+- name: mm_group_invert_word
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: w
+      ptr: true
+    - type: uint32_t
+      name: l
+- name: mm_group_mul_words
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: w1
+      ptr: true
+    - type: uint32_t
+      name: l1
+    - type: uint32_t
+      name: w2
+      ptr: true
+    - type: uint32_t
+      name: l2
+    - type: int32_t
+      name: e
+- name: mm_group_n_clear
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: mm_group_n_conj_to_Q_x0
+  source: generators.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: mm_group_n_conj_word_scan
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: w
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: mm_group_n_conjugate_element
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: g_1
+      ptr: true
+    - type: uint32_t
+      name: g_2
+      ptr: true
+    - type: uint32_t
+      name: g_3
+      ptr: true
+- name: mm_group_n_copy_element
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: g_1
+      ptr: true
+    - type: uint32_t
+      name: g_2
+      ptr: true
+- name: mm_group_n_inv_element
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: g_1
+      ptr: true
+    - type: uint32_t
+      name: g_2
+      ptr: true
+- name: mm_group_n_mul_atom
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: atom
+- name: mm_group_n_mul_delta_pi
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: delta
+    - type: uint32_t
+      name: pi
+- name: mm_group_n_mul_element
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: g_1
+      ptr: true
+    - type: uint32_t
+      name: g_2
+      ptr: true
+    - type: uint32_t
+      name: g_3
+      ptr: true
+- name: mm_group_n_mul_inv_delta_pi
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: delta
+    - type: uint32_t
+      name: pi
+- name: mm_group_n_mul_inv_element
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: g_1
+      ptr: true
+    - type: uint32_t
+      name: g_2
+      ptr: true
+    - type: uint32_t
+      name: g_3
+      ptr: true
+- name: mm_group_n_mul_t
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: t
+- name: mm_group_n_mul_word_scan
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: w
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: mm_group_n_mul_x
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: e
+- name: mm_group_n_mul_y
+  source: generators.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: f
+- name: mm_group_n_reduce_element
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: mm_group_n_reduce_element_y
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: mm_group_n_right_coset_N_x0
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: mm_group_n_scan_word
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: w
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: mm_group_n_to_word
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: w
+      ptr: true
+- name: mm_group_n_to_word_std
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: w
+      ptr: true
+- name: mm_group_split_word_n
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: word
+      ptr: true
+    - type: uint32_t
+      name: length
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: mm_group_words_equ
+  source: generators.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: w1
+      ptr: true
+    - type: uint32_t
+      name: l1
+    - type: uint32_t
+      name: w2
+      ptr: true
+    - type: uint32_t
+      name: l2
+    - type: uint32_t
+      name: work
+      ptr: true
+
+# mat24_functions.pxd
+- name: mat24_all_syndromes
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: a_out
+      ptr: true
+- name: mat24_autpl_set_qform
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: m_io
+      ptr: true
+- name: mat24_autpl_to_cocode
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: m1
+      ptr: true
+- name: mat24_autpl_to_perm
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: m1
+      ptr: true
+    - type: uint8_t
+      name: p_out
+      ptr: true
+- name: mat24_bw24
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+- name: mat24_check_endianess
+  source: mat24_functions.pxd
+  return: int32_t
+  params: []
+- name: mat24_cocode_all_syndromes
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: c1
+    - type: uint32_t
+      name: a_out
+      ptr: true
+- name: mat24_cocode_as_subdodecad
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: c1
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: u_single
+- name: mat24_cocode_syndrome
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: c1
+    - type: uint32_t
+      name: u_tetrad
+- name: mat24_cocode_to_autpl
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: c1
+    - type: uint32_t
+      name: m_out
+      ptr: true
+- name: mat24_cocode_to_bit_list
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: c1
+    - type: uint32_t
+      name: u_tetrad
+    - type: uint8_t
+      name: a_out
+      ptr: true
+- name: mat24_cocode_to_sextet
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: c1
+    - type: uint8_t
+      name: a_out
+      ptr: true
+- name: mat24_cocode_to_suboctad
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: c1
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: u_strict
+- name: mat24_cocode_to_vect
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: c1
+- name: mat24_cocode_weight
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: c1
+- name: mat24_complete_rand_mode
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: u_mode
+- name: mat24_extract_b24
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: u_mask
+- name: mat24_gcode_to_bit_list
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint8_t
+      name: a_out
+      ptr: true
+- name: mat24_gcode_to_octad
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: u_strict
+- name: mat24_gcode_to_vect
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+- name: mat24_gcode_weight
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+- name: mat24_intersect_octad_tetrad
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: v2
+- name: mat24_inv_autpl
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: m1
+      ptr: true
+    - type: uint32_t
+      name: m_out
+      ptr: true
+- name: mat24_inv_perm
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint8_t
+      name: p1
+      ptr: true
+    - type: uint8_t
+      name: p_out
+      ptr: true
+- name: mat24_lsbit24
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+- name: mat24_m24num_rand_adjust_xy
+  source: mat24_functions.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: u_mode
+    - type: uint32_t
+      name: v
+- name: mat24_m24num_rand_local
+  source: mat24_functions.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: u_mode
+    - type: uint32_t
+      name: u_rand
+- name: mat24_m24num_to_perm
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: u_m24
+    - type: uint8_t
+      name: p_out
+      ptr: true
+- name: mat24_matrix_from_mod_omega
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: m1
+      ptr: true
+- name: mat24_matrix_to_perm
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: m1
+      ptr: true
+    - type: uint8_t
+      name: p_out
+      ptr: true
+- name: mat24_mul_autpl
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: m1
+      ptr: true
+    - type: uint32_t
+      name: m2
+      ptr: true
+    - type: uint32_t
+      name: m_out
+      ptr: true
+- name: mat24_mul_perm
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint8_t
+      name: p1
+      ptr: true
+    - type: uint8_t
+      name: p2
+      ptr: true
+    - type: uint8_t
+      name: p_out
+      ptr: true
+- name: mat24_mul_ploop
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: v2
+- name: mat24_octad_entries
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: u_octad
+    - type: uint8_t
+      name: a_out
+      ptr: true
+- name: mat24_octad_to_gcode
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: u_octad
+- name: mat24_octad_to_vect
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: u_octad
+- name: mat24_op_all_autpl
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: m1
+      ptr: true
+    - type: uint16_t
+      name: a_out
+      ptr: true
+- name: mat24_op_all_cocode
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: c1
+    - type: uint8_t
+      name: a_out
+      ptr: true
+- name: mat24_op_cocode_perm
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: c1
+    - type: uint8_t
+      name: p1
+      ptr: true
+- name: mat24_op_gcode_matrix
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: m1
+      ptr: true
+- name: mat24_op_gcode_perm
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint8_t
+      name: p1
+      ptr: true
+- name: mat24_op_ploop_autpl
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: m1
+      ptr: true
+- name: mat24_op_vect_perm
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint8_t
+      name: p1
+      ptr: true
+- name: mat24_perm_check
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint8_t
+      name: p1
+      ptr: true
+- name: mat24_perm_complete_heptad
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint8_t
+      name: p_io
+      ptr: true
+- name: mat24_perm_complete_octad
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint8_t
+      name: p_io
+      ptr: true
+- name: mat24_perm_from_dodecads
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint8_t
+      name: d1
+      ptr: true
+    - type: uint8_t
+      name: d2
+      ptr: true
+    - type: uint8_t
+      name: p_out
+      ptr: true
+- name: mat24_perm_from_heptads
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint8_t
+      name: h1
+      ptr: true
+    - type: uint8_t
+      name: h2
+      ptr: true
+    - type: uint8_t
+      name: p_out
+      ptr: true
+- name: mat24_perm_from_map
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint8_t
+      name: h1
+      ptr: true
+    - type: uint8_t
+      name: h2
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint8_t
+      name: p_out
+      ptr: true
+- name: mat24_perm_in_local
+  source: mat24_functions.pxd
+  return: int32_t
+  params:
+    - type: uint8_t
+      name: p1
+      ptr: true
+- name: mat24_perm_rand_debug_info
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: len
+- name: mat24_perm_rand_local
+  source: mat24_functions.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: u_mode
+    - type: uint32_t
+      name: u_rand
+    - type: uint8_t
+      name: p_out
+      ptr: true
+- name: mat24_perm_to_autpl
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: c1
+    - type: uint8_t
+      name: p1
+      ptr: true
+    - type: uint32_t
+      name: m_out
+      ptr: true
+- name: mat24_perm_to_iautpl
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: c1
+    - type: uint8_t
+      name: p1
+      ptr: true
+    - type: uint8_t
+      name: p_out
+      ptr: true
+    - type: uint32_t
+      name: m_out
+      ptr: true
+- name: mat24_perm_to_m24num
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint8_t
+      name: p1
+      ptr: true
+- name: mat24_perm_to_matrix
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint8_t
+      name: p1
+      ptr: true
+    - type: uint32_t
+      name: m_out
+      ptr: true
+- name: mat24_perm_to_net
+  source: mat24_functions.pxd
+  return: void
+  params:
+    - type: uint8_t
+      name: p1
+      ptr: true
+    - type: uint32_t
+      name: a_out
+      ptr: true
+- name: mat24_ploop_assoc
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: v2
+    - type: uint32_t
+      name: v3
+- name: mat24_ploop_cap
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: v2
+- name: mat24_ploop_cocycle
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: v2
+- name: mat24_ploop_comm
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: v2
+- name: mat24_ploop_solve
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: p_io
+      ptr: true
+    - type: uint32_t
+      name: u_len
+- name: mat24_ploop_theta
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+- name: mat24_pow_ploop
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: u_exp
+- name: mat24_scalar_prod
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: c1
+- name: mat24_spread_b24
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: u_mask
+- name: mat24_suboctad_scalar_prod
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: u_sub1
+    - type: uint32_t
+      name: u_sub2
+- name: mat24_suboctad_to_cocode
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: u_sub
+    - type: uint32_t
+      name: u_octad
+- name: mat24_suboctad_weight
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: u_sub
+- name: mat24_syndrome
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: u_tetrad
+- name: mat24_vect_to_bit_list
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint8_t
+      name: a_out
+      ptr: true
+- name: mat24_vect_to_cocode
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+- name: mat24_vect_to_gcode
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+- name: mat24_vect_to_list
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: u_len
+    - type: uint8_t
+      name: a_out
+      ptr: true
+- name: mat24_vect_to_octad
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+    - type: uint32_t
+      name: u_strict
+- name: mat24_vect_to_vintern
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+- name: mat24_vect_type
+  source: mat24_functions.pxd
+  return: uint8_t
+  params:
+    - type: uint32_t
+      name: v1
+- name: mat24_vintern_to_vect
+  source: mat24_functions.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v1
+
+# mm_basics.pxd
+- name: mm_aux_add_mmv
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint8_t
+      name: value
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: i
+- name: mm_aux_array_extern_to_sparse
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: len
+- name: mm_aux_bytes_to_mmv
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint8_t
+      name: b
+      ptr: true
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+- name: mm_aux_check_mmv
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+- name: mm_aux_get_mmv
+  source: mm_basics.pxd
+  return: uint8_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: i
+- name: mm_aux_get_mmv_leech2
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: v2
+- name: mm_aux_hash
+  source: mm_basics.pxd
+  return: uint64_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: skip
+- name: mm_aux_index_check_intern
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: i
+- name: mm_aux_index_extern_to_intern
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: i
+- name: mm_aux_index_extern_to_sparse
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: i
+- name: mm_aux_index_intern_to_leech2
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: i
+- name: mm_aux_index_intern_to_sparse
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: i
+- name: mm_aux_index_leech2_to_intern_fast
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v2
+- name: mm_aux_index_leech2_to_sparse
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v2
+- name: mm_aux_index_mmv
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint16_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: l
+- name: mm_aux_index_sparse_to_extern
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: i
+- name: mm_aux_index_sparse_to_intern
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: i
+- name: mm_aux_index_sparse_to_leech
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: i
+    - type: int32_t
+      name: v
+      ptr: true
+- name: mm_aux_index_sparse_to_leech2
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: i
+- name: mm_aux_leech2_op_word_sparse
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: q
+      ptr: true
+    - type: uint32_t
+      name: m
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: qg
+      ptr: true
+- name: mm_aux_mmv_add_sparse
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint32_t
+      name: sp
+      ptr: true
+    - type: uint32_t
+      name: length
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+- name: mm_aux_mmv_extract_sparse
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: sp
+      ptr: true
+    - type: uint32_t
+      name: length
+- name: mm_aux_mmv_extract_sparse_signs
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: sp
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: mm_aux_mmv_extract_x_signs
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint64_t
+      name: elem
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: mm_aux_mmv_get_sparse
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: sp
+- name: mm_aux_mmv_set_sparse
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: sp
+      ptr: true
+    - type: uint32_t
+      name: length
+- name: mm_aux_mmv_size
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: p
+- name: mm_aux_mmv_to_bytes
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint8_t
+      name: b
+      ptr: true
+- name: mm_aux_mmv_to_sparse
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: sp
+      ptr: true
+- name: mm_aux_mul_sparse
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint32_t
+      name: sp
+      ptr: true
+    - type: uint32_t
+      name: length
+    - type: int64_t
+      name: f
+    - type: uint32_t
+      name: p1
+    - type: uint32_t
+      name: sp1
+      ptr: true
+- name: mm_aux_put_mmv
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint8_t
+      name: value
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: i
+- name: mm_aux_random_mmv
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint64_t
+      name: seed
+      ptr: true
+- name: mm_aux_read_mmv24
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint8_t
+      name: b
+      ptr: true
+    - type: uint32_t
+      name: len
+- name: mm_aux_read_mmv32
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint8_t
+      name: b
+      ptr: true
+    - type: uint32_t
+      name: len
+- name: mm_aux_reduce_mmv
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+- name: mm_aux_reduce_mmv_fields
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: nfields
+- name: mm_aux_small24_compress
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint8_t
+      name: b_src
+      ptr: true
+    - type: uint8_t
+      name: b_dest
+      ptr: true
+- name: mm_aux_small24_expand
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint8_t
+      name: b_src
+      ptr: true
+    - type: uint8_t
+      name: b_dest
+      ptr: true
+- name: mm_aux_v24_ints
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: p
+- name: mm_aux_write_mmv24
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint8_t
+      name: b
+      ptr: true
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: len
+- name: mm_aux_write_mmv32
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint8_t
+      name: b
+      ptr: true
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: len
+- name: mm_aux_zero_mmv
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+- name: mm_crt_check_g
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: g
+    - type: uint_mmv_t
+      name: p7
+      ptr: true
+    - type: uint_mmv_t
+      name: p31
+      ptr: true
+    - type: uint_mmv_t
+      name: p127
+      ptr: true
+    - type: uint_mmv_t
+      name: p255
+      ptr: true
+- name: mm_crt_check_v2
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint_mmv_t
+      name: p7
+      ptr: true
+    - type: uint_mmv_t
+      name: p31
+      ptr: true
+    - type: uint_mmv_t
+      name: p127
+      ptr: true
+    - type: uint_mmv_t
+      name: p255
+      ptr: true
+- name: mm_crt_combine
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint_mmv_t
+      name: p7
+      ptr: true
+    - type: uint_mmv_t
+      name: p31
+      ptr: true
+    - type: uint_mmv_t
+      name: p127
+      ptr: true
+    - type: uint_mmv_t
+      name: p255
+      ptr: true
+    - type: int32_t
+      name: p_out
+      ptr: true
+- name: mm_crt_combine_bytes
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint8_t
+      name: p7
+      ptr: true
+    - type: uint8_t
+      name: p31
+      ptr: true
+    - type: uint8_t
+      name: p127
+      ptr: true
+    - type: uint8_t
+      name: p255
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: int32_t
+      name: p_out
+      ptr: true
+- name: mm_crt_norm_int32
+  source: mm_basics.pxd
+  return: int64_t
+  params:
+    - type: int32_t
+      name: pv
+      ptr: true
+- name: mm_crt_norm_int32_32
+  source: mm_basics.pxd
+  return: int64_t
+  params:
+    - type: int32_t
+      name: pv
+      ptr: true
+    - type: uint32_t
+      name: i0
+    - type: uint32_t
+      name: i1
+- name: mm_crt_v2_int32
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: int32_t
+      name: pv
+      ptr: true
+- name: mm_crt_v2_int32_32
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: int32_t
+      name: pv
+      ptr: true
+    - type: uint32_t
+      name: i0
+    - type: uint32_t
+      name: i1
+- name: mm_group_prepare_op_ABC
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: len_g
+    - type: uint32_t
+      name: a
+      ptr: true
+- name: mm_sub_get_offset_table_xi
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: e
+    - type: uint32_t
+      name: j
+- name: mm_sub_get_table_xi
+  source: mm_basics.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: i
+    - type: uint32_t
+      name: e
+    - type: uint32_t
+      name: j
+    - type: uint32_t
+      name: k
+- name: mm_sub_table_octad_to_std_ax_op
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: o
+- name: mm_sub_test_prep_pi_64
+  source: mm_basics.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: eps
+    - type: uint32_t
+      name: pi
+    - type: uint32_t
+      name: p_tbl
+      ptr: true
+- name: mm_sub_test_prep_xy
+  source: mm_basics.pxd
+  return: void
+  params:
+    - type: uint32_t
+      name: f
+    - type: uint32_t
+      name: e
+    - type: uint32_t
+      name: eps
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: p_tbl
+      ptr: true
+
+# mm_op_p.pxd
+- name: mm_op_checkzero
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+- name: mm_op_compare
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv1
+      ptr: true
+    - type: uint_mmv_t
+      name: mv2
+      ptr: true
+- name: mm_op_compare_abs
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv1
+      ptr: true
+    - type: uint_mmv_t
+      name: mv2
+      ptr: true
+- name: mm_op_compare_len
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv1
+      ptr: true
+    - type: uint_mmv_t
+      name: mv2
+      ptr: true
+    - type: uint32_t
+      name: len
+- name: mm_op_compare_mod_q
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv1
+      ptr: true
+    - type: uint_mmv_t
+      name: mv2
+      ptr: true
+    - type: uint32_t
+      name: q
+- name: mm_op_copy
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv1
+      ptr: true
+    - type: uint_mmv_t
+      name: mv2
+      ptr: true
+- name: mm_op_eval_A
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: v2
+- name: mm_op_eval_A_aux
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: m_and
+    - type: uint32_t
+      name: m_xor
+    - type: uint32_t
+      name: row
+- name: mm_op_eval_A_rank_mod3
+  source: mm_op_p.pxd
+  return: int64_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: d
+- name: mm_op_eval_X_count_abs
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: p_out
+      ptr: true
+- name: mm_op_eval_X_find_abs
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: p_out
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: y0
+    - type: uint32_t
+      name: y1
+- name: mm_op_load_leech3matrix
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint64_t
+      name: a
+      ptr: true
+- name: mm_op_mul_std_axis
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+- name: mm_op_norm_A
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+- name: mm_op_omega
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: d
+- name: mm_op_pi
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v_in
+      ptr: true
+    - type: uint32_t
+      name: delta
+    - type: uint32_t
+      name: pi
+    - type: uint_mmv_t
+      name: v_out
+      ptr: true
+- name: mm_op_scalar_mul
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: int32_t
+      name: factor
+    - type: uint_mmv_t
+      name: mv1
+      ptr: true
+- name: mm_op_scalprod
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v1
+      ptr: true
+    - type: uint_mmv_t
+      name: v2
+      ptr: true
+- name: mm_op_scalprod_ind
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v1
+      ptr: true
+    - type: uint_mmv_t
+      name: v2
+      ptr: true
+    - type: uint16_t
+      name: ind
+      ptr: true
+- name: mm_op_store_axis
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint32_t
+      name: x
+    - type: uint_mmv_t
+      name: mv
+      ptr: true
+- name: mm_op_t_A
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v_in
+      ptr: true
+    - type: uint32_t
+      name: e
+    - type: uint_mmv_t
+      name: v_out
+      ptr: true
+- name: mm_op_vector_add
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: mv1
+      ptr: true
+    - type: uint_mmv_t
+      name: mv2
+      ptr: true
+- name: mm_op_watermark_A
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: w
+      ptr: true
+- name: mm_op_watermark_A_perm_num
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint32_t
+      name: w
+      ptr: true
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+- name: mm_op_word
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: int32_t
+      name: len_g
+    - type: int32_t
+      name: e
+    - type: uint_mmv_t
+      name: work
+      ptr: true
+- name: mm_op_word_ABC
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: int32_t
+      name: len_g
+    - type: uint_mmv_t
+      name: v_out
+      ptr: true
+- name: mm_op_word_tag_A
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: int32_t
+      name: len_g
+    - type: int32_t
+      name: e
+- name: mm_op_xy
+  source: mm_op_p.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v_in
+      ptr: true
+    - type: uint32_t
+      name: f
+    - type: uint32_t
+      name: e
+    - type: uint32_t
+      name: eps
+    - type: uint_mmv_t
+      name: v_out
+      ptr: true
+
+# mm_reduce.pxd
+- name: gt_subword_clear
+  source: mm_reduce.pxd
+  return: void
+  params:
+    - type: gt_subword_type
+      name: p_gtsub
+      ptr: true
+- name: gt_word_alloc
+  source: mm_reduce.pxd
+  return: gt_word_type
+  return_ptr: true
+  params:
+    - type: uint32_t
+      name: mode
+    - type: void
+      name: p_buffer
+      ptr: true
+    - type: size_t
+      name: nbytes
+- name: gt_word_append
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: gt_word_append_sub_part
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: gt_word_clear
+  source: mm_reduce.pxd
+  return: void
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+- name: gt_word_compress
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+    - type: uint64_t
+      name: p_n
+      ptr: true
+- name: gt_word_delete
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+- name: gt_word_free
+  source: mm_reduce.pxd
+  return: void
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+- name: gt_word_insert
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+- name: gt_word_len_pickle
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+- name: gt_word_length
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+- name: gt_word_n_subwords
+  source: mm_reduce.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+- name: gt_word_pickle
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+    - type: uint32_t
+      name: buf
+      ptr: true
+    - type: uint32_t
+      name: maxlen
+- name: gt_word_reduce
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+- name: gt_word_reduce_input
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+- name: gt_word_reduce_sub
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+    - type: uint32_t
+      name: sub_mode
+- name: gt_word_rule_join
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+- name: gt_word_rule_t_xi_t
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+- name: gt_word_seek
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+    - type: int32_t
+      name: pos
+    - type: uint32_t
+      name: set
+- name: gt_word_shorten
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: g1
+      ptr: true
+    - type: uint32_t
+      name: n1max
+    - type: uint32_t
+      name: mode
+- name: gt_word_store
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+    - type: uint32_t
+      name: pa
+      ptr: true
+    - type: uint32_t
+      name: maxlen
+- name: gt_word_to_mm_compress
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: gt_word_type
+      name: p_gt
+      ptr: true
+    - type: mm_compress_type
+      name: p_c
+      ptr: true
+- name: mm_compress_expand_type4
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: i
+- name: mm_compress_pc_add_nx
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: mm_compress_type
+      name: pc
+      ptr: true
+    - type: uint32_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: len
+- name: mm_compress_pc_add_type2
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: mm_compress_type
+      name: pc
+      ptr: true
+    - type: uint32_t
+      name: c
+- name: mm_compress_pc_expand_int
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint64_t
+      name: p_n
+      ptr: true
+    - type: uint32_t
+      name: m
+      ptr: true
+    - type: uint32_t
+      name: l_m
+- name: mm_compress_pc_init
+  source: mm_reduce.pxd
+  return: void
+  params:
+    - type: mm_compress_type
+      name: pc
+      ptr: true
+- name: mm_compress_type4
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: i
+- name: mm_order_check_in_Gx0
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: mode
+    - type: uint_mmv_t
+      name: work
+      ptr: true
+- name: mm_order_check_in_Gx0_fast
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+- name: mm_order_compare_v1_mod3
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+- name: mm_order_compare_vector
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint_mmv_t
+      name: p_v
+      ptr: true
+- name: mm_order_compare_vector_part_A
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint_mmv_t
+      name: p_v
+      ptr: true
+- name: mm_order_element_Gx0
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: h
+      ptr: true
+    - type: uint32_t
+      name: o
+- name: mm_order_element_M
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: o
+- name: mm_order_find_Gx0_via_v1_mod3
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: g
+      ptr: true
+- name: mm_order_hash_vector
+  source: mm_reduce.pxd
+  return: uint64_t
+  params:
+    - type: uint_mmv_t
+      name: p_dest
+      ptr: true
+- name: mm_order_load_tag_data
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: buf
+      ptr: true
+    - type: uint32_t
+      name: buf_size
+- name: mm_order_load_vector
+  source: mm_reduce.pxd
+  return: void
+  params:
+    - type: uint_mmv_t
+      name: p_dest
+      ptr: true
+- name: mm_order_load_vector_v1_mod3
+  source: mm_reduce.pxd
+  return: void
+  params:
+    - type: uint_mmv_t
+      name: p_dest
+      ptr: true
+- name: mm_profile_graph24
+  source: mm_reduce.pxd
+  return: void
+  params:
+    - type: uint16_t
+      name: b
+      ptr: true
+- name: mm_profile_mod3_hash
+  source: mm_reduce.pxd
+  return: int64_t
+  params:
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint16_t
+      name: b
+      ptr: true
+    - type: uint32_t
+      name: mode
+- name: mm_profile_mod3_load
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: p
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint64_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: t
+- name: mm_profile_mod3_permute24
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint16_t
+      name: b
+      ptr: true
+    - type: uint8_t
+      name: p
+      ptr: true
+    - type: uint16_t
+      name: b1
+      ptr: true
+- name: mm_reduce_2A_axis_type
+  source: mm_reduce.pxd
+  return: uint32_t
+  params:
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+- name: mm_reduce_M
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: mode
+    - type: uint32_t
+      name: r
+      ptr: true
+- name: mm_reduce_analyze_2A_axis
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: r
+      ptr: true
+- name: mm_reduce_find_type4
+  source: mm_reduce.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint32_t
+      name: v2
+- name: mm_reduce_find_type4_axis
+  source: mm_reduce.pxd
+  return: uint32_t
+  params:
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: v2
+- name: mm_reduce_load_axis
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: s
+- name: mm_reduce_map_axis
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: vt
+      ptr: true
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: a
+      ptr: true
+    - type: uint32_t
+      name: n
+    - type: uint_mmv_t
+      name: work
+      ptr: true
+- name: mm_reduce_op_2A_axis_type
+  source: mm_reduce.pxd
+  return: uint32_t
+  params:
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: g
+      ptr: true
+    - type: uint32_t
+      name: len_g
+    - type: uint32_t
+      name: mode
+- name: mm_reduce_set_order_vector_mod15
+  source: mm_reduce.pxd
+  return: uint32_t
+  params:
+    - type: uint32_t
+      name: mode
+- name: mm_reduce_transform_v4
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: v4
+    - type: uint32_t
+      name: target_axes
+      ptr: true
+    - type: uint32_t
+      name: r
+      ptr: true
+    - type: uint_mmv_t
+      name: work
+      ptr: true
+- name: mm_reduce_vector_incomplete
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: r
+      ptr: true
+- name: mm_reduce_vector_shortcut
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: stage
+    - type: uint32_t
+      name: mode
+    - type: uint32_t
+      name: axis
+    - type: uint32_t
+      name: r
+      ptr: true
+- name: mm_reduce_vector_v1
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: r
+      ptr: true
+    - type: uint_mmv_t
+      name: work
+      ptr: true
+- name: mm_reduce_vector_vm
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: vt
+      ptr: true
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: r
+      ptr: true
+    - type: uint_mmv_t
+      name: work
+      ptr: true
+- name: mm_reduce_vector_vp
+  source: mm_reduce.pxd
+  return: int32_t
+  params:
+    - type: uint32_t
+      name: vt
+      ptr: true
+    - type: uint_mmv_t
+      name: v
+      ptr: true
+    - type: uint32_t
+      name: mode
+    - type: uint32_t
+      name: r
+      ptr: true
+    - type: uint_mmv_t
+      name: work
+      ptr: true
+
+# Opaque ctypedef struct handles (names only; fields
+# are a downstream concern). Used to populate goStruct.
+- struct: gt_subword_type
+- struct: gt_word_type
+- struct: mm_compress_type
+- struct: qstate12_support_type
+- struct: qstate12_type
+
+# Enum compile-time constants. Values are read from the
+# C headers (the .pxd carries names only).
+- enum: MAX_GT_WORD_DATA
+  value: 24
+- enum: MM_COMPRESS_TYPE_NENTRIES
+  value: 19
+- enum: QSTATE12_MAXCOLS
+  value: 64
+- enum: QSTATE12_MAXROWS
+  value: 65
+- enum: QSTATE12_UNDEF_ROW
+  value: 255

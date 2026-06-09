@@ -1,7 +1,5 @@
 package cgt
 
-//go:generate go run -C _gen . -out ../mm_op_p_gen.go
-
 // This file ports the group operations and the
 // supporting tables from mm_tables.c, mm_tables_xi.c
 // and the per-modulus mm*_op_*.c files. The
