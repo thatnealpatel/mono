@@ -1,5 +1,7 @@
 package cgt
 
+import "patel.codes/cgt/xsp2co1"
+
 // This file ports mm_op*_mul_std_axis (Griess
 // algebra product with the standard axis v+) and
 // mm_op*_store_axis, field-generically.
@@ -211,14 +213,14 @@ func mulStdAxisXYZ(p int, v []uint64) {
 // Leech-lattice encoding.
 //
 // It panics if x is not a short Leech-mod-2 vector
-// (via short2ToLeech). The C source uses p=15; here
+// (via xsp2co1.Short2ToLeech). The C source uses p=15; here
 // the modulus is the field parameter p.
 func OpStoreAxis(p int, x uint32, dst []uint64) {
 	zeroMMV(p, dst)
 
 	// Short Leech coordinates, norm 32, arbitrary sign.
 	var a [24]int8
-	short2ToLeech(x, a[:])
+	xsp2co1.Short2ToLeech(x, a[:])
 
 	// Reduce each biased, scaled coordinate mod p. The
 	// bias (p << 8) keeps the value non-negative before

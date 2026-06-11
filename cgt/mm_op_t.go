@@ -3,6 +3,7 @@ package cgt
 import (
 	"patel.codes/cgt/generator"
 	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/xsp2co1"
 )
 
 // This file ports the triality operation tau^e on
@@ -213,7 +214,7 @@ func leech3matrixRank(a []uint64, d uint32) int64 {
 		return int64(uint64(i) << 48)
 	}
 	// Corank 1: row 23 of Ah is the kernel vector.
-	return int64((uint64(23) << 48) + xsp2co1FromVectMod3(a[24+23]))
+	return int64((uint64(23) << 48) + xsp2co1.FromVectMod3(a[24+23]))
 }
 
 // leech3SubDiag subtracts diag from every entry

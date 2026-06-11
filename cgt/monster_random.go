@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 
 	"patel.codes/cgt/generator"
+	"patel.codes/cgt/leech"
 	"patel.codes/cgt/mat24"
 )
 
@@ -302,7 +303,7 @@ func appendCosetGx0(w []uint32, flags uint32) []uint32 {
 // idiom.
 func appendReduceType4Inv(w []uint32, c uint32) []uint32 {
 	var a [6]uint32
-	n := genLeech2ReduceType4(c, a[:])
+	n := leech.GenLeech2ReduceType4(c, a[:])
 	if n < 0 {
 		panic("MMRand: gen_leech2_reduce_type4 failed")
 	}

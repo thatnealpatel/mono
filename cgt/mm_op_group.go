@@ -1,6 +1,10 @@
 package cgt
 
-import "patel.codes/cgt/mat24"
+import (
+	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/n0"
+	"patel.codes/cgt/xsp2co1"
+)
 
 // This file ports the group operations and the
 // supporting tables from mm_tables.c, mm_tables_xi.c
@@ -631,11 +635,11 @@ func PrepareOpABC(g []uint32, length int, out []uint32) int {
 
 	if !hasL {
 		// No tag l: compute the whole word in N_0.
-		var a N0Elem
-		if int(nMulWordScan(&a, g)) < length {
+		var a n0.N0Elem
+		if int(n0.MulWordScan(&a, g)) < length {
 			return -1002
 		}
-		lenA := nToWord(&a, out)
+		lenA := n0.ToWord(&a, out)
 		return int(lenA) + 0x100
 	}
 
@@ -648,35 +652,35 @@ func PrepareOpABC(g []uint32, length int, out []uint32) int {
 	// Reduce g into a product elem * gn with elem in
 	// G_{x0} and gn in N_0.
 	var elem [26]uint64
-	pos := xsp2co1SetElemWordScan(elem[:], g, false)
+	pos := xsp2co1.SetElemWordScan(elem[:], g, false)
 	if pos < 0 || pos > length {
 		return -0x1009
 	}
-	var gn N0Elem
-	scan := int(nMulWordScan(&gn, g[pos:]))
+	var gn n0.N0Elem
+	scan := int(n0.MulWordScan(&gn, g[pos:]))
 	if pos+scan != length {
 		return -1003
 	}
 	// Here g = elem * gn.
 
-	if xsp2co1ElemSubtype(elem[:]) == 0x48 {
+	if xsp2co1.ElemSubtype(elem[:]) == 0x48 {
 		// elem is in N_x0: store g as an element of N_x0.
-		if xsp2co1ElemToN0(elem[:], out[:5]) != nil {
+		if xsp2co1.ElemToN0(elem[:], out[:5]) != nil {
 			return -1004
 		}
-		nMulElement((*N0Elem)(out[:5]), &gn, (*N0Elem)(out[:5]))
-		lenA := nToWord((*N0Elem)(out[:5]), out)
+		n0.MulElement((*n0.N0Elem)(out[:5]), &gn, (*n0.N0Elem)(out[:5]))
+		lenA := n0.ToWord((*n0.N0Elem)(out[:5]), out)
 		return int(lenA) + 0x100
 	}
 
 	// Otherwise store a word equal to g. Split off the
 	// tag-t power so that gn lands in N_x0.
-	e := nRightCosetNx0(gn[:])
-	lenA := int(nToWord(&gn, gn[:]))
-	if xsp2co1MulElemWord(elem[:], gn[:lenA]) != nil {
+	e := n0.RightCosetNx0(gn[:])
+	lenA := int(n0.ToWord(&gn, gn[:]))
+	if xsp2co1.MulElemWord(elem[:], gn[:lenA]) != nil {
 		return -1005
 	}
-	lenA = xsp2co1ElemToWord(elem[:], out)
+	lenA = xsp2co1.ElemToWord(elem[:], out)
 	if lenA < 0 {
 		return -1006
 	}

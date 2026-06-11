@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/n0"
+	"patel.codes/cgt/xsp2co1"
 )
 
 // MM is an element of the monster group,
@@ -49,432 +51,6 @@ var mmTagDict = map[byte]uint32{
 }
 
 //////////////////////////////////////////////////
-// Subgroup N_0 word algebra (mm_group_n.c)
-//
-// An element of N_0 is held as [5]uint32 with
-// index layout t, y, x, d, pi (I_t..I_pi).
-//////////////////////////////////////////////////
-
-// N0Elem is an element of the subgroup N_0, held as
-// the five components t, y, x, d, pi (indexed by
-// iT..iPi). The neutral element is the zero value.
-type N0Elem [5]uint32
-
-const (
-	iT  = 0 // tau exponent
-	iY  = 1 // y_e Parker loop elt
-	iX  = 2 // x_e Parker loop elt
-	iD  = 3 // x_delta cocode elt
-	iPi = 4 // pi M24 number
-)
-
-// theta1000 returns bit 0x1000 of the Parker-loop
-// theta of v (low 11 bits index the table). This
-// matches the C idiom MAT24_THETA_TABLE[v&0x7ff] &
-// 0x1000.
-func theta1000(v uint32) uint32 {
-	return uint32(mat24.ThetaTable(v&0x7ff)) & 0x1000
-}
-
-// nPlInvAutpl returns f with
-// f = (x_delta x_pi)^-1 e (x_delta x_pi) for e in
-// PL, delta in C*, pi in mat24.AutPL. Mirrors C
-// mm_group_op_pl_inv_autpl.
-func nPlInvAutpl(e, delta, pi uint32) uint32 {
-	e &= 0x1fff
-	if pi == 0 || pi >= mat24.Mat24Order {
-		return e ^ (mat24.ScalarProd(e, delta) << 12)
-	}
-	perm := mat24.M24numToPerm(pi)
-	_, invAutpl := mat24.PermToIautpl(delta, perm)
-	return mat24.OpPloopAutpl(e, invAutpl)
-}
-
-// nMulDeltaPi puts g = g * x_delta x_pi.
-func nMulDeltaPi(g *N0Elem, delta, pi uint32) {
-	if pi >= mat24.Mat24Order {
-		pi = 0
-	}
-	delta &= 0xfff
-	switch {
-	case g[iPi] == 0:
-		g[iPi] = pi
-		g[iD] ^= delta
-	case pi == 0:
-		perm := mat24.M24numToPerm(g[iPi])
-		invPerm := mat24.InvPerm(perm)
-		delta = mat24.OpCocodePerm(delta, invPerm)
-		g[iD] ^= delta
-	default:
-		perm1 := mat24.M24numToPerm(g[iPi])
-		aut1 := mat24.PermToAutpl(g[iD], perm1)
-		perm2 := mat24.M24numToPerm(pi)
-		aut2 := mat24.PermToAutpl(delta, perm2)
-		aut3 := mat24.MulAutpl(aut1, aut2)
-		g[iD] = mat24.AutplToCocode(aut3)
-		perm1 = mat24.AutplToPerm(aut3)
-		g[iPi] = mat24.PermToM24num(perm1)
-	}
-}
-
-// nMulInvDeltaPi puts g = g * (x_delta x_pi)^-1.
-func nMulInvDeltaPi(g *N0Elem, delta, pi uint32) {
-	if pi >= mat24.Mat24Order {
-		pi = 0
-	}
-	delta &= 0xfff
-	if pi == 0 {
-		if g[iPi] != 0 {
-			perm := mat24.M24numToPerm(g[iPi])
-			invPerm := mat24.InvPerm(perm)
-			delta = mat24.OpCocodePerm(delta, invPerm)
-		}
-		g[iD] ^= delta
-		return
-	}
-	perm2 := mat24.M24numToPerm(pi)
-	invPerm2, aut2 := mat24.PermToIautpl(delta, perm2)
-	_ = invPerm2
-	var perm1 []byte
-	if g[iPi] == 0 {
-		g[iD] ^= mat24.AutplToCocode(aut2)
-		perm1 = mat24.AutplToPerm(aut2)
-	} else {
-		perm1 = mat24.M24numToPerm(g[iPi])
-		aut1 := mat24.PermToAutpl(g[iD], perm1)
-		aut3 := mat24.MulAutpl(aut1, aut2)
-		g[iD] = mat24.AutplToCocode(aut3)
-		perm1 = mat24.AutplToPerm(aut3)
-	}
-	g[iPi] = mat24.PermToM24num(perm1)
-}
-
-// nMulX puts g = g * x_e.
-func nMulX(g *N0Elem, e uint32) {
-	e = nPlInvAutpl(e, g[iD], g[iPi])
-	g[iD] ^= mat24.PloopCap(g[iX], e)
-	g[iX] ^= e ^ (mat24.PloopCocycle(g[iX], e) << 12)
-}
-
-// nMulY puts g = g * y_f.
-func nMulY(g *N0Elem, f uint32) {
-	f = nPlInvAutpl(f, g[iD], g[iPi])
-	signC := mat24.PloopComm(g[iX], f)
-	signY := mat24.PloopCocycle(g[iY], f) ^ signC
-	signX := mat24.PloopAssoc(g[iX], g[iY], f) ^ signC
-	if g[iD]&0x800 != 0 { // g1 is odd
-		signX ^= mat24.PloopCocycle(g[iX], f)
-		f ^= theta1000(f)
-		g[iD] ^= mat24.PloopCap(g[iY], f)
-		g[iX] ^= f ^ (signX << 12)
-	} else { // g1 is even
-		g[iD] ^= mat24.PloopCap(g[iX]^g[iY], f)
-		g[iX] ^= signX << 12
-	}
-	g[iY] ^= f ^ (signY << 12)
-}
-
-// nMulT puts g = g * tau^t.
-func nMulT(g *N0Elem, t uint32) {
-	t %= 3
-	if t == 0 {
-		return
-	}
-	t = (t ^ (g[iD] >> 11)) & 1
-	var a1, b1 uint32
-	if t != 0 { // (-1)^parity(g1) * t = 1 (mod 3)
-		a1 = g[iY]
-		a1 ^= theta1000(a1)
-		b1 = g[iX] ^ a1
-		a1 ^= mat24.PloopComm(g[iX], g[iY]) << 12
-		b1 ^= mat24.PloopCocycle(g[iX], g[iY]) << 12
-	} else { // (-1)^parity(g1) * t = 2 (mod 3)
-		b1 = g[iX]
-		b1 ^= theta1000(b1)
-		a1 = g[iY] ^ b1
-		b1 ^= mat24.PloopComm(g[iX], g[iY]) << 12
-		a1 ^= mat24.PloopCocycle(g[iX], g[iY]) << 12
-	}
-	t = g[iT] + 3 - t
-	g[iT] = ((t + (t >> 2)) & 3) - 1
-	g[iY] = b1
-	g[iX] = a1
-}
-
-// nMul puts g = g * g1 for g1 in N_0.
-func nMul(g, g1 *N0Elem) {
-	nMulT(g, g1[iT])
-	nMulY(g, g1[iY])
-	nMulX(g, g1[iX])
-	nMulDeltaPi(g, g1[iD], g1[iPi])
-}
-
-// nMulInv puts g = g * g1^-1 for g1 in N_0.
-func nMulInv(g, g1 *N0Elem) {
-	nMulInvDeltaPi(g, g1[iD], g1[iPi])
-	nMulX(g, g1[iX]^theta1000(g1[iX]))
-	nMulY(g, g1[iY]^theta1000(g1[iY]))
-	nMulT(g, 3-g1[iT])
-}
-
-// nMulElement puts g3 = g1 * g2 for elements of
-// N_0. The arguments may overlap.
-func nMulElement(g1, g2, g3 *N0Elem) {
-	g := *g1
-	nMul(&g, g2)
-	*g3 = g
-}
-
-// nInvElement puts g2 = g1^-1 for g1 in N_0.
-func nInvElement(g1, g2 *N0Elem) {
-	var g N0Elem
-	nMulInv(&g, g1)
-	*g2 = g
-}
-
-// nConjugateElement puts g3 = g2^-1 g1 g2 for
-// elements of N_0. The arguments may overlap.
-func nConjugateElement(g1, g2, g3 *N0Elem) {
-	var g N0Elem
-	nMulInv(&g, g2)
-	nMul(&g, g1)
-	nMul(&g, g2)
-	*g3 = g
-}
-
-// Shifted atom tags, i.e. the top nibble of each
-// atom tag, used by the nMulWordScanCore switch.
-const (
-	tagShift1  = atomTag1 >> 28  // 0
-	tagShiftI1 = atomTagI1 >> 28 // 8
-	tagShiftD  = atomTagD >> 28  // 1
-	tagShiftID = atomTagID >> 28 // 9
-	tagShiftP  = atomTagP >> 28  // 2
-	tagShiftIP = atomTagIP >> 28 // 10
-	tagShiftX  = atomTagX >> 28  // 3
-	tagShiftIX = atomTagIX >> 28 // 11
-	tagShiftY  = atomTagY >> 28  // 4
-	tagShiftIY = atomTagIY >> 28 // 12
-	tagShiftT  = atomTagT >> 28  // 5
-	tagShiftIT = atomTagIT >> 28 // 13
-	tagShiftL  = atomTagL >> 28  // 6
-	tagShiftIL = atomTagIL >> 28 // 14
-)
-
-// nMulWordScanCore is the workhorse C
-// _mul_word_scan. If index is true it multiplies g
-// by the longest N_0 prefix of w and returns the
-// number of atoms processed. Otherwise it returns
-// the first unprocessed (possibly simplified) atom,
-// or 0 if all atoms were processed.
-func nMulWordScanCore(g *N0Elem, w []uint32, index bool) uint32 {
-	n := uint32(len(w))
-	for i := uint32(0); i < n; i++ {
-		atom := w[i]
-		tag := (atom >> 28) & 0xf
-		op := atom & 0xfffffff
-		switch tag {
-		case tagShiftI1, tagShift1:
-		case tagShiftID, tagShiftD:
-			nMulDeltaPi(g, op&0xfff, 0)
-		case tagShiftIP:
-			nMulInvDeltaPi(g, 0, op)
-		case tagShiftP:
-			nMulDeltaPi(g, 0, op)
-		case tagShiftIX:
-			op ^= theta1000(op)
-			fallthrough
-		case tagShiftX:
-			nMulX(g, op&0x1fff)
-		case tagShiftIY:
-			op ^= theta1000(op)
-			fallthrough
-		case tagShiftY:
-			nMulY(g, op&0x1fff)
-		case tagShiftIT:
-			op ^= 3
-			fallthrough
-		case tagShiftT:
-			nMulT(g, op&3)
-		case tagShiftIL:
-			op ^= 3
-			fallthrough
-		case tagShiftL:
-			if (op+1)&2 != 0 {
-				if index {
-					return i
-				}
-				return 0x60000000 + (op & 3)
-			}
-		default:
-			if index {
-				return i
-			}
-			return atom
-		}
-	}
-	if index {
-		return n
-	}
-	return 0
-}
-
-// nMulWordScan multiplies g in N_0 by the longest
-// N_0 prefix of w and returns its length.
-func nMulWordScan(g *N0Elem, w []uint32) uint32 {
-	return nMulWordScanCore(g, w, true)
-}
-
-// nMulAtom puts g = g * atom for an atom that is a
-// generator of N_0. It returns 0 on success and
-// the (possibly simplified) atom on failure.
-func nMulAtom(g *N0Elem, atom uint32) uint32 {
-	return nMulWordScanCore(g, []uint32{atom}, false)
-}
-
-// ker tables for nReduceElement.
-var kerTableXy = [4]uint16{0, 0x1800, 0x800, 0x1000}
-var kerTableYx = [4]uint16{0, 0x1000, 0x1800, 0x800}
-
-// nReduceElement reduces g in N_0 to standard form
-// and returns 0 iff g is the neutral element.
-func nReduceElement(g *N0Elem) uint32 {
-	g[0] %= 3
-	g[1] &= 0x1fff
-	g[2] &= 0x1fff
-	g[3] &= 0xfff
-	if ((g[1]&0x7ff)+0x7ff)&((g[2]&0x7ff)-1)&0x800 != 0 {
-		g[1] ^= uint32(kerTableXy[g[2]>>11])
-		g[2] = 0
-	} else {
-		g[2] ^= uint32(kerTableYx[g[1]>>11])
-		g[1] &= 0x7ff
-	}
-	return g[0] | g[1] | g[2] | g[3] | g[4]
-}
-
-// nToWord reduces g in N_0 and converts it to a
-// word of generator atoms in w (up to 5). It
-// returns the word length. w may alias g.
-func nToWord(g *N0Elem, w []uint32) uint32 {
-	nReduceElement(g)
-	var n uint32
-	if g[0] != 0 {
-		w[n] = (g[0] & 0xfffffff) | tagT
-		n++
-	}
-	if g[1] != 0 {
-		w[n] = (g[1] & 0x1fff) | tagY
-		n++
-	}
-	if g[2] != 0 {
-		w[n] = (g[2] & 0x1fff) | tagX
-		n++
-	}
-	if g[3] != 0 {
-		w[n] = (g[3] & 0xfff) | tagD
-		n++
-	}
-	if g[4] != 0 {
-		w[n] = (g[4] & 0xfffffff) | tagP
-		n++
-	}
-	return n
-}
-
-// nToWordStd reduces g in N_0 and converts it to a
-// word of generator atoms in w (up to 5), in the
-// standard generator order x, d, y, p, t used by the
-// reducer. Unlike nToWord (order t, y, x, d, p), the
-// y component is folded into x/d via a right-coset
-// step so the tau power becomes the last atom. It
-// returns the word length. w may alias g. C function
-// mm_group_n_to_word_std.
-func nToWordStd(g *N0Elem, w []uint32) uint32 {
-	nReduceElement(g)
-	h := *g
-	var out [5]uint32
-	// 't' part becomes the last generator; remove it from h.
-	out[4] = nRightCosetNx0(h[:])
-	// 'p' part precedes 't'; remove it from h.
-	out[3] = h[iPi]
-	h[iPi] = 0
-	// 'y' part precedes 'p'; fold it into x/d via mul_y.
-	y := h[iY] & 0x7ff
-	out[2] = y
-	y ^= theta1000(y)
-	nMulY(&h, y)
-	nReduceElement(&h)
-	// 'x' and 'd' parts come first.
-	out[0] = h[iX]
-	out[1] = h[iD]
-	var n uint32
-	if out[0] != 0 {
-		w[n] = (out[0] & 0x1fff) | tagX
-		n++
-	}
-	if out[1] != 0 {
-		w[n] = (out[1] & 0xfff) | tagD
-		n++
-	}
-	if out[2] != 0 {
-		w[n] = (out[2] & 0x1fff) | tagY
-		n++
-	}
-	if out[3] != 0 {
-		w[n] = (out[3] & 0xfffffff) | tagP
-		n++
-	}
-	if out[4] != 0 {
-		w[n] = (out[4] & 0xfffffff) | tagT
-		n++
-	}
-	return n
-}
-
-// nRightCosetNx0 changes g in N_0 to an element g'
-// of N_x0 and returns e with g = g' * tau^e.
-func nRightCosetNx0(g []uint32) uint32 {
-	ng := (*N0Elem)(g)
-	nReduceElement(ng)
-	e := g[0]
-	if e != 0 && g[3]&0x800 != 0 {
-		e = 3 - e
-	}
-	nMulT(ng, 3-e)
-	return e
-}
-
-// nConjToQx0 tries to find e (0..2) and q in Q_x0
-// with g = tau^-e q tau^e. On success it returns q
-// in bits 24..0 (Leech encoding) and e in bits
-// 26..25. On failure it returns -1.
-func nConjToQx0(g []uint32) int32 {
-	var t2 N0Elem
-	t2[iT] = 2
-	g1 := *(*N0Elem)(g)
-	nReduceElement(&g1)
-	if g1[iPi] != 0 {
-		return -1
-	}
-	e := uint32(0)
-	for {
-		if (g1[iY] | g1[iT]) == 0 {
-			x := g1[iX] & 0x1fff
-			x = (x << 12) ^ (uint32(mat24.ThetaTable(x&0x7ff)) & 0xfff)
-			x ^= g1[iD] & 0xfff
-			return int32(x + (e << 25))
-		}
-		if e >= 2 {
-			return -1
-		}
-		nConjugateElement(&g1, &t2, &g1)
-		nReduceElement(&g1)
-		e++
-	}
-}
-
-//////////////////////////////////////////////////
 // Word algebra over the full monster (mm_group_word.c)
 //////////////////////////////////////////////////
 
@@ -482,10 +58,10 @@ func nConjToQx0(g []uint32) int32 {
 // element g in N_0 such that word = word1 * g, with
 // word1 a prefix. It returns the length of word1
 // and does not modify word.
-func splitWordN(word []uint32, g *N0Elem) uint32 {
+func splitWordN(word []uint32, g *n0.N0Elem) uint32 {
 	length := uint32(len(word))
 	status := uint32(0)
-	*g = N0Elem{}
+	*g = n0.N0Elem{}
 	for length > 0 {
 		atom := word[length-1]
 		switch (atom >> 28) & 0xf {
@@ -545,7 +121,7 @@ func mulWords(w1 []uint32, l1 uint32, w2 []uint32, e int) uint32 {
 	l2 := len(w2)
 	iStart, iStop, iStep := 0, l2, 1
 	var sign uint32
-	var gn N0Elem
+	var gn n0.N0Elem
 	l1 = splitWordN(w1[:l1], &gn)
 	if e < 0 {
 		iStart, iStop, iStep = l2-1, -1, -1
@@ -554,11 +130,11 @@ func mulWords(w1 []uint32, l1 uint32, w2 []uint32, e int) uint32 {
 	}
 	for round := 0; round < e; round++ {
 		for i := iStart; i != iStop; i += iStep {
-			pending := nMulAtom(&gn, w2[i]^sign)
+			pending := n0.MulAtom(&gn, w2[i]^sign)
 			if pending != 0 {
-				nReduceElement(&gn)
-				l1 += nToWord(&gn, w1[l1:])
-				gn = N0Elem{}
+				n0.ReduceElement(&gn)
+				l1 += n0.ToWord(&gn, w1[l1:])
+				gn = n0.N0Elem{}
 				if pending&0x70000000 == 0x60000000 && l1 != 0 &&
 					w1[l1-1]&0x70000000 == 0x60000000 {
 					exp := ((w1[l1-1] & 0xfffffff) + (pending & 3)) % 3
@@ -574,8 +150,8 @@ func mulWords(w1 []uint32, l1 uint32, w2 []uint32, e int) uint32 {
 			}
 		}
 	}
-	nReduceElement(&gn)
-	l1 += nToWord(&gn, w1[l1:])
+	n0.ReduceElement(&gn)
+	l1 += n0.ToWord(&gn, w1[l1:])
 	return l1
 }
 
@@ -600,7 +176,7 @@ func invertWord(w []uint32) {
 // On status 0 or 1 the N_0 element is written to
 // gOut (length 5).
 func checkWordN(w []uint32, gOut []uint32) uint32 {
-	var g N0Elem
+	var g n0.N0Elem
 	status := uint32(0)
 	if len(w) > 0 {
 		numXi := 0
@@ -617,9 +193,9 @@ func checkWordN(w []uint32, gOut []uint32) uint32 {
 			return 2
 		}
 		for _, a := range w {
-			nMulAtom(&g, a)
+			n0.MulAtom(&g, a)
 		}
-		if nReduceElement(&g) != 0 {
+		if n0.ReduceElement(&g) != 0 {
 			status = 1
 		}
 	}
@@ -922,7 +498,7 @@ func ihex(x uint32) string {
 // emitNx0Strings appends the string form of the
 // reduced N_x0 element to dst and clears it.
 func emitNx0Strings(dst []string, element []uint32) []string {
-	nReduceElement((*N0Elem)(element))
+	n0.ReduceElement((*n0.N0Elem)(element))
 	if element[1] != 0 {
 		dst = append(dst, "y_"+ihex(element[1]))
 	}
@@ -935,7 +511,7 @@ func emitNx0Strings(dst []string, element []uint32) []string {
 	if element[4] != 0 {
 		dst = append(dst, "p_"+strconv.FormatUint(uint64(element[4]), 10))
 	}
-	*(*N0Elem)(element) = N0Elem{}
+	*(*n0.N0Elem)(element) = n0.N0Elem{}
 	return dst
 }
 
@@ -948,7 +524,7 @@ func stringsFromAtoms(atoms []uint32) []string {
 		t := a & 0x7fffffff
 		switch {
 		case t < 0x50000000:
-			nMulAtom((*N0Elem)(nx0[:]), a)
+			n0.MulAtom((*n0.N0Elem)(nx0[:]), a)
 		case a&0xfffffff == 0:
 			// neutral t/l atom
 		case t < 0x70000000:
@@ -1079,18 +655,18 @@ func reductionStrategy(a []uint32) int {
 //	2  no reduction was done (out is nil; reduce a)
 //
 // It mirrors C prereduce. Strategy 1 collapses an N_0
-// element to standard form via nToWordStd; strategy 2
+// element to standard form via n0.ToWordStd; strategy 2
 // reduces a G_x0 word via reduceWord; the general
 // strategy runs the GtWord shortening engine.
 func prereduce(a []uint32) ([]uint32, int) {
 	switch reductionStrategy(a) {
 	case 1:
-		var gn N0Elem
-		if nMulWordScan(&gn, a) != uint32(len(a)) {
+		var gn n0.N0Elem
+		if n0.MulWordScan(&gn, a) != uint32(len(a)) {
 			return nil, 2
 		}
 		var buf [5]uint32
-		k := nToWordStd(&gn, buf[:])
+		k := n0.ToWordStd(&gn, buf[:])
 		return append([]uint32(nil), buf[:k]...), 0
 	case 2:
 		out, n := reduceWord(a)
@@ -1298,7 +874,7 @@ func (g *MM) HalfOrder() (int, *MM) {
 	if o1 == 0 {
 		return 0, nil
 	}
-	elem := NewXsp2Co1(atomsFromWord(h)...)
+	elem := xsp2co1.NewXsp2Co1(atomsFromWord(h)...)
 	o2, h2 := elem.HalfOrder()
 	o := o1 * o2
 	if o2&1 == 0 {
@@ -1337,7 +913,7 @@ func (g *MM) orderElementGx0(o int) (int, []uint32) {
 	switch checkWordGx0(g.data) {
 	case 0:
 		// g is already a word of G_x0 generators.
-		elem := NewXsp2Co1(atomsFromWord(g.data)...)
+		elem := xsp2co1.NewXsp2Co1(atomsFromWord(g.data)...)
 		return 1, elem.Mmdata()
 	case 1:
 		// g is definitely not in G_x0. If we only need to
@@ -1434,7 +1010,7 @@ func (g *MM) ChiGx0() [4]int {
 	if h == nil {
 		panic("ChiGx0: element is not in the subgroup G_x0")
 	}
-	elem := NewXsp2Co1(atomsFromWord(h)...)
+	elem := xsp2co1.NewXsp2Co1(atomsFromWord(h)...)
 	return elem.ChiGx0()
 }
 
@@ -1475,7 +1051,7 @@ func (g *MM) ChiPowers(maxE, ntrials int) (int, ChiMap, *MM) {
 		chi[o>>1] = 4371
 	}
 	if cur.InGx0() {
-		x := NewXsp2Co1(atomsFromWord(cur.checkInGx0())...)
+		x := xsp2co1.NewXsp2Co1(atomsFromWord(cur.checkInGx0())...)
 		for e := range divisors {
 			if _, done := chi[e]; !done && e <= maxE {
 				chi[e] = x.Pow(e).ChiGx0()[0]
@@ -1576,7 +1152,7 @@ func reduceViaPower(g *MM, ntrials int) (*MM, bool) {
 func tryConjugateInvolution(g2 *MM) (it int, h *MM, ok bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			if s, isStr := r.(string); isStr && s == errNotInvolution {
+			if s, isStr := r.(string); isStr && s == xsp2co1.ErrNotInvolution {
 				it, h, ok = 0, nil, false
 				return
 			}
@@ -1592,12 +1168,12 @@ func tryConjugateInvolution(g2 *MM) (it int, h *MM, ok bool) {
 
 // atomsFromWord converts an atom word to a slice of
 // XspAtom values keyed by tag letter.
-func atomsFromWord(w []uint32) []XspAtom {
+func atomsFromWord(w []uint32) []xsp2co1.XspAtom {
 	tagLetters := map[uint32]string{
 		0x1: "d", 0x2: "p", 0x3: "x",
 		0x4: "y", 0x5: "t", 0x6: "l",
 	}
-	out := make([]XspAtom, 0, len(w))
+	out := make([]xsp2co1.XspAtom, 0, len(w))
 	for _, a := range w {
 		tag := (a >> 28) & 7
 		letter, ok := tagLetters[tag]
@@ -1608,7 +1184,7 @@ func atomsFromWord(w []uint32) []XspAtom {
 		if a&0x80000000 != 0 {
 			sign = "-"
 		}
-		out = append(out, XspAtom{Tag: sign + letter, I: int(a & 0xfffffff)})
+		out = append(out, xsp2co1.XspAtom{Tag: sign + letter, I: int(a & 0xfffffff)})
 	}
 	return out
 }

@@ -1,7 +1,18 @@
-package cgt
+// Package leech implements the Leech lattice mod 2
+// (Q_{x0}) layer of the monster's G_{x0} machinery:
+// the XLeech2 element type, its pure (mm-free)
+// constructors, the lattice mod-2/mod-3 operations,
+// the Leech2OpAtom/Leech2OpWord family describing the
+// action of G_{x0} on Q_{x0}, the bm64 basis/radical
+// composites, and the reduction and orbit drivers.
+//
+// The mm-coupled XLeech2 constructors (those that
+// take or yield a monster element, parse a named
+// q-element, or index the short-vector table) live in
+// the flat cgt package, which imports leech.
+package leech
 
 import (
-	"fmt"
 	"math/bits"
 	"math/rand/v2"
 
@@ -28,16 +39,17 @@ func NewXLeech2() *XLeech2 {
 // in Leech lattice encoding. Only bits 0..24 are
 // retained. It mirrors XLeech2(int).
 func NewXLeech2FromInt(v uint32) *XLeech2 {
-	x := xleech2FromInt(v)
+	x := XLeech2FromInt(v)
 	return &x
 }
 
-// xleech2FromInt builds an XLeech2 value (not a
+// XLeech2FromInt builds an XLeech2 value (not a
 // pointer) from a Leech-lattice-encoded integer,
-// retaining only bits 0..24. It is the internal
-// value-returning workhorse behind the public
-// constructors.
-func xleech2FromInt(v uint32) XLeech2 {
+// retaining only bits 0..24. It is the value-returning
+// workhorse behind the public constructors, exported
+// so the flat-cgt mm-coupled constructors can build an
+// XLeech2 without reaching into unexported state.
+func XLeech2FromInt(v uint32) XLeech2 {
 	return XLeech2{ord: v & 0x1ffffff}
 }
 
@@ -69,7 +81,7 @@ func NewXLeech2FromPLoop(d *mat24.PLoop, c *mat24.Cocode) *XLeech2 {
 	if c != nil {
 		val ^= uint32(c.Ord()) & 0xfff
 	}
-	x := xleech2FromInt(val)
+	x := XLeech2FromInt(val)
 	return &x
 }
 
@@ -77,163 +89,7 @@ func NewXLeech2FromPLoop(d *mat24.PLoop, c *mat24.Cocode) *XLeech2 {
 // element of Q_{x0}, in Leech lattice encoding. It
 // mirrors XLeech2('r').
 func NewXLeech2Random() *XLeech2 {
-	x := xleech2FromInt(uint32(rand.IntN(0x2000000)))
-	return &x
-}
-
-// NewXLeech2RandomType returns a random element of
-// Q_{x0} whose Leech-lattice-mod-2 image has the
-// given type. It mirrors XLeech2('r', vtype).
-//
-// NewXLeech2RandomType panics if vtype is not 0, 2,
-// 3 or 4, or if no element of type 3 or 4 is found
-// after 1000 rejection samples.
-func NewXLeech2RandomType(vtype int) *XLeech2 {
-	x := xleech2FromInt(RandXleech2Type(vtype))
-	return &x
-}
-
-// RandXleech2Type returns the Leech-lattice encoding
-// of a random element of Q_{x0} whose image in the
-// Leech lattice mod 2 has the given type. It mirrors
-// rand_xleech2_type.
-//
-// RandXleech2Type panics if vtype is not 0, 2, 3 or
-// 4, or if no element of type 3 or 4 is found after
-// 1000 rejection samples.
-func RandXleech2Type(vtype int) uint32 {
-	switch vtype {
-	case 0:
-		return 0
-	case 2:
-		ve := 300 + rand.IntN(98280) // randint(300, 98579)
-		vs := IndexExternToSparse(ve)
-		sign := uint32(rand.IntN(2))
-		return IndexSparseToLeech2(vs) ^ (sign << 24)
-	case 3, 4:
-		for i := 0; i < 1000; i++ {
-			v := uint32(rand.IntN(0x2000000)) // randint(0, 0x1ffffff)
-			if int(generator.Leech2Type(v)) == vtype {
-				return v
-			}
-		}
-		panic("RandXleech2Type: no random type-3/4 element found")
-	default:
-		panic(fmt.Sprintf("RandXleech2Type: illegal type %d", vtype))
-	}
-}
-
-// NewXLeech2FromShort returns the index-th positive
-// short element of Q_{x0}. It mirrors
-// XLeech2('short', index).
-//
-// NewXLeech2FromShort panics if index is not in the
-// range 0 <= index < 98280.
-func NewXLeech2FromShort(index int) *XLeech2 {
-	if index < 0 || index >= 98280 {
-		panic(fmt.Sprintf("NewXLeech2FromShort: index %d out of range [0, 98280)", index))
-	}
-	vs := IndexExternToSparse(index + 300)
-	x := xleech2FromInt(IndexSparseToLeech2(vs))
-	return &x
-}
-
-// NewXLeech2FromMM extracts the Q_{x0} component of
-// the monster element g. It mirrors XLeech2(MM).
-//
-// NewXLeech2FromMM panics if g is nil, or if g does
-// not lie in the subgroup Q_{x0} of the monster.
-func NewXLeech2FromMM(g *MM) *XLeech2 {
-	if g == nil {
-		panic("NewXLeech2FromMM: nil MM")
-	}
-	x := xleech2FromInt(MMToQX0(g))
-	return &x
-}
-
-// MMToQX0 returns the Leech-lattice encoding of the
-// monster element g, which must lie in the subgroup
-// Q_{x0}. It mirrors MM_to_Q_x0: it checks G_x0
-// membership, reduces g, then folds the x (tag 3)
-// and d (tag 1) atoms of the reduced word into a
-// Leech-lattice value.
-//
-// MMToQX0 panics if g is not in the subgroup Q_{x0}
-// of the monster.
-func MMToQX0(g *MM) uint32 {
-	// Operate on a copy so the caller's element is
-	// neither mutated nor reduced as a side effect.
-	h := &MM{data: append([]uint32(nil), g.data...)}
-	if h.checkInGx0() == nil {
-		panic("MMToQX0: monster element is not in subgroup Q_x0")
-	}
-	h.Reduce()
-	var res uint32
-	for _, atom := range h.data {
-		tag := (atom >> 28) & 0x0f
-		switch {
-		case res == 0 && tag == 3:
-			res = ((atom & 0x1fff) << 12) ^ mat24.PloopTheta(atom)
-		case tag == 1:
-			res ^= atom & 0xfff
-		case tag != 0:
-			panic("MMToQX0: monster element is not in subgroup Q_x0")
-		}
-	}
-	return res
-}
-
-// NewXLeech2FromBasisVector returns the Q_{x0}
-// element corresponding to a (possibly negated)
-// basis vector of the representation rho, named by
-// a single tag letter (one of B, C, T, X) and the
-// indices i0, i1. It mirrors the BCTXE letter path
-// of the XLeech2 constructor.
-//
-// NewXLeech2FromBasisVector panics if the tag is not
-// a recognized short-vector tag or if the resulting
-// basis vector does not correspond to an element of
-// Q_{x0}.
-func NewXLeech2FromBasisVector(tag byte, i0, i1 int) *XLeech2 {
-	t, ok := parseTagLetter(tag)
-	if !ok {
-		panic(fmt.Sprintf("NewXLeech2FromBasisVector: illegal tag %q", string(tag)))
-	}
-	a := tupleToSparse(0xff, Tuple{Factor: 1, Tag: t, I0: i0, I1: i1})
-	if len(a) != 1 {
-		panic(fmt.Sprintf("NewXLeech2FromBasisVector: tag %q does not yield a Q_x0 element", string(tag)))
-	}
-	a0 := a[0]
-	d := IndexSparseToLeech2(a0)
-	switch a0 & 0xff {
-	case 0xfe: // scalar -1: negate
-		d ^= 0x1000000
-	case 1: // scalar +1: keep
-	default:
-		d = 0
-	}
-	if d == 0 {
-		panic(fmt.Sprintf("NewXLeech2FromBasisVector: tag %q does not yield a Q_x0 element", string(tag)))
-	}
-	x := xleech2FromInt(d)
-	return &x
-}
-
-// NewXLeech2FromName returns a named Q_{x0} element.
-// Recognized names include "v+", "v-", "Omega",
-// "-Omega", "+", "-", "omega" and "-omega", as well
-// as any value string accepted by the q-atom parser.
-// It mirrors the std_q_element("q", name) path of
-// the XLeech2 constructor.
-//
-// NewXLeech2FromName panics if name cannot be parsed
-// as a Q_{x0} element.
-func NewXLeech2FromName(name string) *XLeech2 {
-	v, err := qElement(name)
-	if err != nil {
-		panic(fmt.Sprintf("NewXLeech2FromName: cannot convert %q to XLeech2: %v", name, err))
-	}
-	x := xleech2FromInt(v)
+	x := XLeech2FromInt(uint32(rand.IntN(0x2000000)))
 	return &x
 }
 
@@ -276,9 +132,9 @@ func Leech2Scalprod(a, b uint32) uint32 {
 	return mat24.Parity12(scalar)
 }
 
-// short3Reduce reduces every coordinate of a
+// Short3Reduce reduces every coordinate of a
 // Leech-mod-3 vector to 0, 1, or 2.
-func short3Reduce(v3 uint64) uint64 {
+func Short3Reduce(v3 uint64) uint64 {
 	a := (v3 & (v3 >> 24)) & 0xffffff
 	v3 ^= a | (a << 24)
 	return v3 & 0xffffffffffff
@@ -337,7 +193,7 @@ func Leech2To3Short(x uint32) uint64 {
 // unique. Returns 0 if v3 is not short. Inverse
 // of Leech2To3Short.
 func Leech3To2Short(x uint64) uint32 {
-	v3 := short3Reduce(x)
+	v3 := Short3Reduce(x)
 	w1 := mat24.Bw24(uint32(v3))
 	w2 := mat24.Bw24(uint32(v3 >> 24))
 	var gcodev, cocodev uint32
@@ -370,7 +226,7 @@ func Leech3To2Short(x uint64) uint32 {
 	default:
 		return 0
 	}
-	gc, ok := vectToGcodeRaw(gcodev)
+	gc, ok := VectToGcodeRaw(gcodev)
 	if !ok || gc&0xfffff000 != 0 {
 		return 0
 	}
@@ -379,11 +235,11 @@ func Leech3To2Short(x uint64) uint32 {
 	return (gc << 12) ^ theta ^ coc
 }
 
-// vectToGcodeRaw returns the Golay code number of
+// VectToGcodeRaw returns the Golay code number of
 // vector v and true, or (0, false) if v is not a
 // code word (the non-panicking analogue of
 // mat24.VectToGcode, matching C mat24_vect_to_gcode).
-func vectToGcodeRaw(v uint32) (uint32, bool) {
+func VectToGcodeRaw(v uint32) (uint32, bool) {
 	cn := mat24.Vintern(v)
 	if cn&0xfff != 0 {
 		return 0, false
@@ -556,13 +412,13 @@ func Leech2MatrixBasis(v2 []uint32) []uint64 {
 	return basis[:dim]
 }
 
-// leech2MatrixOrthogonal computes a basis b of
+// Leech2MatrixOrthogonal computes a basis b of
 // the Leech lattice mod 2 such that b[m..23] is a
 // basis of the orthogonal complement of the space
 // spanned by a[0..k-1]. It returns (m, true), or
 // (0, false) if k > 24. a has k rows; b must have
 // 24 rows.
-func leech2MatrixOrthogonal(a, b []uint64, k int) (int, bool) {
+func Leech2MatrixOrthogonal(a, b []uint64, k int) (int, bool) {
 	if k > 24 {
 		return 0, false
 	}
@@ -594,7 +450,7 @@ func Leech2MatrixRadical(v2 []uint32) []uint64 {
 	var span, ortho [24]uint64
 	basis := make([]uint64, 24)
 	dim := int(getLeech2Basis(v2, span[:], 24))
-	if _, ok := leech2MatrixOrthogonal(span[:], ortho[:], dim); !ok {
+	if _, ok := Leech2MatrixOrthogonal(span[:], ortho[:], dim); !ok {
 		return basis[:0]
 	}
 	swar.Bm64EchelonH(span[:], dim, 24, 24)
@@ -614,9 +470,9 @@ func Leech2MatrixRadical(v2 []uint32) []uint64 {
 	return basis[:res]
 }
 
-// leech3OpPi performs x_pi on a Leech-mod-3
+// Leech3OpPi performs x_pi on a Leech-mod-3
 // vector v3 using permutation perm.
-func leech3OpPi(v3 uint64, perm []byte) uint64 {
+func Leech3OpPi(v3 uint64, perm []byte) uint64 {
 	var w3 uint64
 	for i := uint(0); i < 24; i++ {
 		w3 |= ((v3 >> i) & 0x1000001) << perm[i]
@@ -624,16 +480,16 @@ func leech3OpPi(v3 uint64, perm []byte) uint64 {
 	return w3
 }
 
-// leech3OpY performs y_d on a Leech-mod-3 vector
+// Leech3OpY performs y_d on a Leech-mod-3 vector
 // v3, with d an element of the Parker loop.
-func leech3OpY(v3 uint64, d uint32) uint64 {
+func Leech3OpY(v3 uint64, d uint32) uint64 {
 	v := uint64(mat24.GcodeToVect(d))
 	return v3 ^ (v | (v << 24))
 }
 
-// leech3OpXi performs xi^e on a Leech-mod-3
+// Leech3OpXi performs xi^e on a Leech-mod-3
 // vector v3.
-func leech3OpXi(v3 uint64, e uint32) uint64 {
+func Leech3OpXi(v3 uint64, e uint32) uint64 {
 	e %= 3
 	if e == 0 {
 		return v3
@@ -687,12 +543,12 @@ func Leech3OpVectorWord(v3 uint64, g []uint32) uint64 {
 		case 8 + 2:
 			copy(perm, mat24.M24numToPermSafe(v))
 			copy(permI, mat24.InvPerm(perm))
-			v3 = leech3OpPi(v3, permI)
+			v3 = Leech3OpPi(v3, permI)
 		case 2:
 			copy(perm, mat24.M24numToPermSafe(v))
-			v3 = leech3OpPi(v3, perm)
+			v3 = Leech3OpPi(v3, perm)
 		case 8 + 4, 4:
-			v3 = leech3OpY(v3, v&0x1fff)
+			v3 = Leech3OpY(v3, v&0x1fff)
 		case 8 + 5, 5:
 			if (v+1)&2 != 0 {
 				return 0xffff000000000000
@@ -702,13 +558,13 @@ func Leech3OpVectorWord(v3 uint64, g []uint32) uint64 {
 			fallthrough
 		case 6:
 			if (v+1)&2 != 0 {
-				v3 = leech3OpXi(v3, v&3)
+				v3 = Leech3OpXi(v3, v&3)
 			}
 		default:
 			return 0xffff000000000000
 		}
 	}
-	return short3Reduce(v3)
+	return Short3Reduce(v3)
 }
 
 // Leech2Pow returns the power x1**e of x1 in
@@ -833,4 +689,136 @@ func Leech2OpAtom(x, g uint32) uint32 {
 		return 0xffffffff
 	}
 	return q0
+}
+
+// Leech2OpWord returns g^{-1} q0 g for q0 in
+// Q_{x0} (Leech lattice encoding) and a word g of
+// generators of G_{x0}. Leech2OpWord panics if an
+// atom of g is illegal.
+func Leech2OpWord(x uint32, g []uint32) uint32 {
+	q0 := x & 0x1ffffff
+	for _, atom := range g {
+		q0 = Leech2OpAtom(q0, atom)
+		if q0 == 0xffffffff {
+			panic("leech: illegal atom in Leech2OpWord")
+		}
+	}
+	return q0
+}
+
+// GenLeech2OpWordMany applies the word g to every
+// entry of q in place, returning the number of
+// atoms successfully applied to all entries.
+func GenLeech2OpWordMany(q []uint32, g []uint32) int {
+	for j := range q {
+		q[j] &= 0x1ffffff
+	}
+	next := make([]uint32, len(q))
+	for i, atom := range g {
+		for j, qv := range q {
+			r := Leech2OpAtom(qv, atom)
+			if r == 0xffffffff {
+				return i
+			}
+			next[j] = r
+		}
+		copy(q, next)
+	}
+	return len(g)
+}
+
+// opPermNoSign applies the permutation pi to the Leech
+// lattice mod 2 vector v, ignoring the sign. C function
+// op_perm_nosign.
+func opPermNoSign(v uint32, pi []byte) uint32 {
+	xd := (v >> 12) & 0xfff
+	xdelta := (v ^ uint32(mat24.ThetaTable(xd&0x7ff))) & 0xfff
+	xd = mat24.OpGcodePerm(xd, pi)
+	xdelta = mat24.OpCocodePerm(xdelta, pi)
+	return (xd << 12) ^ xdelta ^ (uint32(mat24.ThetaTable(xd&0x7ff)) & 0xfff)
+}
+
+// opYNoSign applies x_d to the Leech lattice mod 2
+// vector q0, ignoring the sign. C function op_y_nosign.
+func opYNoSign(q0, d uint32) uint32 {
+	odd := 0 - ((q0 >> 11) & 1)
+	thetaQ0 := uint32(mat24.ThetaTable((q0 >> 12) & 0x7ff))
+	thetaY := uint32(mat24.ThetaTable(d & 0x7ff))
+	o := (thetaY & (q0 >> 12)) ^ (q0 & d)
+	o ^= (thetaY >> 12) & 1 & odd
+	o = mat24.Parity12(o)
+	eps := thetaQ0 ^ (thetaY & ^odd) ^ uint32(mat24.ThetaTable(((q0>>12)^d)&0x7ff))
+	q0 ^= (eps & 0xfff) ^ ((d << 12) & 0xfff000 & odd)
+	q0 ^= o << 23
+	return q0
+}
+
+// GenLeech2OpWordLeech2Many applies the word g (or its
+// inverse if back) to every entry of a in place,
+// ignoring the sign of each Leech-mod-2 vector. It
+// returns 0 on success or a negative value if any
+// generator in g is not in G_x0. C function
+// gen_leech2_op_word_leech2_many.
+//
+// Unlike GenLeech2OpWordMany, this is the sign-free
+// operation: tags x, d and the identity are ignored (they
+// only change signs), tags p/y/l act via the nosign
+// helpers, and a nonzero tau (tag t) or opaque atom
+// (tag 7) makes the word leave G_x0.
+func GenLeech2OpWordLeech2Many(a []uint32, g []uint32, back bool) int {
+	step := 1
+	imask := uint32(0)
+	idx := 0
+	if back {
+		step = -1
+		imask = 0x80000000
+		idx = len(g) - 1
+	}
+	for n := len(g); n > 0; n-- {
+		v := g[idx] ^ imask
+		idx += step
+		tag := v & 0xf0000000
+		v &= 0xfffffff
+		switch tag {
+		case 0xa0000000: // Ip
+			perm := mat24.M24numToPermSafe(v)
+			perm = mat24.InvPerm(perm)
+			for j := range a {
+				a[j] = opPermNoSign(a[j], perm)
+			}
+		case 0x20000000: // p
+			perm := mat24.M24numToPermSafe(v)
+			for j := range a {
+				a[j] = opPermNoSign(a[j], perm)
+			}
+		case 0xc0000000: // Iy
+			y := uint32(mat24.ThetaTable(v&0x7ff)) & 0x1000
+			y ^= v & 0x1fff
+			for j := range a {
+				a[j] = opYNoSign(a[j], y&0x1fff)
+			}
+		case 0x40000000: // y
+			y := v & 0x1fff
+			for j := range a {
+				a[j] = opYNoSign(a[j], y&0x1fff)
+			}
+		case 0xe0000000, 0x60000000: // Il, l
+			if tag == 0xe0000000 {
+				v ^= 3
+			}
+			for j := range a {
+				a[j] = generator.XiOpXiNoSign(a[j], int(v))
+			}
+		case 0xd0000000, 0x50000000: // It, t
+			if (v-1)&2 == 0 {
+				return -1
+			}
+		case 0x70000000, 0xf0000000:
+			if v != 0 {
+				return -1
+			}
+		default: // 1, I1, d, Id, x, Ix: no effect on sign-free image
+		}
+	}
+	return 0
 }

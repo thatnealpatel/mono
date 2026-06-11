@@ -14,9 +14,16 @@ package cgt
 
 // Derived tables (verified against checked-in goldens by _gen):
 //go:generate go run -C _gen . -out ../mat24/mat24_gen.go
-//go:generate go run -C _gen . -out ../mm_op_xi_gen.go
 //go:generate go run -C _gen . -out ../mm_op_p_gen.go
 //go:generate go run -C _gen . -out ../monster_order_gen.go
+
+// The xi operation tables are no longer generated: package
+// cgt builds all twenty (xiPerm00..xiPerm41 and
+// xiSign00..xiSign41) at init from generator.XiOpXiShort
+// (see mm_op_xi.go). The independent first-principles
+// derivation that formerly verified the emitted file now
+// runs as a regression cross-check in
+// mm_op_xi_regress_test.go on every `go test`.
 
 // API-surface manifests (cython.yaml, python.yaml, go.yaml in _api):
 //go:generate go run -C _api .

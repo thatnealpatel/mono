@@ -1,4 +1,4 @@
-package cgt
+package leech
 
 import (
 	"patel.codes/cgt/generator"
@@ -149,10 +149,10 @@ func findOctadPermutation(v uint32, pRes *uint32) int32 {
 *** Subtype starters (gen_leech_type.c)
 *************************************************************************/
 
-// genLeech2StartType24 returns the subtype of a
+// GenLeech2StartType24 returns the subtype of a
 // type-2 vector v with v+beta of type 4 (0 for
 // v=beta+Omega), or a negative value.
-func genLeech2StartType24(v uint32) int32 {
+func GenLeech2StartType24(v uint32) int32 {
 	if v&0x200000 != 0 {
 		return -1
 	}
@@ -192,10 +192,10 @@ func genLeech2StartType24(v uint32) int32 {
 	}
 }
 
-// genLeech2StartType4 returns the subtype of the
+// GenLeech2StartType4 returns the subtype of the
 // type-4 vector v used for reduction (0 for
 // v=Omega), or a negative value.
-func genLeech2StartType4(v uint32) int32 {
+func GenLeech2StartType4(v uint32) int32 {
 	v &= 0xffffff
 	if v&0x7ff800 == 0 {
 		if v&0x7fffff == 0 {
@@ -254,11 +254,11 @@ func genLeech2StartType4(v uint32) int32 {
 *** Reduce type-2, type-2-ortho and type-4 vectors
 *************************************************************************/
 
-// genLeech2ReduceType2 maps a type-2 vector v to
+// GenLeech2ReduceType2 maps a type-2 vector v to
 // the standard short vector beta, storing the
 // word in pgOut and returning its length, or a
 // negative value.
-func genLeech2ReduceType2(v uint32, pgOut []uint32) int {
+func GenLeech2ReduceType2(v uint32, pgOut []uint32) int {
 	end := 0
 	vtype := generator.Leech2Subtype(v)
 	if (vtype >> 4) != 2 {
@@ -498,12 +498,12 @@ func reduceType4(v, vtype uint32, pgOut []uint32) int {
 	return -1
 }
 
-// genLeech2ReduceType4 maps the type-4 vector v
+// GenLeech2ReduceType4 maps the type-4 vector v
 // to the standard frame Omega, storing the word
 // in pgOut and returning its length or a negative
 // value.
-func genLeech2ReduceType4(v uint32, pgOut []uint32) int {
-	vtype := genLeech2StartType4(v)
+func GenLeech2ReduceType4(v uint32, pgOut []uint32) int {
+	vtype := GenLeech2StartType4(v)
 	if vtype <= 0 {
 		return int(vtype)
 	}
@@ -513,10 +513,10 @@ func genLeech2ReduceType4(v uint32, pgOut []uint32) int {
 	return reduceType4(v, uint32(vtype), pgOut)
 }
 
-// genLeech2ReduceType2Ortho maps a type-2 vector
+// GenLeech2ReduceType2Ortho maps a type-2 vector
 // v orthogonal to beta to e_2+e_3, fixing beta.
-func genLeech2ReduceType2Ortho(v uint32, pgOut []uint32) int {
-	vtype := genLeech2StartType24(v)
+func GenLeech2ReduceType2Ortho(v uint32, pgOut []uint32) int {
+	vtype := GenLeech2StartType24(v)
 	if vtype <= 0 {
 		return int(vtype)
 	}

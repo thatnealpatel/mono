@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"patel.codes/cgt/generator"
+	"patel.codes/cgt/leech"
 )
 
 // gen_leech2.go holds the field-independent helpers
@@ -59,7 +60,7 @@ func genLeech2MapStdSubframe(g []uint32, length int, a []uint32) int {
 		q[i] = 1 << uint(i)
 	}
 	q[11] = 0x800000
-	if genLeech2OpWordMany(q[:], g[:length]) != length {
+	if leech.GenLeech2OpWordMany(q[:], g[:length]) != length {
 		return -1
 	}
 	for i := 0; i < 11; i++ {

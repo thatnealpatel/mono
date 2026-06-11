@@ -1256,6 +1256,17 @@ var pkgRules = []pkgRule{
 	{prefix: "apply_", pkg: "generator"},
 }
 
+// moduleFnPkgOverride reroutes a Python module-level free function from the
+// package its module rule would assign to a different home package (P3a).
+// It is keyed by the dotless Python provenance name. The two xleech2 module
+// functions that fold the monster representation — MM_to_Q_x0 (takes an *MM)
+// and rand_xleech2_type (indexes the mm-rep short-vector table) — belong in
+// mm even though mmgroup.structures.xleech2 otherwise routes to leech.
+var moduleFnPkgOverride = map[string]string{
+	"MM_to_Q_x0":        "mm",
+	"rand_xleech2_type": "mm",
+}
+
 // renameOverrides maps a C symbol to the Go name it must use, bypassing
 // the computed name from goName. It resolves collisions that arise when
 // collapsing width-bearing C prefixes into a single package: e.g.
@@ -1418,6 +1429,12 @@ type goFunc struct {
 	// monomorphic method. When present, Return holds the principal
 	// (first-arm) return and the full ladder is emitted as a dispatch:
 	// block for the human to fold into per-branch Go methods.
+	Pkg string // per-entry target-package override for a manualConstructors
+	// sibling whose home differs from its class's Pkg (P3a): a constructor
+	// that couples to a type outside the leaf package — e.g. an XLeech2
+	// constructor that takes/yields an *MM or indexes the mm-rep short-vector
+	// table — lands in the mm package while the pure XLeech2 surface stays in
+	// leech. "" means inherit the manualClass Pkg.
 }
 
 type goParam struct {
@@ -2260,13 +2277,16 @@ var manualConstructors = []manualClass{
 		Siblings: []goFunc{
 			{Name: "NewXLeech2FromInt", Py: "XLeech2.__init__", Return: "*XLeech2", Params: []goParam{{Name: "v", Type: "uint32"}}},
 			{Name: "NewXLeech2Random", Py: "XLeech2.__init__", Return: "*XLeech2"},
-			{Name: "NewXLeech2RandomType", Py: "XLeech2.__init__", Return: "*XLeech2", Params: []goParam{{Name: "vtype", Type: "int"}}},
-			{Name: "NewXLeech2FromShort", Py: "XLeech2.__init__", Return: "*XLeech2", Params: []goParam{{Name: "index", Type: "int"}}},
+			// The mm-coupled XLeech2 constructors land in mm (P3a): they
+			// take/yield an *MM, parse a named q-element, or index the mm-rep
+			// short-vector table; the pure XLeech2 surface stays in leech.
+			{Name: "NewXLeech2RandomType", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "mm", Params: []goParam{{Name: "vtype", Type: "int"}}},
+			{Name: "NewXLeech2FromShort", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "mm", Params: []goParam{{Name: "index", Type: "int"}}},
 			{Name: "NewXLeech2FromPLoop", Py: "XLeech2.__init__", Return: "*XLeech2", Params: []goParam{{Name: "d", Type: "*PLoop"}, {Name: "c", Type: "*Cocode"}}},
 			{Name: "NewXLeech2Copy", Py: "XLeech2.__init__", Return: "*XLeech2", Params: []goParam{{Name: "x", Type: "*XLeech2"}}},
-			{Name: "NewXLeech2FromMM", Py: "XLeech2.__init__", Return: "*XLeech2", Params: []goParam{{Name: "g", Type: "*MM"}}},
-			{Name: "NewXLeech2FromBasisVector", Py: "XLeech2.__init__", Return: "*XLeech2", Params: []goParam{{Name: "tag", Type: "byte"}, {Name: "i0", Type: "int"}, {Name: "i1", Type: "int"}}},
-			{Name: "NewXLeech2FromName", Py: "XLeech2.__init__", Return: "*XLeech2", Params: []goParam{{Name: "name", Type: "string"}}},
+			{Name: "NewXLeech2FromMM", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "mm", Params: []goParam{{Name: "g", Type: "*MM"}}},
+			{Name: "NewXLeech2FromBasisVector", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "mm", Params: []goParam{{Name: "tag", Type: "byte"}, {Name: "i0", Type: "int"}, {Name: "i1", Type: "int"}}},
+			{Name: "NewXLeech2FromName", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "mm", Params: []goParam{{Name: "name", Type: "string"}}},
 		},
 	},
 	{
@@ -2400,7 +2420,20 @@ func mergeManualConstructors(pkgs []goPackage) error {
 		} else {
 			p.Funcs[principalIdx] = principal
 		}
-		p.Funcs = append(p.Funcs, mc.Siblings...)
+		// Route each sibling to its class package, unless it carries a
+		// per-entry Pkg override (P3a) that lands it in a different package.
+		for _, sib := range mc.Siblings {
+			dst := p
+			if sib.Pkg != "" {
+				oi, ok := pkgIdx[sib.Pkg]
+				if !ok {
+					return fmt.Errorf("manual constructor %s (class %s): override package %q not in plan", sib.Name, mc.Class, sib.Pkg)
+				}
+				dst = &pkgs[oi]
+			}
+			sib.Pkg = "" // not emitted; the package is positional in go.yaml
+			dst.Funcs = append(dst.Funcs, sib)
+		}
 	}
 	return nil
 }
@@ -3584,6 +3617,17 @@ var pyToCAlias = map[string]string{
 // it lands on — and correlates with — the same go.yaml entry. Otherwise
 // it is a pure-Python helper routed by its defining module.
 func goSiteForModuleFn(fn pyModuleFn) (pkg, name string) {
+	pkg, name = goSiteForModuleFnBase(fn)
+	// A per-function package override reroutes a folded module function to a
+	// different home than its module rule assigns, keeping the computed name
+	// (P3a: the mm-coupled xleech2 module functions move from leech to mm).
+	if ov, has := moduleFnPkgOverride[fn.Name]; has && pkg != "" {
+		pkg = ov
+	}
+	return pkg, name
+}
+
+func goSiteForModuleFnBase(fn pyModuleFn) (pkg, name string) {
 	// A Cython wrapper whose Python name drops a C prefix (the gen_xi_*
 	// table builders) is routed by its aliased C symbol so it correlates
 	// onto the C entry rather than producing a Python-only duplicate (A2).

@@ -1,11 +1,13 @@
-package cgt
+package xsp2co1
 
 import (
 	"errors"
 	"sync"
 
 	"patel.codes/cgt/generator"
+	"patel.codes/cgt/leech"
 	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/qstate12"
 	"patel.codes/cgt/swar"
 )
 
@@ -76,6 +78,24 @@ const (
 	atomTagL  = 0x60000000
 	atomTagIL = 0xE0000000
 )
+
+// atomTagAll masks the tag (and sign) bits of an
+// atom; atomData masks the 28-bit value field.
+const (
+	atomTagAll = 0xf0000000
+	atomData   = 0xfffffff
+)
+
+// invertWord inverts the word w of generator atoms
+// in place (negate each atom's sign, reverse order).
+func invertWord(w []uint32) {
+	for i := range w {
+		w[i] ^= 0x80000000
+	}
+	for i, j := 0, len(w)-1; i < j; i, j = i+1, j-1 {
+		w[i], w[j] = w[j], w[i]
+	}
+}
 
 /*************************************************************************
 *** Public type and constructors
@@ -169,8 +189,8 @@ func convPauliVectorXspecialNoSign(x uint32) uint32 {
 // convConjugateBasis applies a Hadamard gate to
 // the sign qubit, converting between the standard
 // basis and the basis (d)' of 4096_x.
-func convConjugateBasis(s *qs12) {
-	qsGateH(s, 0x800800)
+func convConjugateBasis(s *qstate12.QState12) {
+	qstate12.QsGateH(s, 0x800800)
 }
 
 /*************************************************************************
@@ -223,156 +243,7 @@ func compute3Sum(v31, v32 uint64) uint64 {
 
 // genLeech3Neg negates a Leech-mod-3 vector.
 func genLeech3Neg(v3 uint64) uint64 {
-	return short3Reduce(((v3 & 0xffffff) << 24) | ((v3 >> 24) & 0xffffff))
-}
-
-/*************************************************************************
-*** qstate helpers not provided by qstate.go
-*************************************************************************/
-
-// qsMonomialColumnMatrix sets s to a monomial
-// column matrix of nqb qubits defined by pa, as
-// qstate12_monomial_column_matrix.
-func qsMonomialColumnMatrix(s *qs12, nqb int, pa []uint64) {
-	factor := int64(((pa[0] >> uint(nqb)) & 1) << 2)
-	s.nrows = nqb + 1
-	s.ncols = nqb << 1
-	if s.nrows+s.ncols > qsMaxCols || s.nrows > qsMaxRows {
-		panic("cgt: quadratic state too large")
-	}
-	s.grow(s.nrows)
-	m := s.data
-	mask1 := (uint64(1) << uint(nqb)) - 1
-	m[0] = (pa[0] & mask1) << uint(nqb)
-	for i := 1; i <= nqb; i++ {
-		mask1 += mask1 + 1
-		m[i] = (uint64(1) << uint(i-1)) | ((pa[i] & mask1) << uint(nqb))
-	}
-	qsSet1(s, 2*nqb, nqb+1)
-	s.shape1 = nqb
-	s.factor = factor
-}
-
-// qsSet1 applies qstate12_set with mode 1 to the
-// first nrows rows of s, treating its ncols-bit A
-// part and the trailing Q part.
-func qsSet1(s *qs12, nqb, nrows int) {
-	m := s.data
-	mask := ((uint64(1) << uint(nqb)) << uint(nrows)) - 1
-	for i := 0; i < nrows; i++ {
-		m[i] &= mask
-	}
-	mask = uint64(1) << uint(nqb)
-	m[0] &= mask - 1
-	for i := 1; i < nrows; i++ {
-		m[i] &= (mask << uint(i+1)) - 1
-	}
-	for i := 0; i < nrows; i++ {
-		for j := i + 1; j < nrows; j++ {
-			m[i] ^= ((m[j] >> uint(i)) & mask) << uint(j)
-		}
-	}
-	s.nrows = nrows
-	s.ncols = nqb
-	s.factor = 0
-	s.shape1 = 0
-	s.reduced = false
-}
-
-// qsMonomialMatrixRowOp obtains the affine
-// operation of a monomial state on its unit
-// vector labels, as qstate12_monomial_matrix_row_op.
-// It returns the number r+1 of rows, or a negative
-// value if s is not monomial.
-func qsMonomialMatrixRowOp(s *qs12, pa []uint32) int {
-	qsReduce(s)
-	cols := s.shape1
-	rows := s.ncols - cols
-	if s.nrows != rows+1 {
-		return -1
-	}
-	m := s.data
-	rowMask := ((uint64(1) << uint(rows)) - 1) << uint(cols)
-	colMask := (uint64(1) << uint(cols)) - 1
-	dataMask := uint64(1) << uint(rows+cols)
-	var err uint64
-	pa[0] = uint32(m[0] & colMask)
-	for i := 1; i <= rows; i++ {
-		dataMask >>= 1
-		err |= (m[i] ^ dataMask) & rowMask
-		pa[rows+1-i] = uint32(m[i] & colMask)
-	}
-	if err != 0 {
-		return -1
-	}
-	return rows + 1
-}
-
-// qsMatTraceFactor reduces s, requires it to be
-// square, and returns the trace as an encoded
-// factor (qstate12_mat_trace_factor).
-func qsMatTraceFactor(s *qs12) int64 {
-	nrows := s.shape1
-	qsReduce(s)
-	if 2*nrows != s.ncols {
-		panic("cgt: trace of non-square matrix")
-	}
-	q := s.copy()
-	for i := 0; i < nrows; i++ {
-		qsGateCtrlNot(q, uint64(1)<<uint(i), uint64(1)<<uint(nrows+i))
-	}
-	qsRestrict(q, nrows, nrows)
-	qsSumCols(q, 0, nrows)
-	qsReduce(q)
-	if q.ncols != 0 {
-		panic("cgt: trace internal error")
-	}
-	if q.nrows != 0 {
-		return int64(uint64(q.factor) & factorMask)
-	}
-	return 8
-}
-
-// qsMatItrace returns the integer trace of the
-// square state s (qstate12_mat_itrace).
-func qsMatItrace(s *qs12) int64 {
-	return factorToInt32(qsMatTraceFactor(s))
-}
-
-// qsToSymplecticRow returns row n of the
-// symplectic bit matrix of the invertible square
-// state s (qstate12_to_symplectic_row). It panics
-// if s is not an invertible (k,k) matrix or n is
-// out of range.
-func qsToSymplecticRow(s *qs12, n int) uint32 {
-	m, dRows, k := qsSymplecticPrep(s)
-	if k == 0 {
-		return 0
-	}
-	swar.Bm64XchBits(m, dRows, 2*k+1, (1<<uint(k))-1)
-	res := swar.Bm64EchelonL(m, dRows, 2*k+1, dRows)
-	if res != dRows {
-		panic("cgt: matrix is not invertible")
-	}
-	var a uint64
-	if n < k {
-		pd := s.data[1:]
-		for j := 0; j < k; j++ {
-			a ^= ((pd[j] >> uint(n)) & 1) << uint(j)
-		}
-		for j := k; j < dRows; j++ {
-			mask := 0 - ((pd[j] >> uint(n)) & 1)
-			a ^= m[j] & mask
-		}
-	} else if n < k+k {
-		a = m[n-k]
-	} else {
-		panic("cgt: qubit index out of range")
-	}
-	a &= (uint64(1) << uint(2*k)) - 1
-	one := []uint64{a}
-	swar.Bm64ReverseBits(one, 1, k, 0)
-	return uint32(one[0])
+	return leech.Short3Reduce(((v3 & 0xffffff) << 24) | ((v3 >> 24) & 0xffffff))
 }
 
 /*************************************************************************
@@ -382,18 +253,14 @@ func qsToSymplecticRow(s *qs12, n int) uint32 {
 // xsp2co1ElemToQsI loads x_g^{-1} from an element
 // of G_{x0} into a fresh qstate (the inverse of
 // component x_g, of shape (12,12)).
-func xsp2co1ElemToQsI(elem []uint64) *qs12 {
-	s := &qs12{
-		nrows:  25,
-		ncols:  24,
-		shape1: 12,
-		factor: -12 * 16,
-	}
-	s.data = make([]uint64, 25, qsMaxRows)
-	copy(s.data, elem[1:26])
-	for s.nrows > 1 && s.data[s.nrows-1] == 0 {
-		s.nrows--
-		s.factor += 16
+func xsp2co1ElemToQsI(elem []uint64) *qstate12.QState12 {
+	s := qstate12.NewQState12Sized(25, 24, 12, -12*16)
+	d := make([]uint64, 25, qstate12.QsMaxRows)
+	copy(d, elem[1:26])
+	s.SetData(d)
+	for s.Nrows() > 1 && d[s.Nrows()-1] == 0 {
+		s.SetNrows(s.Nrows() - 1)
+		s.AddFactor(16)
 	}
 	return s
 }
@@ -401,28 +268,29 @@ func xsp2co1ElemToQsI(elem []uint64) *qs12 {
 // xsp2co1QsToElemINoreduce stores the (unreduced)
 // element with x_g^{-1} given by s and Leech-mod-3
 // vector v3 into elem.
-func xsp2co1QsToElemINoreduce(s *qs12, v3 uint64, elem []uint64) {
-	if s.nrows > 25 {
+func xsp2co1QsToElemINoreduce(s *qstate12.QState12, v3 uint64, elem []uint64) {
+	if s.Nrows() > 25 {
 		panic("cgt: quadratic state buffer overflow")
 	}
-	for i := 0; i < s.nrows; i++ {
-		elem[i+1] = s.data[i] & 0x3fffffeffffff
+	d := s.Data()
+	for i := 0; i < s.Nrows(); i++ {
+		elem[i+1] = d[i] & 0x3fffffeffffff
 	}
-	for i := s.nrows; i < 25; i++ {
+	for i := s.Nrows(); i < 25; i++ {
 		elem[i+1] = 0
 	}
-	if s.factor&4 != 0 {
+	if s.Factor()&4 != 0 {
 		v3 ^= 0xffffffffffff
 	}
-	elem[0] = short3Reduce(v3)
+	elem[0] = leech.Short3Reduce(v3)
 }
 
 // xsp2co1QsToElemI reduces and checks s, then
 // stores the element with x_g^{-1} = s and
 // Leech-mod-3 vector vg into elem.
-func xsp2co1QsToElemI(s *qs12, vg uint64, elem []uint64) {
-	qsReduce(s)
-	qsCheck(s)
+func xsp2co1QsToElemI(s *qstate12.QState12, vg uint64, elem []uint64) {
+	qstate12.QsReduce(s)
+	qstate12.QsCheck(s)
 	xsp2co1QsToElemINoreduce(s, vg, elem)
 }
 
@@ -440,7 +308,7 @@ func xsp2co1ReduceElem(elem []uint64) {
 // xsp2co1NegElem negates an element of G_{x0} in
 // place (multiplication by x_{-1}).
 func xsp2co1NegElem(elem []uint64) {
-	elem[0] = short3Reduce(^elem[0] & 0xffffffffffff)
+	elem[0] = leech.Short3Reduce(^elem[0] & 0xffffffffffff)
 }
 
 // xsp2co1CopyElem copies a G_{x0} element.
@@ -485,7 +353,7 @@ func xsp2co1IsUnitElem(elem []uint64) bool {
 // returned as 24 uint64 rows.
 func xsp2co1ElemToBitmatrix(elem []uint64) [24]uint64 {
 	s := xsp2co1ElemToQsI(elem)
-	bm := qsToSymplectic(s)
+	bm := qstate12.QsToSymplectic(s)
 	var pA [24]uint64
 	copy(pA[:len(bm)], bm)
 	for i := 0; i < 24; i++ {
@@ -504,8 +372,8 @@ func xsp2co1ElemToBitmatrix(elem []uint64) [24]uint64 {
 // not orthogonal to both v3_1 and v3_2, or 0 if
 // none exists.
 func xsp2co1FindChainShort3(v31, v32 uint64) uint64 {
-	v31 = short3Reduce(v31)
-	v32 = short3Reduce(v32)
+	v31 = leech.Short3Reduce(v31)
+	v32 = leech.Short3Reduce(v32)
 	support1 := uint32((v31 | (v31 >> 24)) & 0xffffff)
 	support2 := uint32((v32 | (v32 >> 24)) & 0xffffff)
 	if support1 & ^support2 != 0 {
@@ -558,28 +426,28 @@ func xsp2co1FindChainShort3(v31, v32 uint64) uint64 {
 // represented by s, given the image of the first.
 // It panics if adjacent vectors are orthogonal or
 // not short (the C error path).
-func xsp2co1ChainShort3(s *qs12, n int, psrc, pdest []uint64) {
-	if s.ncols != 24 || s.shape1 != 12 {
+func xsp2co1ChainShort3(s *qstate12.QState12, n int, psrc, pdest []uint64) {
+	if s.Ncols() != 24 || s.Shape1() != 12 {
 		panic("cgt: bad quadratic state shape for chain")
 	}
 	if n <= 1 {
 		return
 	}
-	bm := qsToSymplectic(s)
+	bm := qstate12.QsToSymplectic(s)
 	ok := true
 	for i := 1; i < n; i++ {
-		v := uint64(Leech3To2Short(psrc[i]))
+		v := uint64(leech.Leech3To2Short(psrc[i]))
 		v = uint64(convPauliVectorXspecialNoSign(uint32(v)))
 		var w uint64
 		for j := 0; j < 24; j++ {
 			w ^= bm[j] & (0 - ((v >> uint(j)) & 1))
 		}
 		w = uint64(convPauliVectorXspecialNoSign(uint32(w)))
-		w = Leech2To3Short(uint32(w))
+		w = leech.Leech2To3Short(uint32(w))
 		srcProd := short3Scalprod(psrc[i-1], psrc[i])
 		prod := short3Scalprod(pdest[i-1], w)
 		if prod != srcProd {
-			w = short3Reduce(^w & 0xffffffffffff)
+			w = leech.Short3Reduce(^w & 0xffffffffffff)
 		}
 		pdest[i] = w
 		ok = ok && srcProd != 0 && prod != 0
@@ -592,7 +460,7 @@ func xsp2co1ChainShort3(s *qs12, n int, psrc, pdest []uint64) {
 // xsp2co1MapShort3 returns the image of src2
 // under the element represented by s, given that
 // s maps src1 to dest1.
-func xsp2co1MapShort3(s *qs12, src1, dest1, src2 uint64) uint64 {
+func xsp2co1MapShort3(s *qstate12.QState12, src1, dest1, src2 uint64) uint64 {
 	var asrc, adest [3]uint64
 	asrc[0] = src1
 	adest[0] = dest1
@@ -611,7 +479,7 @@ func xsp2co1MapShort3(s *qs12, src1, dest1, src2 uint64) uint64 {
 func xsp2co1MulElem(elem1, elem2, elem3 []uint64) {
 	qs1 := xsp2co1ElemToQsI(elem1)
 	qs2 := xsp2co1ElemToQsI(elem2)
-	qs3 := qsMatmul(qs2, qs1)
+	qs3 := qstate12.QsMatmul(qs2, qs1)
 	v := xsp2co1MapShort3(qs2, xspStdV3, elem2[0], elem1[0])
 	xsp2co1QsToElemINoreduce(qs3, v, elem3)
 }
@@ -619,8 +487,8 @@ func xsp2co1MulElem(elem1, elem2, elem3 []uint64) {
 // xsp2co1InvElem computes elem1^{-1} into elem2.
 func xsp2co1InvElem(elem1, elem2 []uint64) {
 	qs1 := xsp2co1ElemToQsI(elem1)
-	qs2 := qs1.copy()
-	qsMatInv(qs2)
+	qs2 := qs1.Copy()
+	qstate12.QsMatInv(qs2)
 	v := xsp2co1MapShort3(qs2, elem1[0], xspStdV3, xspStdV3)
 	xsp2co1QsToElemINoreduce(qs2, v, elem2)
 }
@@ -629,11 +497,11 @@ func xsp2co1InvElem(elem1, elem2 []uint64) {
 // elem2 into elem3.
 func xsp2co1ConjElem(elem1, elem2, elem3 []uint64) {
 	qs2 := xsp2co1ElemToQsI(elem2)
-	qs3 := qs2.copy()
-	qsMatInv(qs3)
+	qs3 := qs2.Copy()
+	qstate12.QsMatInv(qs3)
 	qs1 := xsp2co1ElemToQsI(elem1)
-	qs3 = qsMatmul(qs1, qs3)
-	qs3 = qsMatmul(qs2, qs3)
+	qs3 = qstate12.QsMatmul(qs1, qs3)
+	qs3 = qstate12.QsMatmul(qs2, qs3)
 	v2 := xsp2co1MapShort3(qs2, xspStdV3, elem2[0], elem1[0])
 	v := xsp2co1MapShort3(qs3, elem2[0], v2, xspStdV3)
 	xsp2co1QsToElemI(qs3, v, elem3)
@@ -686,11 +554,11 @@ func xsp2co1XspecialConjugate(elem []uint64, ax []uint64, sign bool) {
 		return
 	}
 	qs := xsp2co1ElemToQsI(elem)
-	qs1 := qs.copy()
+	qs1 := qs.Copy()
 	for i := range ax {
 		ax[i] = uint64(convPauliVectorXspecial(uint32(ax[i])))
 	}
-	out := qsPauliConjugate(qs1, ax)
+	out := qstate12.QsPauliConjugate(qs1, ax)
 	copy(ax, out)
 	for i := range ax {
 		ax[i] = uint64(convPauliVectorXspecial(uint32(ax[i])))
@@ -701,7 +569,7 @@ func xsp2co1XspecialConjugate(elem []uint64, ax []uint64, sign bool) {
 // in Leech lattice encoding, ignoring the sign.
 func xsp2co1XspecialImgOmega(elem []uint64) uint32 {
 	qs := xsp2co1ElemToQsI(elem)
-	res := qsToSymplecticRow(qs, 11)
+	res := qstate12.QsToSymplecticRow(qs, 11)
 	sh := (res ^ (res >> 12)) & 0x800
 	res ^= sh ^ (sh << 12)
 	return res & 0xffffff
@@ -716,12 +584,12 @@ func xsp2co1XspecialImgOmega(elem []uint64) uint32 {
 // or a negative value if elem is not in Q_{x0}.
 func xsp2co1XspecialVector(elem []uint64) int32 {
 	qs := xsp2co1ElemToQsI(elem)
-	qs1 := qs.copy()
+	qs1 := qs.Copy()
 	v, ok := qsPauliVectorSafe(qs1)
 	if !ok {
 		return -1
 	}
-	e0 := short3Reduce(elem[0])
+	e0 := leech.Short3Reduce(elem[0])
 	switch e0 {
 	case xspStdV3Neg:
 		v ^= 0x1000000
@@ -737,33 +605,33 @@ func xsp2co1XspecialVector(elem []uint64) int32 {
 // Pauli group (instead of panicking). This
 // mirrors the C error return of
 // qstate12_pauli_vector.
-func qsPauliVectorSafe(s *qs12) (v uint64, ok bool) {
+func qsPauliVectorSafe(s *qstate12.QState12) (v uint64, ok bool) {
 	defer func() {
 		if recover() != nil {
 			v, ok = 0, false
 		}
 	}()
-	_, v = qsPauliVector(s)
+	_, v = qstate12.QsPauliVector(s)
 	return v, true
 }
 
 // mulQsXspecial right-multiplies x_g (in s) by
 // the element x of Q_{x0} in Leech encoding.
-func mulQsXspecial(s *qs12, x uint32) {
+func mulQsXspecial(s *qstate12.QState12, x uint32) {
 	x = convPauliVectorXspecial(x)
-	qsReduce(s)
-	sh := uint(s.shape1)
-	qsGatePhi(s, uint64(x&0xfff)<<sh, 2)
-	qsGateNot(s, uint64((x>>12)&0xfff)<<sh)
-	s.factor ^= int64((x >> 22) & 4)
+	qstate12.QsReduce(s)
+	sh := uint(s.Shape1())
+	qstate12.QsGatePhi(s, uint64(x&0xfff)<<sh, 2)
+	qstate12.QsGateNot(s, uint64((x>>12)&0xfff)<<sh)
+	s.XorFactor(int64((x >> 22) & 4))
 }
 
 // xsp2co1ElemXspecial converts x in Q_{x0} (Leech
 // encoding) to G_x0 representation in elem.
 func xsp2co1ElemXspecial(elem []uint64, x uint32) error {
-	s := &qs12{}
-	s.grow(xspMaxRowsElem)
-	qsUnitMatrix(s, 12)
+	s := qstate12.NewQState12()
+	s.Grow(xspMaxRowsElem)
+	qstate12.QsUnitMatrix(s, 12)
 	mulQsXspecial(s, x)
 	xsp2co1QsToElemI(s, xspStdV3, elem)
 	return nil
@@ -775,18 +643,18 @@ func xsp2co1ElemXspecial(elem []uint64, x uint32) error {
 
 // setQsDeltaPiAut sets s to the element x_pi of
 // G(4096_x) for the Parker loop automorphism aut.
-func setQsDeltaPiAut(s *qs12, aut []uint32) {
+func setQsDeltaPiAut(s *qstate12.QState12, aut []uint32) {
 	data := make([]uint64, 13)
 	for i := 0; i < 12; i++ {
 		data[i+1] = uint64(aut[i])
 	}
-	qsMonomialColumnMatrix(s, 12, data)
+	qstate12.QsMonomialColumnMatrix(s, 12, data)
 	convConjugateBasis(s)
 }
 
 // setQsY sets s to the element y_d of G(4096_x)
 // for the Parker loop element y.
-func setQsY(s *qs12, y uint32) {
+func setQsY(s *qstate12.QState12, y uint32) {
 	thetaY := uint64(mat24.ThetaTable(y&0x7ff)) & 0x7ff
 	data := make([]uint64, 13)
 	data[0] = uint64(y & 0x17ff)
@@ -799,39 +667,39 @@ func setQsY(s *qs12, y uint32) {
 		data[i+1] = uint64(d) + (sv << 12) + ((assoc & 0x7ff) << 13)
 	}
 	data[12] = data[0] + 0x800 + (thetaY << 13)
-	qsMonomialColumnMatrix(s, 12, data)
+	qstate12.QsMonomialColumnMatrix(s, 12, data)
 }
 
 // mulQsXi1 right-multiplies x_g (in s) by xi_g.
-func mulQsXi1(s *qs12) {
-	sh := uint(s.shape1)
-	qsGateNot(s, 0x400<<sh)
-	qsGateCtrlNot(s, 0x800<<sh, 0x400<<sh)
-	qsGateCtrlNot(s, 0xf<<sh, 0xf<<sh)
-	qsGateH(s, 0xf<<sh)
+func mulQsXi1(s *qstate12.QState12) {
+	sh := uint(s.Shape1())
+	qstate12.QsGateNot(s, 0x400<<sh)
+	qstate12.QsGateCtrlNot(s, 0x800<<sh, 0x400<<sh)
+	qstate12.QsGateCtrlNot(s, 0xf<<sh, 0xf<<sh)
+	qstate12.QsGateH(s, 0xf<<sh)
 }
 
 // mulQsXi2 right-multiplies x_g (in s) by
 // xi_gamma.
-func mulQsXi2(s *qs12) {
-	sh := uint(s.shape1)
+func mulQsXi2(s *qstate12.QState12) {
+	sh := uint(s.Shape1())
 	qsXchBitsRaw(s, 1, 0x400<<sh)
-	qsGateCtrlPhi(s, 8<<sh, 7<<sh)
-	qsGateCtrlPhi(s, 4<<sh, 3<<sh)
-	qsGateCtrlPhi(s, 2<<sh, 1<<sh)
+	qstate12.QsGateCtrlPhi(s, 8<<sh, 7<<sh)
+	qstate12.QsGateCtrlPhi(s, 4<<sh, 3<<sh)
+	qstate12.QsGateCtrlPhi(s, 2<<sh, 1<<sh)
 }
 
 // qsXchBitsRaw exchanges bit pairs of every data
 // row of s (qstate12_xch_bits), shifting bits in
 // mask by sh.
-func qsXchBitsRaw(s *qs12, sh int, mask uint64) {
-	swar.Bm64XchBits(s.data, s.nrows, sh, mask)
-	s.reduced = false
+func qsXchBitsRaw(s *qstate12.QState12, sh int, mask uint64) {
+	swar.Bm64XchBits(s.Data(), s.Nrows(), sh, mask)
+	s.SetReduced(false)
 }
 
 // mulQsXi right-multiplies x_g (in s) by xi^e,
 // where e = eMinus1 + 1 is 1 or 2.
-func mulQsXi(s *qs12, eMinus1 uint32) {
+func mulQsXi(s *qstate12.QState12, eMinus1 uint32) {
 	if eMinus1 != 0 {
 		mulQsXi2(s)
 		mulQsXi1(s)
@@ -851,9 +719,9 @@ func mulQsXi(s *qs12, eMinus1 uint32) {
 // lies in G_{x0}. If setOne, s is reset to the
 // unit matrix and v3 to STD_V3 first. It returns
 // the number of atoms processed.
-func xsp2co1MulQsV3Word(s *qs12, pv3 *uint64, a []uint32, setOne bool) int {
+func xsp2co1MulQsV3Word(s *qstate12.QState12, pv3 *uint64, a []uint32, setOne bool) int {
 	n := len(a)
-	maxrows := s.ncols + 1
+	maxrows := s.Ncols() + 1
 	if maxrows < 14 {
 		maxrows = 14
 	}
@@ -865,9 +733,9 @@ func xsp2co1MulQsV3Word(s *qs12, pv3 *uint64, a []uint32, setOne bool) int {
 	qs := &scratch.qs
 	qsAtom := &scratch.qsAtom
 	var v3 uint64
-	var pAtom *qs12
+	var pAtom *qstate12.QState12
 	if setOne {
-		qsUnitMatrix(qs, 12)
+		qstate12.QsUnitMatrix(qs, 12)
 		v3 = xspStdV3
 		pAtom = qs
 	} else {
@@ -893,13 +761,13 @@ func xsp2co1MulQsV3Word(s *qs12, pv3 *uint64, a []uint32, setOne bool) int {
 			permI := mat24.InvPerm(perm)
 			autI := mat24.InvAutpl(aut)
 			setQsDeltaPiAut(pAtom, autI)
-			v3 = leech3OpPi(v3, permI)
+			v3 = leech.Leech3OpPi(v3, permI)
 			multiply = pAtom != qs
 		case atomTagP:
 			perm := mat24.M24numToPermSafe(v)
 			aut := mat24.PermToAutpl(0, perm)
 			setQsDeltaPiAut(pAtom, aut)
-			v3 = leech3OpPi(v3, perm)
+			v3 = leech.Leech3OpPi(v3, perm)
 			multiply = pAtom != qs
 		case atomTagIX:
 			x ^= (uint32(mat24.ThetaTable(v&0x7ff)) & 0x1000) << 12
@@ -914,12 +782,12 @@ func xsp2co1MulQsV3Word(s *qs12, pv3 *uint64, a []uint32, setOne bool) int {
 			x ^= uint32(mat24.ThetaTable(v&0x7ff)) & 0x1000
 			x ^= v & 0x1fff
 			setQsY(pAtom, x)
-			v3 = leech3OpY(v3, x)
+			v3 = leech.Leech3OpY(v3, x)
 			multiply = pAtom != qs
 		case atomTagY:
 			x ^= v & 0x1fff
 			setQsY(pAtom, x)
-			v3 = leech3OpY(v3, x)
+			v3 = leech.Leech3OpY(v3, x)
 			multiply = pAtom != qs
 		case atomTagIT, atomTagT:
 			if v%3 != 0 {
@@ -932,22 +800,22 @@ func xsp2co1MulQsV3Word(s *qs12, pv3 *uint64, a []uint32, setOne bool) int {
 			v = v % 3
 			if v != 0 {
 				mulQsXi(qs, v-1)
-				v3 = leech3OpXi(v3, v)
+				v3 = leech.Leech3OpXi(v3, v)
 			}
 		default:
 			goto final
 		}
 		if multiply {
-			qs2 := qsMatmul(qsAtom, qs)
+			qs2 := qstate12.QsMatmul(qsAtom, qs)
 			qsCopyInto(qs2, qs)
-		} else if qs.nrows > maxrows {
-			qsReduce(qs)
+		} else if qs.Nrows() > maxrows {
+			qstate12.QsReduce(qs)
 		}
 		pAtom = qsAtom
 	}
 
 final:
-	qsReduce(qs)
+	qstate12.QsReduce(qs)
 	qsCopyInto(qs, s)
 	*pv3 = v3
 	return i
@@ -955,12 +823,12 @@ final:
 
 // mulQsScratch holds the two reusable qstate buffers
 // for one xsp2co1MulQsV3Word call. Both qstates are
-// fully reinitialized (via qsUnitMatrix/qsCopyInto or
+// fully reinitialized (via qstate12.QsUnitMatrix/qsCopyInto or
 // a setQs* helper) before they are read, so stale
 // data carried over by the pool is never observed.
 type mulQsScratch struct {
-	qs     qs12
-	qsAtom qs12
+	qs     qstate12.QState12
+	qsAtom qstate12.QState12
 }
 
 // mulQsScratchPool pools mulQsScratch values so the
@@ -970,22 +838,22 @@ type mulQsScratch struct {
 var mulQsScratchPool = sync.Pool{
 	New: func() any {
 		sc := &mulQsScratch{}
-		sc.qs.grow(xspMaxRowsElem)
-		sc.qsAtom.grow(xspMaxRowsElem)
+		sc.qs.Grow(xspMaxRowsElem)
+		sc.qsAtom.Grow(xspMaxRowsElem)
 		return sc
 	},
 }
 
 // qsCopyInto copies the contents of src into dst
 // (preserving dst's backing capacity).
-func qsCopyInto(src, dst *qs12) {
-	dst.grow(src.nrows)
-	copy(dst.data, src.data[:src.nrows])
-	dst.nrows = src.nrows
-	dst.ncols = src.ncols
-	dst.shape1 = src.shape1
-	dst.factor = src.factor
-	dst.reduced = src.reduced
+func qsCopyInto(src, dst *qstate12.QState12) {
+	dst.Grow(src.Nrows())
+	copy(dst.Data(), src.Data()[:src.Nrows()])
+	dst.SetNrows(src.Nrows())
+	dst.SetNcols(src.Ncols())
+	dst.SetShape1(src.Shape1())
+	dst.SetFactor(src.Factor())
+	dst.SetReduced(src.Reduced())
 }
 
 /*************************************************************************
@@ -1172,142 +1040,6 @@ func (g *Xsp2Co1) HalfOrder() (int, *Xsp2Co1) {
 }
 
 /*************************************************************************
-*** Operation of G_{x0} on Q_{x0}: gen_leech2_op_word
-*************************************************************************/
-
-// Leech2OpWord returns g^{-1} q0 g for q0 in
-// Q_{x0} (Leech lattice encoding) and a word g of
-// generators of G_{x0}. Leech2OpWord panics if an
-// atom of g is illegal.
-func Leech2OpWord(x uint32, g []uint32) uint32 {
-	q0 := x & 0x1ffffff
-	for _, atom := range g {
-		q0 = Leech2OpAtom(q0, atom)
-		if q0 == 0xffffffff {
-			panic("cgt: illegal atom in Leech2OpWord")
-		}
-	}
-	return q0
-}
-
-// genLeech2OpWordMany applies the word g to every
-// entry of q in place, returning the number of
-// atoms successfully applied to all entries.
-func genLeech2OpWordMany(q []uint32, g []uint32) int {
-	for j := range q {
-		q[j] &= 0x1ffffff
-	}
-	next := make([]uint32, len(q))
-	for i, atom := range g {
-		for j, qv := range q {
-			r := Leech2OpAtom(qv, atom)
-			if r == 0xffffffff {
-				return i
-			}
-			next[j] = r
-		}
-		copy(q, next)
-	}
-	return len(g)
-}
-
-// opPermNoSign applies the permutation pi to the Leech
-// lattice mod 2 vector v, ignoring the sign. C function
-// op_perm_nosign.
-func opPermNoSign(v uint32, pi []byte) uint32 {
-	xd := (v >> 12) & 0xfff
-	xdelta := (v ^ uint32(mat24.ThetaTable(xd&0x7ff))) & 0xfff
-	xd = mat24.OpGcodePerm(xd, pi)
-	xdelta = mat24.OpCocodePerm(xdelta, pi)
-	return (xd << 12) ^ xdelta ^ (uint32(mat24.ThetaTable(xd&0x7ff)) & 0xfff)
-}
-
-// opYNoSign applies x_d to the Leech lattice mod 2
-// vector q0, ignoring the sign. C function op_y_nosign.
-func opYNoSign(q0, d uint32) uint32 {
-	odd := 0 - ((q0 >> 11) & 1)
-	thetaQ0 := uint32(mat24.ThetaTable((q0 >> 12) & 0x7ff))
-	thetaY := uint32(mat24.ThetaTable(d & 0x7ff))
-	o := (thetaY & (q0 >> 12)) ^ (q0 & d)
-	o ^= (thetaY >> 12) & 1 & odd
-	o = mat24.Parity12(o)
-	eps := thetaQ0 ^ (thetaY & ^odd) ^ uint32(mat24.ThetaTable(((q0>>12)^d)&0x7ff))
-	q0 ^= (eps & 0xfff) ^ ((d << 12) & 0xfff000 & odd)
-	q0 ^= o << 23
-	return q0
-}
-
-// genLeech2OpWordLeech2Many applies the word g (or its
-// inverse if back) to every entry of a in place,
-// ignoring the sign of each Leech-mod-2 vector. It
-// returns 0 on success or a negative value if any
-// generator in g is not in G_x0. C function
-// gen_leech2_op_word_leech2_many.
-//
-// Unlike genLeech2OpWordMany, this is the sign-free
-// operation: tags x, d and the identity are ignored (they
-// only change signs), tags p/y/l act via the nosign
-// helpers, and a nonzero tau (tag t) or opaque atom
-// (tag 7) makes the word leave G_x0.
-func genLeech2OpWordLeech2Many(a []uint32, g []uint32, back bool) int {
-	step := 1
-	imask := uint32(0)
-	idx := 0
-	if back {
-		step = -1
-		imask = 0x80000000
-		idx = len(g) - 1
-	}
-	for n := len(g); n > 0; n-- {
-		v := g[idx] ^ imask
-		idx += step
-		tag := v & 0xf0000000
-		v &= 0xfffffff
-		switch tag {
-		case 0xa0000000: // Ip
-			perm := mat24.M24numToPermSafe(v)
-			perm = mat24.InvPerm(perm)
-			for j := range a {
-				a[j] = opPermNoSign(a[j], perm)
-			}
-		case 0x20000000: // p
-			perm := mat24.M24numToPermSafe(v)
-			for j := range a {
-				a[j] = opPermNoSign(a[j], perm)
-			}
-		case 0xc0000000: // Iy
-			y := uint32(mat24.ThetaTable(v&0x7ff)) & 0x1000
-			y ^= v & 0x1fff
-			for j := range a {
-				a[j] = opYNoSign(a[j], y&0x1fff)
-			}
-		case 0x40000000: // y
-			y := v & 0x1fff
-			for j := range a {
-				a[j] = opYNoSign(a[j], y&0x1fff)
-			}
-		case 0xe0000000, 0x60000000: // Il, l
-			if tag == 0xe0000000 {
-				v ^= 3
-			}
-			for j := range a {
-				a[j] = generator.XiOpXiNoSign(a[j], int(v))
-			}
-		case 0xd0000000, 0x50000000: // It, t
-			if (v-1)&2 == 0 {
-				return -1
-			}
-		case 0x70000000, 0xf0000000:
-			if v != 0 {
-				return -1
-			}
-		default: // 1, I1, d, Id, x, Ix: no effect on sign-free image
-		}
-	}
-	return 0
-}
-
-/*************************************************************************
 *** Subtype of an element of G_{x0}
 *************************************************************************/
 
@@ -1350,7 +1082,7 @@ func (g *Xsp2Co1) TypeQx0() uint32 {
 // xsp2co1ToVectMod3 converts a Leech-mod-3 vector
 // to the (Z/3)^24 encoding used by mm_op.
 func xsp2co1ToVectMod3(x uint64) uint64 {
-	x = short3Reduce(x)
+	x = leech.Short3Reduce(x)
 	x = (x & 0xffffff) + ((x & 0xffffff000000) << 8)
 	x = shiftMasked(x, 0x00000000FFFF0000, 16)
 	x = shiftMasked(x, 0x0000FF000000FF00, 8)
@@ -1371,7 +1103,7 @@ func xsp2co1FromVectMod3(x uint64) uint64 {
 	x = shiftMasked(x, 0x0000FF000000FF00, 8)
 	x = shiftMasked(x, 0x00000000FFFF0000, 16)
 	x = (x & 0xffffff) + ((x & 0xffffff00000000) >> 8)
-	return short3Reduce(x)
+	return leech.Short3Reduce(x)
 }
 
 // shiftMasked implements the SHIFT_MASKED macro:
@@ -1387,7 +1119,7 @@ func shiftMasked(a, mask uint64, sh uint) uint64 {
 // It panics on an illegal x.
 func xsp2co1AddShort3Leech(x uint64, factor int8, src, dest []int8) {
 	var f [4]int8
-	x = short3Reduce(x)
+	x = leech.Short3Reduce(x)
 	w1 := mat24.Bw24(uint32(x))
 	w2 := mat24.Bw24(uint32(x >> 24))
 	var gcodev uint32
@@ -1445,7 +1177,7 @@ func short3ToLeech(x uint64, pdest []int8) {
 // It panics if x is not a short Leech-mod-2 vector.
 // C xsp2co1_short_2_to_leech.
 func short2ToLeech(x uint32, pdest []int8) {
-	x3 := Leech2To3Short(x & 0xffffff)
+	x3 := leech.Leech2To3Short(x & 0xffffff)
 	if x3 == 0 {
 		panic("cgt: short2ToLeech: vector is not short")
 	}
@@ -1653,8 +1385,8 @@ func xsp2co1Trace98280(elem []uint64, fFast func([]uint64) (int32, bool)) int32 
 // elem (defined up to sign).
 func trace4096(elem []uint64) int32 {
 	qs := xsp2co1ElemToQsI(elem)
-	qs1 := qs.copy()
-	return int32(qsMatItrace(qs1))
+	qs1 := qs.Copy()
+	return int32(qstate12.QsMatItrace(qs1))
 }
 
 // tracesVerySmall computes the characters of
@@ -1723,7 +1455,7 @@ func (g *Xsp2Co1) ChiGx0() [4]int {
 func xsp2co1ElemMonomialToXsp(elem []uint64, a []uint32) int {
 	qsI := xsp2co1ElemToQsI(elem)
 	var monomial [13]uint32
-	if qsMonomialMatrixRowOp(qsI, monomial[:]) < 0 {
+	if qstate12.QsMonomialMatrixRowOp(qsI, monomial[:]) < 0 {
 		return -1
 	}
 	y := monomial[12] & 0x7ff
@@ -1754,7 +1486,7 @@ func elemToWord(elem []uint64, a []uint32, imgOmega uint32) int {
 	}
 	lenA := 0
 	if imgOmega != 0x800000 {
-		res := genLeech2ReduceType4(imgOmega, a)
+		res := leech.GenLeech2ReduceType4(imgOmega, a)
 		if res < 0 || res > 6 {
 			panic("cgt: Leech mod 2 operation failed")
 		}

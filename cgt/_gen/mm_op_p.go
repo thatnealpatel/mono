@@ -510,6 +510,7 @@ import (
 
 	"patel.codes/cgt/generator"
 	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/n0"
 )
 
 // This file implements the per-modulus SWAR group
@@ -1948,7 +1949,7 @@ func genIterNextAtom(it *genWordIter) {
 // xi exponent) into it.data, returning 0 to continue, 1 at the end of
 // the word, or 2 on an illegal atom. C mm_group_iter_next.
 func genIterNext(it *genWordIter) uint32 {
-	g := (*N0Elem)(it.data[1:])
+	g := (*n0.N0Elem)(it.data[1:])
 	for i := range it.data {
 		it.data[i] = 0
 	}
@@ -1960,34 +1961,34 @@ func genIterNext(it *genWordIter) uint32 {
 		case 8, 0:
 			// neutral
 		case 8 + 1, 1:
-			nMulDeltaPi(g, atom&0xfff, 0)
+			n0.MulDeltaPi(g, atom&0xfff, 0)
 			xiUsed = true
 		case 8 + 2:
-			nMulInvDeltaPi(g, 0, atom&0xfffffff)
+			n0.MulInvDeltaPi(g, 0, atom&0xfffffff)
 			xiUsed = true
 		case 2:
-			nMulDeltaPi(g, 0, atom&0xfffffff)
+			n0.MulDeltaPi(g, 0, atom&0xfffffff)
 			xiUsed = true
 		case 8 + 3:
 			atom ^= mat24.ThetaTable(atom&0x7ff) & 0x1000
-			nMulX(g, atom&0x1fff)
+			n0.MulX(g, atom&0x1fff)
 			xiUsed = true
 		case 3:
-			nMulX(g, atom&0x1fff)
+			n0.MulX(g, atom&0x1fff)
 			xiUsed = true
 		case 8 + 4:
 			atom ^= mat24.ThetaTable(atom&0x7ff) & 0x1000
-			nMulY(g, atom&0x1fff)
+			n0.MulY(g, atom&0x1fff)
 			xiUsed = true
 		case 4:
-			nMulY(g, atom&0x1fff)
+			n0.MulY(g, atom&0x1fff)
 			xiUsed = true
 		case 8 + 5:
 			atom ^= 0x3
-			nMulT(g, atom&3)
+			n0.MulT(g, atom&3)
 			xiUsed = true
 		case 5:
-			nMulT(g, atom&3)
+			n0.MulT(g, atom&3)
 			xiUsed = true
 		case 8 + 6:
 			atom ^= 3

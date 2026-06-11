@@ -1,4 +1,4 @@
-package cgt
+package qstate12
 
 import (
 	"math"

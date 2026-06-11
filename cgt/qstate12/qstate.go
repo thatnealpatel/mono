@@ -1,4 +1,4 @@
-package cgt
+package qstate12
 
 import (
 	"errors"
@@ -54,20 +54,25 @@ const (
 	qsUndefRow = 0xff
 )
 
-// factorMask masks the valid bits of factor
+// FactorMask masks the valid bits of factor
 // (all bits except bit 3).
-const factorMask = ^uint64(8)
+const FactorMask = ^uint64(8)
 
 // qsAddFactors adds two factor encodings,
 // keeping only valid bits.
 func qsAddFactors(e1, e2 int64) int64 {
-	return int64((uint64(e1)&factorMask + uint64(e2)) & factorMask)
+	return int64((uint64(e1)&FactorMask + uint64(e2)) & FactorMask)
 }
 
-// qs12 is the mutable working representation
+// QState12 is the mutable working representation
 // mirroring qstate12_type. Algorithms operate
-// on a qs12; QState methods convert in and out.
-type qs12 struct {
+// on a QState12; QState methods convert in and out.
+//
+// Its fields are unexported; cross-file (and, after
+// the qstate12 package split, cross-package)
+// consumers reach them through the narrow accessor
+// and constructor surface defined below.
+type QState12 struct {
 	nrows   int
 	ncols   int
 	shape1  int
@@ -76,10 +81,76 @@ type qs12 struct {
 	data    []uint64
 }
 
+// NewQState12 returns an empty working state. The
+// caller is expected to size it (via Grow plus the
+// field setters, or one of the helper builders) and
+// fill its data before use.
+func NewQState12() *QState12 {
+	return &QState12{}
+}
+
+// NewQState12Sized returns a working state with the
+// given shape parameters and factor and no data
+// rows allocated yet; callers Grow and populate
+// data afterward.
+func NewQState12Sized(nrows, ncols, shape1 int, factor int64) *QState12 {
+	return &QState12{
+		nrows:  nrows,
+		ncols:  ncols,
+		shape1: shape1,
+		factor: factor,
+	}
+}
+
+// Nrows returns the number of data rows.
+func (s *QState12) Nrows() int { return s.nrows }
+
+// SetNrows sets the number of data rows.
+func (s *QState12) SetNrows(n int) { s.nrows = n }
+
+// Ncols returns the combined column count (the C
+// ncols = rows+cols).
+func (s *QState12) Ncols() int { return s.ncols }
+
+// SetNcols sets the combined column count.
+func (s *QState12) SetNcols(n int) { s.ncols = n }
+
+// Shape1 returns the shape1 parameter (the C cols).
+func (s *QState12) Shape1() int { return s.shape1 }
+
+// SetShape1 sets the shape1 parameter.
+func (s *QState12) SetShape1(n int) { s.shape1 = n }
+
+// Factor returns the encoded scalar factor.
+func (s *QState12) Factor() int64 { return s.factor }
+
+// SetFactor sets the encoded scalar factor.
+func (s *QState12) SetFactor(f int64) { s.factor = f }
+
+// XorFactor XORs f into the encoded scalar factor.
+func (s *QState12) XorFactor(f int64) { s.factor ^= f }
+
+// AddFactor adds f to the encoded scalar factor.
+func (s *QState12) AddFactor(f int64) { s.factor += f }
+
+// Reduced reports whether s is in reduced form.
+func (s *QState12) Reduced() bool { return s.reduced }
+
+// SetReduced records whether s is in reduced form.
+func (s *QState12) SetReduced(b bool) { s.reduced = b }
+
+// Data returns the backing data slice. Mutating its
+// entries mutates the state; the length is the
+// allocated row count, not necessarily Nrows.
+func (s *QState12) Data() []uint64 { return s.data }
+
+// SetData replaces the backing data slice.
+func (s *QState12) SetData(d []uint64) { s.data = d }
+
 // toQS12 builds a working state from q. The data
 // slice is copied with capacity qsMaxRows.
-func (q *QState) toQS12() *qs12 {
-	s := &qs12{
+func (q *QState) toQS12() *QState12 {
+	s := &QState12{
 		nrows:  len(q.data),
 		ncols:  q.rows + q.cols,
 		shape1: q.cols,
@@ -91,7 +162,7 @@ func (q *QState) toQS12() *qs12 {
 }
 
 // store writes the working state back into q.
-func (q *QState) store(s *qs12) {
+func (q *QState) store(s *QState12) {
 	q.rows = s.ncols - s.shape1
 	q.cols = s.shape1
 	q.factor[0] = int(s.factor)
@@ -101,18 +172,18 @@ func (q *QState) store(s *qs12) {
 }
 
 // fromQS12 wraps a working state in a QState.
-func fromQS12(s *qs12) *QState {
+func fromQS12(s *QState12) *QState {
 	q := &QState{}
 	q.store(s)
 	return q
 }
 
-// copy returns a deep copy of s with capacity
+// Copy returns a deep copy of s with capacity
 // qsMaxRows.
-func (s *qs12) copy() *qs12 {
+func (s *QState12) Copy() *QState12 {
 	d := make([]uint64, s.nrows, qsMaxRows)
 	copy(d, s.data[:s.nrows])
-	return &qs12{
+	return &QState12{
 		nrows:   s.nrows,
 		ncols:   s.ncols,
 		shape1:  s.shape1,
@@ -122,8 +193,8 @@ func (s *qs12) copy() *qs12 {
 	}
 }
 
-// grow ensures data has at least n usable rows.
-func (s *qs12) grow(n int) {
+// Grow ensures data has at least n usable rows.
+func (s *QState12) Grow(n int) {
 	if cap(s.data) < n {
 		d := make([]uint64, n, qsMaxRows)
 		copy(d, s.data)
@@ -147,14 +218,14 @@ func qsParity(v uint64) uint64 {
 *** Low-level state functions (qstate12.c)
 *************************************************************************/
 
-// qsCheck enforces consistency of s: it copies
+// QsCheck enforces consistency of s: it copies
 // Q[0,i] to Q[i,0], clears Q[0,0], masks junk
 // bits, and panics if Q is not symmetric.
-func qsCheck(s *qs12) {
+func QsCheck(s *QState12) {
 	if s.nrows+s.ncols > qsMaxCols || s.nrows > qsMaxRows || s.shape1 > s.ncols {
 		panic("cgt: inconsistent quadratic state")
 	}
-	s.factor = int64(uint64(s.factor) & factorMask)
+	s.factor = int64(uint64(s.factor) & FactorMask)
 	// C indexes data[0] unconditionally;
 	// safe there because data is a fixed
 	// array. Go slice may be empty.
@@ -203,7 +274,7 @@ func qsFindPivot(m []uint64, nrows, j int) int {
 
 // qsXchRows exchanges rows i1 and i2 of s and
 // adjusts Q. This does not change the state.
-func qsXchRows(s *qs12, i1, i2 int) {
+func qsXchRows(s *QState12, i1, i2 int) {
 	m := s.data
 	m[i1], m[i2] = m[i2], m[i1]
 	a1 := uint(i1 + s.ncols)
@@ -220,7 +291,7 @@ func qsXchRows(s *qs12, i1, i2 int) {
 // k < i and bit k of v is set, row i is xored
 // into row k (columns of Q adjusted). Does not
 // change the state.
-func qsPivot(s *qs12, i int, v uint64) {
+func qsPivot(s *QState12, i int, v uint64) {
 	m := s.data
 	colMask := uint64(1) << uint(s.ncols)
 	var colUpdate uint64
@@ -249,7 +320,7 @@ func qsPivot(s *qs12, i int, v uint64) {
 // qsPivotRotRows rotates rows fst..last down by
 // one (row last moves to row fst), adjusting Q.
 // Does not change the state.
-func qsPivotRotRows(s *qs12, fst, last int) {
+func qsPivotRotRows(s *QState12, fst, last int) {
 	if fst >= last || fst == 0 || last >= s.nrows {
 		return
 	}
@@ -273,7 +344,7 @@ func qsPivotRotRows(s *qs12, fst, last int) {
 // qsDelRows deletes all rows i (1 <= i < nrows)
 // with bit i set in v, adjusting Q. Row 0 is
 // never deleted.
-func qsDelRows(s *qs12, v uint64) {
+func qsDelRows(s *QState12, v uint64) {
 	m := s.data
 	rowPos := 1
 	shifted := 0
@@ -301,14 +372,14 @@ func qsDelRows(s *qs12, v uint64) {
 // qsInsertRows inserts nrows zero rows before
 // row i, multiplying the state by 2**nrows.
 // 1 <= i <= nrows must hold.
-func qsInsertRows(s *qs12, i, nrows int) {
+func qsInsertRows(s *QState12, i, nrows int) {
 	if s.ncols+s.nrows+nrows > qsMaxCols {
 		panic("cgt: quadratic state too large")
 	}
 	if i == 0 || i > s.nrows {
 		panic("cgt: bad row index")
 	}
-	s.grow(s.nrows + nrows)
+	s.Grow(s.nrows + nrows)
 	m := s.data
 	for k := s.nrows - 1; k >= i; k-- {
 		m[k+nrows] = m[k]
@@ -326,7 +397,7 @@ func qsInsertRows(s *qs12, i, nrows int) {
 
 // qsMulAv returns A * transpose(v) as a bit
 // vector.
-func qsMulAv(s *qs12, v uint64) uint64 {
+func qsMulAv(s *QState12, v uint64) uint64 {
 	var w uint64
 	m := s.data
 	v &= (uint64(1) << uint(s.ncols)) - 1
@@ -349,7 +420,7 @@ func qsMulAv(s *qs12, v uint64) uint64 {
 
 // qsSumUpKernel sums up the kernel of the
 // echelonized matrix A of s.
-func qsSumUpKernel(s *qs12) {
+func qsSumUpKernel(s *QState12) {
 	m := s.data
 	mask := (uint64(1) << uint(s.ncols)) - 1
 	var delRows uint64
@@ -396,7 +467,7 @@ func qsSumUpKernel(s *qs12) {
 // qsEchelonize converts s to (non-reduced)
 // echelon form and sums up the kernel. Does not
 // change the state.
-func qsEchelonize(s *qs12) {
+func qsEchelonize(s *QState12) {
 	if s.reduced {
 		return
 	}
@@ -435,7 +506,7 @@ func qsEchelonize(s *qs12) {
 // qsCheckReduced sets s.reduced if s is already
 // reduced and performs some easy reduction
 // steps. It returns the new value of reduced.
-func qsCheckReduced(s *qs12) bool {
+func qsCheckReduced(s *QState12) bool {
 	m := s.data
 	if s.reduced {
 		return true
@@ -491,10 +562,10 @@ func qsCheckReduced(s *qs12) bool {
 	return true
 }
 
-// qsReduce converts s to reduced echelon form
+// QsReduce converts s to reduced echelon form
 // and sums up the kernel. Does not change the
 // state.
-func qsReduce(s *qs12) {
+func QsReduce(s *QState12) {
 	if qsCheckReduced(s) {
 		return
 	}
@@ -530,7 +601,7 @@ func qsReduce(s *qs12) {
 // qsRowTable fills rowTable so rowTable[j] = i
 // if the leading bit of row i is in column j,
 // else qsUndefRow. s must be echelonized.
-func qsRowTable(s *qs12, rowTable []uint8) {
+func qsRowTable(s *QState12, rowTable []uint8) {
 	for col := s.ncols - 1; col >= 0; col-- {
 		rowTable[col] = qsUndefRow
 	}
@@ -556,8 +627,8 @@ func qsRowTable(s *qs12, rowTable []uint8) {
 // qsJoinImaginary reduces s and ensures Q has at
 // most one nonzero diagonal entry, in row 1. It
 // returns 1 if that entry is present, else 0.
-func qsJoinImaginary(s *qs12) int {
-	qsReduce(s)
+func qsJoinImaginary(s *QState12) int {
+	QsReduce(s)
 	m := s.data
 	M := uint64(1) << uint(s.ncols)
 	row := 0
@@ -588,7 +659,7 @@ func qsJoinImaginary(s *qs12) int {
 
 // qsExtendZero inserts nqb zero qubits at
 // position j, set to 0.
-func qsExtendZero(s *qs12, j, nqb int) {
+func qsExtendZero(s *QState12, j, nqb int) {
 	if j > s.ncols {
 		panic("cgt: qubit index out of range")
 	}
@@ -605,7 +676,7 @@ func qsExtendZero(s *qs12, j, nqb int) {
 }
 
 // qsExtend inserts nqb qubits at position j.
-func qsExtend(s *qs12, j, nqb int) {
+func qsExtend(s *QState12, j, nqb int) {
 	qsExtendZero(s, j, nqb)
 	if s.nrows == 0 {
 		return
@@ -620,9 +691,9 @@ func qsExtend(s *qs12, j, nqb int) {
 	}
 }
 
-// qsSumCols sums up nqb qubits at position j,
+// QsSumCols sums up nqb qubits at position j,
 // decrementing ncols by nqb.
-func qsSumCols(s *qs12, j, nqb int) {
+func QsSumCols(s *QState12, j, nqb int) {
 	if nqb+j > s.ncols {
 		panic("cgt: qubit index out of range")
 	}
@@ -638,7 +709,7 @@ func qsSumCols(s *qs12, j, nqb int) {
 
 // qsRestrictZero restricts nqb qubits at
 // position j to 0, keeping the shape.
-func qsRestrictZero(s *qs12, j, nqb int) {
+func qsRestrictZero(s *QState12, j, nqb int) {
 	if nqb+j > s.ncols {
 		panic("cgt: qubit index out of range")
 	}
@@ -662,20 +733,20 @@ func qsRestrictZero(s *qs12, j, nqb int) {
 	qsDelRows(s, deleted)
 }
 
-// qsRestrict restricts nqb qubits at position j
+// QsRestrict restricts nqb qubits at position j
 // to 0 and deletes them.
-func qsRestrict(s *qs12, j, nqb int) {
+func QsRestrict(s *QState12, j, nqb int) {
 	qsRestrictZero(s, j, nqb)
 	s.reduced = false
-	qsSumCols(s, j, nqb)
+	QsSumCols(s, j, nqb)
 }
 
 /*************************************************************************
 *** Applying gates to a state (qstate12.c)
 *************************************************************************/
 
-// qsGateNot applies a not gate: qs1(x) = qs(x^v).
-func qsGateNot(s *qs12, v uint64) {
+// QsGateNot applies a not gate: qs1(x) = qs(x^v).
+func QsGateNot(s *QState12, v uint64) {
 	if s.nrows == 0 {
 		return
 	}
@@ -683,9 +754,9 @@ func qsGateNot(s *qs12, v uint64) {
 	s.reduced = false
 }
 
-// qsGateCtrlNot applies a controlled not gate:
+// QsGateCtrlNot applies a controlled not gate:
 // qs1(x) = qs(x ^ <vc,x>*v).
-func qsGateCtrlNot(s *qs12, vc, v uint64) {
+func QsGateCtrlNot(s *QState12, vc, v uint64) {
 	m := s.data
 	v &= (uint64(1) << uint(s.ncols)) - 1
 	if qsParity(v&vc) != 0 {
@@ -700,9 +771,9 @@ func qsGateCtrlNot(s *qs12, vc, v uint64) {
 	}
 }
 
-// qsGatePhi applies a phase gate:
+// QsGatePhi applies a phase gate:
 // qs1(x) = qs(x) * sqrt(-1)**(phi*<v,x>).
-func qsGatePhi(s *qs12, v uint64, phi int) {
+func QsGatePhi(s *QState12, v uint64, phi int) {
 	m := s.data
 	c := uint64(1) << uint(s.ncols)
 	w := qsMulAv(s, v)
@@ -724,9 +795,9 @@ func qsGatePhi(s *qs12, v uint64, phi int) {
 	}
 }
 
-// qsGateCtrlPhi applies a controlled phase gate:
+// QsGateCtrlPhi applies a controlled phase gate:
 // qs1(x) = qs(x) * (-1)**(<v1,x>*<v2,x>).
-func qsGateCtrlPhi(s *qs12, v1, v2 uint64) {
+func QsGateCtrlPhi(s *QState12, v1, v2 uint64) {
 	m := s.data
 	w1 := qsMulAv(s, v1)
 	w2 := qsMulAv(s, v2)
@@ -739,9 +810,9 @@ func qsGateCtrlPhi(s *qs12, v1, v2 uint64) {
 	}
 }
 
-// qsGateH applies Hadamard gates to all qubits j
+// QsGateH applies Hadamard gates to all qubits j
 // with bit j of v set.
-func qsGateH(s *qs12, v uint64) {
+func QsGateH(s *QState12, v uint64) {
 	if s.nrows == 0 {
 		return
 	}
@@ -763,7 +834,7 @@ func qsGateH(s *qs12, v uint64) {
 				panic("cgt: quadratic state buffer overflow")
 			}
 		}
-		s.grow(s.nrows + 1)
+		s.Grow(s.nrows + 1)
 		m := s.data
 		var w uint64
 		sh := uint(s.nrows + s.ncols)
@@ -811,10 +882,10 @@ func factorToComplex(factor int64) complex128 {
 	return complex(re, im)
 }
 
-// factorToInt32 converts a scalar factor to an
+// FactorToInt32 converts a scalar factor to an
 // integer. It panics if the factor is not an
 // integer.
-func factorToInt32(factor int64) int64 {
+func FactorToInt32(factor int64) int64 {
 	if factor&8 != 0 {
 		return 0
 	}
@@ -857,7 +928,7 @@ type qsSupport struct {
 	indices       [64]uint32
 	signs         [64]uint8
 	lbBatchLength int
-	qs            *qs12
+	qs            *QState12
 	qf            uint64
 	assoc         uint64
 	i             int
@@ -866,12 +937,12 @@ type qsSupport struct {
 
 // qsSupportInit initializes a support iterator
 // from a state.
-func qsSupportInit(s *qs12) *qsSupport {
-	qsReduce(s)
+func qsSupportInit(s *QState12) *qsSupport {
+	QsReduce(s)
 	if s.ncols > 30 || s.nrows > 31 {
 		panic("cgt: quadratic state too large for support iteration")
 	}
-	sup := &qsSupport{qs: s.copy()}
+	sup := &qsSupport{qs: s.Copy()}
 	pqs := sup.qs
 	sup.size = 1 << uint(pqs.ncols)
 	sup.i = 0
@@ -980,8 +1051,8 @@ func qsSupportAdjustReal(sup *qsSupport) {
 
 // qsComplex expands s to its 2**ncols complex
 // entries, indexed by bit vector. It reduces s.
-func qsComplex(s *qs12) []complex128 {
-	qsReduce(s)
+func qsComplex(s *QState12) []complex128 {
+	QsReduce(s)
 	ncols := s.ncols
 	out := make([]complex128, 1<<uint(ncols))
 	if s.nrows == 0 {
@@ -993,7 +1064,7 @@ func qsComplex(s *qs12) []complex128 {
 	nrc := uint(ncols + s.nrows - 1)
 	nIter := 1 << uint(s.nrows-1)
 	mask := (uint64(1) << uint(ncols)) - 1
-	base := factorToComplex(int64(uint64(s.factor) & factorMask))
+	base := factorToComplex(int64(uint64(s.factor) & FactorMask))
 	freal := [4]complex128{base, base * 1i, -base, base * -1i}
 	var qf uint64
 	for i := 1; i <= nIter; i++ {
@@ -1043,7 +1114,7 @@ func subbatchLength(sup *qsSupport) int {
 // qsToSigns stores the signs of a real state in
 // bmap: t = 0,1,3 for zero, positive, negative
 // entries packed two bits per entry.
-func qsToSigns(s *qs12) []uint64 {
+func qsToSigns(s *QState12) []uint64 {
 	sup := qsSupportInit(s)
 	qsSupportAdjustReal(sup)
 	subLen := subbatchLength(sup)
@@ -1074,7 +1145,7 @@ func qsToSigns(s *qs12) []uint64 {
 
 // qsCompareSigns reports whether the signs of a
 // real state s match bmap.
-func qsCompareSigns(s *qs12, bmap []uint64) bool {
+func qsCompareSigns(s *QState12, bmap []uint64) bool {
 	defer func() { recover() }()
 	sup := qsSupportInit(s)
 	if sup.factor&0x3 != 0 || sup.cWeight != sup.weight {
@@ -1149,7 +1220,7 @@ func loadBmap(bmap []uint64, i uint64) uint64 {
 
 // scanAffine finds an affine subspace covering
 // the nonzero indices of bmap, encoded in s.
-func scanAffine(bmap []uint64, n int, s *qs12) {
+func scanAffine(bmap []uint64, n int, s *QState12) {
 	maxlen := 1 << uint(n)
 	s.nrows = 0
 	s.ncols = n
@@ -1159,7 +1230,7 @@ func scanAffine(bmap []uint64, n int, s *qs12) {
 	if n >= qsMaxRows || n > 30 {
 		panic("cgt: quadratic state buffer overflow")
 	}
-	s.grow(maxlen + 1)
+	s.Grow(maxlen + 1)
 	m := s.data
 	m0 := uint64(swar.Bm64FindLowBit(bmap, 0, 2*maxlen) >> 1)
 	if m0 >= uint64(maxlen) {
@@ -1196,7 +1267,7 @@ func scanAffine(bmap []uint64, n int, s *qs12) {
 // fillAffine fills the Q part of s from the
 // signs in bmap. It returns false if bmap is not
 // a quadratic state vector.
-func fillAffine(bmap []uint64, s *qs12) bool {
+func fillAffine(bmap []uint64, s *QState12) bool {
 	m := s.data
 	ncols1 := uint64(s.ncols)
 	nrows := s.nrows
@@ -1276,9 +1347,9 @@ func qsCopyRow(m []uint64, ncols, nrows, i1, i2 int) {
 // qsPrepMul prepares s1 and s2 for matrix
 // multiplication summing over the first nqb
 // qubits. It returns rowPos.
-func qsPrepMul(s1, s2 *qs12, nqb int) int {
-	qsReduce(s1)
-	qsReduce(s2)
+func qsPrepMul(s1, s2 *QState12, nqb int) int {
+	QsReduce(s1)
+	QsReduce(s2)
 	if nqb > s1.ncols || nqb > s2.ncols {
 		panic("cgt: qubit index out of range")
 	}
@@ -1405,7 +1476,7 @@ func qsPrepMul(s1, s2 *qs12, nqb int) int {
 
 // qsShiftA extracts columns 0..n-1 of A and
 // inserts iLo low and iHi high zero columns.
-func qsShiftA(s *qs12, n, iLo, iHi int) {
+func qsShiftA(s *QState12, n, iLo, iHi int) {
 	if n > s.ncols {
 		panic("cgt: qubit index out of range")
 	}
@@ -1426,7 +1497,7 @@ func qsShiftA(s *qs12, n, iLo, iHi int) {
 
 // qsMulElements combines s1 and s2 by adding
 // their A and Q parts; result stored in s1.
-func qsMulElements(s1, s2 *qs12, rowPos int) {
+func qsMulElements(s1, s2 *QState12, rowPos int) {
 	c := uint64(1) << uint(s1.ncols)
 	mask := (uint64(1) << uint(s2.ncols+s2.nrows)) - 1
 	if rowPos > s2.nrows {
@@ -1451,7 +1522,7 @@ func qsMulElements(s1, s2 *qs12, rowPos int) {
 
 // qsProductInto computes a product of s1 and s2
 // in place in s1, destroying s2.
-func qsProductInto(s1, s2 *qs12, nqb, nc int) {
+func qsProductInto(s1, s2 *QState12, nqb, nc int) {
 	rowPos := qsPrepMul(s1, s2, nqb)
 	if nc > nqb {
 		panic("cgt: qubit index out of range")
@@ -1466,20 +1537,20 @@ func qsProductInto(s1, s2 *qs12, nqb, nc int) {
 		return
 	}
 	qsMulElements(s1, s2, rowPos)
-	qsReduce(s1)
+	QsReduce(s1)
 }
 
 // qsProduct returns a product of s1 and s2
 // without modifying either.
-func qsProduct(s1, s2 *qs12, nqb, nc int) *qs12 {
-	a := s1.copy()
-	b := s2.copy()
+func qsProduct(s1, s2 *QState12, nqb, nc int) *QState12 {
+	a := s1.Copy()
+	b := s2.Copy()
 	qsProductInto(a, b, nqb, nc)
 	return a
 }
 
 // qsMatT transposes s in place.
-func qsMatT(s *qs12) {
+func qsMatT(s *QState12) {
 	nqb := s.ncols - s.shape1
 	s.shape1 = nqb
 	swar.Bm64RotBits(s.data, s.nrows, nqb, s.ncols, 0)
@@ -1487,24 +1558,24 @@ func qsMatT(s *qs12) {
 }
 
 // qsConjugate conjugates s in place.
-func qsConjugate(s *qs12) {
+func qsConjugate(s *QState12) {
 	m := s.data
 	c := uint64(1) << uint(s.ncols)
 	for k := 1; k < s.nrows; k++ {
 		m[0] ^= m[k] & (c << uint(k))
 	}
-	s.factor = int64((((uint64(s.factor) & factorMask) ^ 7) + 1) & factorMask)
+	s.factor = int64((((uint64(s.factor) & FactorMask) ^ 7) + 1) & FactorMask)
 }
 
-// qsMatmul returns the matrix product s1 @ s2.
-func qsMatmul(s1, s2 *qs12) *qs12 {
+// QsMatmul returns the matrix product s1 @ s2.
+func QsMatmul(s1, s2 *QState12) *QState12 {
 	nqb := s1.shape1
 	cols := s2.shape1
 	if s2.ncols-s2.shape1 != nqb {
 		panic("cgt: matrix shape mismatch")
 	}
-	a := s1.copy()
-	b := s2.copy()
+	a := s1.Copy()
+	b := s2.Copy()
 	swar.Bm64RotBits(a.data, a.nrows, -nqb, a.ncols, 0)
 	a.reduced = false
 	qsProductInto(a, b, nqb, nqb)
@@ -1527,12 +1598,12 @@ func bitRev(length int, n uint64) uint64 {
 
 // qsStdMatrix sets s to a 2**rows x 2**cols
 // matrix with rk diagonal ones.
-func qsStdMatrix(s *qs12, rows, cols, rk int) {
+func qsStdMatrix(s *QState12, rows, cols, rk int) {
 	s.nrows = rk + 1
 	s.ncols = rows + cols
 	s.shape1 = cols
 	s.factor = 0
-	s.grow(rk + 1)
+	s.Grow(rk + 1)
 	s.data[0] = 0
 	if s.nrows+s.ncols > qsMaxCols || s.nrows > qsMaxRows || s.shape1 > s.ncols {
 		panic("cgt: quadratic state too large")
@@ -1548,15 +1619,15 @@ func qsStdMatrix(s *qs12, rows, cols, rk int) {
 	s.reduced = true
 }
 
-// qsUnitMatrix sets s to a 2**nqb x 2**nqb unit
+// QsUnitMatrix sets s to a 2**nqb x 2**nqb unit
 // matrix.
-func qsUnitMatrix(s *qs12, nqb int) {
+func QsUnitMatrix(s *QState12, nqb int) {
 	qsStdMatrix(s, nqb, nqb, nqb)
 }
 
 // qsPauliMatrix sets s to the Pauli group
 // element v of nqb qubits.
-func qsPauliMatrix(s *qs12, nqb int, v uint64) {
+func qsPauliMatrix(s *QState12, nqb int, v uint64) {
 	qsStdMatrix(s, nqb, nqb, nqb)
 	m := s.data
 	mask := (uint64(1) << uint(nqb)) - 1
@@ -1568,11 +1639,11 @@ func qsPauliMatrix(s *qs12, nqb int, v uint64) {
 	s.factor |= int64(v & 2)
 }
 
-// qsPauliVector returns nqb and the encoded
+// QsPauliVector returns nqb and the encoded
 // Pauli vector of s. It panics if s is not in
 // the Pauli group.
-func qsPauliVector(s *qs12) (int, uint64) {
-	qsReduce(s)
+func QsPauliVector(s *QState12) (int, uint64) {
+	QsReduce(s)
 	nqb := s.shape1
 	m := s.data
 	mask := (uint64(1) + (uint64(1) << uint(nqb))) << uint(nqb-1)
@@ -1644,7 +1715,7 @@ func qsFindMaskedPivot(m []uint64, nrows, j int, mask uint64) int {
 // reduceMatrix converts a reduced state to
 // reduced matrix representation, filling
 // rowTable.
-func reduceMatrix(s *qs12, rowTable []uint8) {
+func reduceMatrix(s *QState12, rowTable []uint8) {
 	n1 := s.shape1
 	n0 := s.ncols - n1
 	qsRowTable(s, rowTable)
@@ -1689,7 +1760,7 @@ func reduceMatrix(s *qs12, rowTable []uint8) {
 
 // lbRankReduced returns the binary logarithm of
 // the rank of a state reduced with reduceMatrix.
-func lbRankReduced(s *qs12, rowTable []uint8) int {
+func lbRankReduced(s *QState12, rowTable []uint8) int {
 	nqb := s.shape1
 	if s.nrows == 0 {
 		return -1
@@ -1711,21 +1782,21 @@ func lbRankReduced(s *qs12, rowTable []uint8) int {
 
 // qsMatLbRank returns the binary logarithm of
 // the rank of s (-1 if zero). It reduces s.
-func qsMatLbRank(s *qs12) int {
-	qsReduce(s)
-	q := s.copy()
+func qsMatLbRank(s *QState12) int {
+	QsReduce(s)
+	q := s.Copy()
 	rowTable := make([]uint8, qsMaxCols+4)
 	reduceMatrix(q, rowTable)
 	return lbRankReduced(q, rowTable)
 }
 
-// qsMatInv inverts s in place. It panics if s is
+// QsMatInv inverts s in place. It panics if s is
 // not invertible.
-func qsMatInv(s *qs12) {
+func QsMatInv(s *QState12) {
 	nqb := s.shape1
 	qsMatT(s)
 	qsConjugate(s)
-	qsReduce(s)
+	QsReduce(s)
 	rk := qsMatLbRank(s)
 	if 2*nqb != s.ncols || rk != nqb {
 		panic("cgt: matrix is not invertible")
@@ -1740,7 +1811,7 @@ func qsMatInv(s *qs12) {
 *** Symplectic and Pauli conjugation (qmatrix12.c)
 *************************************************************************/
 
-// qsSymplecticPrep reduces s, checks that it is an
+// QsSymplecticPrep reduces s, checks that it is an
 // invertible (k,k) state, and builds the working
 // bit matrix m holding rows 1..nrows-1 of s. It
 // returns m (length 2*qsMaxCols/3+1), dRows =
@@ -1749,12 +1820,12 @@ func qsMatInv(s *qs12) {
 // applied. Callers handle the k == 0 case (m is
 // unused then) with their own zero value before the
 // shared echelon step; this is the preamble common
-// to qsToSymplectic and qsToSymplecticRow.
+// to QsToSymplectic and qsToSymplecticRow.
 //
-// qsSymplecticPrep panics if s is not an invertible
+// QsSymplecticPrep panics if s is not an invertible
 // (k,k) matrix or is too large for the qstate buffer.
-func qsSymplecticPrep(s *qs12) (m []uint64, dRows, k int) {
-	qsReduce(s)
+func QsSymplecticPrep(s *QState12) (m []uint64, dRows, k int) {
+	QsReduce(s)
 	k = s.shape1
 	if 2*k != s.ncols || s.nrows <= k {
 		panic("cgt: matrix is not invertible")
@@ -1780,12 +1851,12 @@ func qsSymplecticPrep(s *qs12) (m []uint64, dRows, k int) {
 	return m, dRows, k
 }
 
-// qsToSymplectic returns the 2k x 2k symplectic
+// QsToSymplectic returns the 2k x 2k symplectic
 // bit matrix of the conjugation action of s on
 // the Pauli group. It panics if s is not an
 // invertible (k,k) matrix.
-func qsToSymplectic(s *qs12) []uint64 {
-	m, dRows, k := qsSymplecticPrep(s)
+func QsToSymplectic(s *QState12) []uint64 {
+	m, dRows, k := QsSymplecticPrep(s)
 	pA := make([]uint64, 2*k)
 	if k == 0 {
 		return pA
@@ -1815,20 +1886,20 @@ func qsToSymplectic(s *qs12) []uint64 {
 // qsPauliConjugateNoArg replaces each entry of v
 // by qs*v*qs^-1 using the symplectic matrix,
 // ignoring the complex argument.
-func qsPauliConjugateNoArg(s *qs12, v []uint64) []uint64 {
-	m := qsToSymplectic(s)
+func qsPauliConjugateNoArg(s *QState12, v []uint64) []uint64 {
+	m := QsToSymplectic(s)
 	out := make([]uint64, len(v))
 	swar.Bm64Mul(v, m, len(v), len(m), out)
 	return out
 }
 
-// qsPauliConjugate replaces each entry of v by
+// QsPauliConjugate replaces each entry of v by
 // the Pauli group element qs*v*qs^-1, computing
 // the complex argument. It panics if s is not an
 // invertible (k,k) matrix.
-func qsPauliConjugate(s *qs12, v []uint64) []uint64 {
-	qsReduce(s)
-	q := s.copy()
+func QsPauliConjugate(s *QState12, v []uint64) []uint64 {
+	QsReduce(s)
+	q := s.Copy()
 	rowTable := make([]uint8, qsMaxCols)
 	reduceMatrix(q, rowTable)
 	nqb := q.shape1
@@ -1911,7 +1982,7 @@ func qsPauliConjugate(s *qs12, v []uint64) []uint64 {
 
 // qsMulScalar multiplies s by 2**(e/2) *
 // exp(phi*pi*i/4).
-func qsMulScalar(s *qs12, e, phi int) {
+func qsMulScalar(s *QState12, e, phi int) {
 	if s.nrows == 0 {
 		return
 	}
@@ -1938,7 +2009,7 @@ func NewQState(rows, cols int, data []uint64, mode int) *QState {
 	if nqb+nrows > qsMaxCols || nrows > qsMaxRows {
 		panic("cgt: quadratic state too large")
 	}
-	s := &qs12{nrows: nrows, ncols: nqb, shape1: cols}
+	s := &QState12{nrows: nrows, ncols: nqb, shape1: cols}
 	s.data = make([]uint64, nrows, qsMaxRows)
 	m := s.data
 	mask := ((uint64(1) << uint(nqb)) << uint(nrows)) - 1
@@ -1973,7 +2044,7 @@ func NewQState(rows, cols int, data []uint64, mode int) *QState {
 			}
 		}
 	default:
-		qsCheck(s)
+		QsCheck(s)
 	}
 	return fromQS12(s)
 }
@@ -1981,8 +2052,8 @@ func NewQState(rows, cols int, data []uint64, mode int) *QState {
 // UnitMatrix returns the 2**nqb x 2**nqb unit
 // matrix.
 func UnitMatrix(nqb int) *QState {
-	s := &qs12{}
-	qsUnitMatrix(s, nqb)
+	s := &QState12{}
+	QsUnitMatrix(s, nqb)
 	return fromQS12(s)
 }
 
@@ -2014,7 +2085,7 @@ func RandRealMatrix(rows, cols, dataRows int) *QState {
 // PauliMatrix returns the matrix of the Pauli
 // group element v of nqb qubits.
 func PauliMatrix(nqb int, v uint64) *QState {
-	s := &qs12{}
+	s := &QState12{}
 	qsPauliMatrix(s, nqb, v)
 	return fromQS12(s)
 }
@@ -2055,8 +2126,8 @@ func HadamardMatrix(nqb int, v uint64) *QState {
 // defined by data of length nqb+1.
 func ColumnMonomialMatrix(data []uint64) *QState {
 	nqb := len(data) - 1
-	s := &qs12{}
-	qsMonomialColumnMatrix(s, nqb, data)
+	s := &QState12{}
+	QsMonomialColumnMatrix(s, nqb, data)
 	return fromQS12(s)
 }
 
@@ -2078,12 +2149,12 @@ func RowMonomialMatrix(data []uint64) *QState {
 // ToSigns, or nil if bmap is not a quadratic
 // state vector.
 func FromSigns(bmap []uint64, n int) *QState {
-	s := &qs12{}
+	s := &QState12{}
 	scanAffine(bmap, n, s)
 	if !fillAffine(bmap, s) {
 		return nil
 	}
-	if !qsCompareSigns(s.copy(), bmap) {
+	if !qsCompareSigns(s.Copy(), bmap) {
 		return nil
 	}
 	return fromQS12(s)
@@ -2172,7 +2243,7 @@ func (q *QState) MulScalar(e, phi int) *QState {
 // place. This does not change the matrix.
 func (q *QState) Reduce() *QState {
 	s := q.toQS12()
-	qsReduce(s)
+	QsReduce(s)
 	q.store(s)
 	return q
 }
@@ -2191,7 +2262,7 @@ func (q *QState) Echelon() *QState {
 // table.
 func (q *QState) ReduceMatrix() []int {
 	s := q.toQS12()
-	qsReduce(s)
+	QsReduce(s)
 	rowTable := make([]uint8, s.ncols+s.nrows+4)
 	reduceMatrix(s, rowTable)
 	q.store(s)
@@ -2304,7 +2375,7 @@ func (q *QState) ExtendZero(j, nqb int) *QState {
 // 0 and deletes them, in place.
 func (q *QState) Restrict(j, nqb int) *QState {
 	s := q.toQS12()
-	qsRestrict(s, j, nqb)
+	QsRestrict(s, j, nqb)
 	q.store(s)
 	return q
 }
@@ -2322,7 +2393,7 @@ func (q *QState) RestrictZero(j, nqb int) *QState {
 // place.
 func (q *QState) Sumup(j, nqb int) *QState {
 	s := q.toQS12()
-	qsSumCols(s, j, nqb)
+	QsSumCols(s, j, nqb)
 	q.store(s)
 	return q
 }
@@ -2331,7 +2402,7 @@ func (q *QState) Sumup(j, nqb int) *QState {
 // place.
 func (q *QState) GateNot(v uint64) *QState {
 	s := q.toQS12()
-	qsGateNot(s, v)
+	QsGateNot(s, v)
 	q.store(s)
 	return q
 }
@@ -2341,7 +2412,7 @@ func (q *QState) GateNot(v uint64) *QState {
 // orthogonal.
 func (q *QState) GateCtrlNot(vc, v uint64) *QState {
 	s := q.toQS12()
-	qsGateCtrlNot(s, vc, v)
+	QsGateCtrlNot(s, vc, v)
 	q.store(s)
 	return q
 }
@@ -2350,7 +2421,7 @@ func (q *QState) GateCtrlNot(vc, v uint64) *QState {
 // qs(x)*sqrt(-1)**(phi*<v,x>) in place.
 func (q *QState) GatePhi(v uint64, phi int) *QState {
 	s := q.toQS12()
-	qsGatePhi(s, v, phi)
+	QsGatePhi(s, v, phi)
 	q.store(s)
 	return q
 }
@@ -2359,7 +2430,7 @@ func (q *QState) GatePhi(v uint64, phi int) *QState {
 // qs(x) = qs(x)*(-1)**(<v1,x>*<v2,x>) in place.
 func (q *QState) GateCtrlPhi(v1, v2 uint64) *QState {
 	s := q.toQS12()
-	qsGateCtrlPhi(s, v1, v2)
+	QsGateCtrlPhi(s, v1, v2)
 	q.store(s)
 	return q
 }
@@ -2368,7 +2439,7 @@ func (q *QState) GateCtrlPhi(v1, v2 uint64) *QState {
 // with bit j of v set, in place.
 func (q *QState) GateH(v uint64) *QState {
 	s := q.toQS12()
-	qsGateH(s, v)
+	QsGateH(s, v)
 	q.store(s)
 	return q
 }
@@ -2403,18 +2474,18 @@ func (q *QState) LbRank() int {
 // zero.
 func (q *QState) LbNorm2() int {
 	s := q.toQS12()
-	qsReduce(s)
+	QsReduce(s)
 	q.store(s)
 	if s.nrows == 0 {
 		return -1
 	}
-	return int(s.factor>>4) + s.nrows - 1 - qsMatLbRank(s.copy())
+	return int(s.factor>>4) + s.nrows - 1 - qsMatLbRank(s.Copy())
 }
 
 // Trace returns the trace of a square matrix.
 func (q *QState) Trace() complex128 {
 	s := q.toQS12()
-	v := factorToComplex(qsMatTraceFactor(s))
+	v := factorToComplex(QsMatTraceFactor(s))
 	q.store(s)
 	return v
 }
@@ -2423,7 +2494,7 @@ func (q *QState) Trace() complex128 {
 // is not invertible.
 func (q *QState) Inv() *QState {
 	s := q.toQS12()
-	qsMatInv(s)
+	QsMatInv(s)
 	return fromQS12(s)
 }
 
@@ -2509,7 +2580,7 @@ func (q *QState) key() string {
 func (q *QState) MatMul(other *QState) *QState {
 	sa := q.toQS12()
 	sb := other.toQS12()
-	return fromQS12(qsMatmul(sa, sb))
+	return fromQS12(QsMatmul(sa, sb))
 }
 
 // Mul returns the elementwise product of q and
@@ -2531,12 +2602,12 @@ func (q *QState) Mul(other *QState) *QState {
 func (q *QState) Equal(other *QState) bool {
 	s1 := q.toQS12()
 	s2 := other.toQS12()
-	qsReduce(s1)
-	qsReduce(s2)
+	QsReduce(s1)
+	QsReduce(s2)
 	if s1.nrows|s2.nrows == 0 {
 		return true
 	}
-	if (uint64(s1.factor)^uint64(s2.factor))&factorMask != 0 || s1.nrows != s2.nrows {
+	if (uint64(s1.factor)^uint64(s2.factor))&FactorMask != 0 || s1.nrows != s2.nrows {
 		return false
 	}
 	mask := (((uint64(1) << uint(s1.nrows)) - 1) << uint(s1.ncols)) - 1
@@ -2552,7 +2623,7 @@ func (q *QState) Equal(other *QState) bool {
 // group.
 func (q *QState) PauliVector() uint64 {
 	s := q.toQS12()
-	_, v := qsPauliVector(s)
+	_, v := QsPauliVector(s)
 	q.store(s)
 	return v
 }
@@ -2566,7 +2637,7 @@ func (q *QState) PauliConjugate(v []uint64, arg bool) []uint64 {
 	if !arg {
 		return qsPauliConjugateNoArg(s, v)
 	}
-	return qsPauliConjugate(s, v)
+	return QsPauliConjugate(s, v)
 }
 
 // ToSymplectic returns the 2k x 2k symplectic bit
@@ -2574,7 +2645,7 @@ func (q *QState) PauliConjugate(v []uint64, arg bool) []uint64 {
 // be an invertible (k,k) matrix.
 func (q *QState) ToSymplectic() []uint64 {
 	s := q.toQS12()
-	out := qsToSymplectic(s)
+	out := QsToSymplectic(s)
 	q.store(s)
 	return out
 }

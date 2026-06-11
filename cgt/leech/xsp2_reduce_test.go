@@ -1,4 +1,4 @@
-package cgt
+package leech
 
 import (
 	"testing"
@@ -80,14 +80,14 @@ func TestGenLeech2ReduceType2(t *testing.T) {
 			t.Errorf("Leech2Subtype(%#x)=%#x want %#x", c.v, got, c.subtype)
 		}
 		var a [6]uint32
-		l := genLeech2ReduceType2(c.v, a[:])
+		l := GenLeech2ReduceType2(c.v, a[:])
 		if l < 0 {
-			t.Errorf("genLeech2ReduceType2(%#x) failed, l=%d", c.v, l)
+			t.Errorf("GenLeech2ReduceType2(%#x) failed, l=%d", c.v, l)
 			continue
 		}
 		got := a[:l]
 		if !u32SliceEq(got, c.word) {
-			t.Errorf("genLeech2ReduceType2(%#x) word=%v want %v", c.v, got, c.word)
+			t.Errorf("GenLeech2ReduceType2(%#x) word=%v want %v", c.v, got, c.word)
 		}
 		w := Leech2OpWord(c.v, got)
 		if w != c.w {
@@ -96,7 +96,7 @@ func TestGenLeech2ReduceType2(t *testing.T) {
 		// Mathematical invariant from the mmgroup test:
 		// the reduced vector equals beta up to the sign bit.
 		if w&0xffffff != leechBeta {
-			t.Errorf("genLeech2ReduceType2(%#x): reduced to %#x, want beta=%#x", c.v, w&0xffffff, leechBeta)
+			t.Errorf("GenLeech2ReduceType2(%#x): reduced to %#x, want beta=%#x", c.v, w&0xffffff, leechBeta)
 		}
 	}
 }
@@ -141,21 +141,21 @@ func TestGenLeech2ReduceType2Ortho(t *testing.T) {
 			t.Errorf("Leech2Subtype(%#x)=%#x want %#x", c.v, got, c.subtype)
 		}
 		var a [6]uint32
-		l := genLeech2ReduceType2Ortho(c.v, a[:])
+		l := GenLeech2ReduceType2Ortho(c.v, a[:])
 		if l < 0 {
-			t.Errorf("genLeech2ReduceType2Ortho(%#x) failed, l=%d", c.v, l)
+			t.Errorf("GenLeech2ReduceType2Ortho(%#x) failed, l=%d", c.v, l)
 			continue
 		}
 		got := a[:l]
 		if !u32SliceEq(got, c.word) {
-			t.Errorf("genLeech2ReduceType2Ortho(%#x) word=%v want %v", c.v, got, c.word)
+			t.Errorf("GenLeech2ReduceType2Ortho(%#x) word=%v want %v", c.v, got, c.word)
 		}
 		w := Leech2OpWord(c.v, got)
 		if w != c.w {
 			t.Errorf("Leech2OpWord(%#x, reduceWord)=%#x want %#x", c.v, w, c.w)
 		}
 		if w&0xffffff != leechBetaOrtho {
-			t.Errorf("genLeech2ReduceType2Ortho(%#x): reduced to %#x, want %#x", c.v, w&0xffffff, leechBetaOrtho)
+			t.Errorf("GenLeech2ReduceType2Ortho(%#x): reduced to %#x, want %#x", c.v, w&0xffffff, leechBetaOrtho)
 		}
 		// The word must fix beta.
 		b := Leech2OpWord(leechBeta, got)
@@ -231,8 +231,8 @@ func TestGenLeech2StartType24(t *testing.T) {
 		{0x7fffff, -1},
 	}
 	for _, c := range cases {
-		if got := genLeech2StartType24(c.v); got != c.want {
-			t.Errorf("genLeech2StartType24(%#x)=%d want %d", c.v, got, c.want)
+		if got := GenLeech2StartType24(c.v); got != c.want {
+			t.Errorf("GenLeech2StartType24(%#x)=%d want %d", c.v, got, c.want)
 		}
 	}
 }

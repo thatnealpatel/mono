@@ -1,4 +1,4 @@
-package cgt
+package leech
 
 import "patel.codes/cgt/generator"
 
@@ -22,8 +22,8 @@ func Leech2OpWordMatrix24(g []uint32, back bool) []uint32 {
 	for i := range a {
 		a[i] = 1 << uint(i)
 	}
-	if genLeech2OpWordLeech2Many(a, g, back) < 0 {
-		panic("cgt: Leech2OpWordMatrix24: word not in G_x0")
+	if GenLeech2OpWordLeech2Many(a, g, back) < 0 {
+		panic("leech: Leech2OpWordMatrix24: word not in G_x0")
 	}
 	return a
 }
@@ -46,11 +46,11 @@ type Leech2OrbitsResult struct {
 	Map     []uint32
 }
 
-// leech2OrbitGen is the interface a generator passed to
+// Leech2OrbitGen is the interface a generator passed to
 // Leech2OrbitsRaw must satisfy: it must expose its monster
 // atom representation. Both *MM and *XLeech2 provide this
 // via Mmdata in the cgt surface.
-type leech2OrbitGen interface {
+type Leech2OrbitGen interface {
 	Mmdata() []uint32
 }
 
@@ -72,7 +72,7 @@ type leech2OrbitGen interface {
 // binding rejects, so the Python function cannot run as
 // written; this port follows the documented intent (the
 // three-argument add).
-func Leech2OrbitsRaw(gList []leech2OrbitGen, map_ bool) Leech2OrbitsResult {
+func Leech2OrbitsRaw(gList []Leech2OrbitGen, map_ bool) Leech2OrbitsResult {
 	const n = uint32(24)
 	nG := uint32(len(gList))
 	lenA := uint32(generator.UFindLin2Size(n, nG))

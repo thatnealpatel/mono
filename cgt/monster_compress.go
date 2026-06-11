@@ -4,7 +4,10 @@ import (
 	"fmt"
 
 	"patel.codes/cgt/generator"
+	"patel.codes/cgt/leech"
 	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/n0"
+	"patel.codes/cgt/xsp2co1"
 )
 
 // Word compression and expansion for the monster
@@ -213,7 +216,7 @@ func nReduceElementY(g []uint32) uint32 {
 	g[1] &= 0x1fff
 	g[2] &= 0x1fff
 	g[3] &= 0xfff
-	g[2] ^= uint32(kerTableYx[g[1]>>11])
+	g[2] ^= uint32(n0.KerTableYx[g[1]>>11])
 	g[1] &= 0x7ff
 	return g[0] | g[1] | g[2] | g[3] | g[4]
 }
@@ -224,14 +227,14 @@ func nReduceElementY(g []uint32) uint32 {
 // allowed. It may be applied only to an empty
 // structure. Mirrors C mm_compress_pc_add_nx.
 func mmCompressPCAddNx(pc *mmCompress, m []uint32) int {
-	var g N0Elem
+	var g n0.N0Elem
 	i := uint32(0)
 	for ; i < uint32(len(m)); i++ {
 		if (m[i]>>28)&7 > 4 {
 			break
 		}
 	}
-	if nMulWordScan(&g, m[:i]) != i {
+	if n0.MulWordScan(&g, m[:i]) != i {
 		return -0x1001
 	}
 	if nReduceElementY(g[:]) == 0 {
@@ -398,15 +401,15 @@ func mmCompressPCExpandInt(pN *[4]uint64) ([]uint32, error) {
 	}
 	p := uint32(pN[0] & 0xfffffff)
 	if p < mat24.Mat24Order {
-		var g N0Elem
+		var g n0.N0Elem
 		g[0] = 0
 		g[1] = uint32((pN[0] >> 28) & 0x7ff)
 		g[2] = uint32((pN[0] >> 39) & 0x1fff)
 		g[3] = uint32((pN[0] >> 52) & 0xfff)
 		g[4] = p
-		if nReduceElement(&g) != 0 {
+		if n0.ReduceElement(&g) != 0 {
 			var w [5]uint32
-			n := nToWord(&g, w[:])
+			n := n0.ToWord(&g, w[:])
 			m = append(m, w[:n]...)
 		}
 		posN = 64
@@ -437,7 +440,7 @@ func mmCompressPCExpandInt(pN *[4]uint64) ([]uint32, error) {
 				return nil, compressError(-4)
 			}
 			var sub [6]uint32
-			status := genLeech2ReduceType2(v, sub[:])
+			status := leech.GenLeech2ReduceType2(v, sub[:])
 			if status < 0 {
 				return nil, compressError(int32(status))
 			}
@@ -468,7 +471,7 @@ func mmCompressPCExpandInt(pN *[4]uint64) ([]uint32, error) {
 			return nil, compressError(int32(ec))
 		}
 		var sub [6]uint32
-		status := genLeech2ReduceType4(uint32(ec), sub[:])
+		status := leech.GenLeech2ReduceType4(uint32(ec), sub[:])
 		if status < 0 {
 			return nil, compressError(int32(status))
 		}
@@ -600,12 +603,15 @@ func (g *gtWord) delete() int {
 // returning the reduced word. It is the Go equivalent
 // of C xsp2co1_reduce_word.
 func reduceWord(a []uint32) ([]uint32, int) {
-	var elem [xsp2Co1Words]uint64
-	if err := xsp2co1SetElemWord(elem[:], a); err != nil {
+	// 26 = the G_x0 element word count (xsp2co1's
+	// internal representation: 1 Leech-mod-3 word + 25
+	// qstate words).
+	var elem [26]uint64
+	if err := xsp2co1.SetElemWord(elem[:], a); err != nil {
 		return nil, -1
 	}
 	out := make([]uint32, 10)
-	n := xsp2co1ElemToWord(elem[:], out)
+	n := xsp2co1.ElemToWord(elem[:], out)
 	return out[:n], n
 }
 
@@ -624,15 +630,15 @@ func (g *gtWord) appendSubPart(a []uint32) int {
 	imgOmegaLen := uint32(len(w))
 	e := g.node[cur].tExp
 	i := uint32(0)
-	var gn N0Elem
+	var gn n0.N0Elem
 
 	for {
-		gn = N0Elem{}
+		gn = n0.N0Elem{}
 		gn[0] = e
-		i += nMulWordScan(&gn, a[i:])
-		e = nRightCosetNx0(gn[:])
+		i += n0.MulWordScan(&gn, a[i:])
+		e = n0.RightCosetNx0(gn[:])
 		var wbuf [5]uint32
-		j := nToWord(&gn, wbuf[:])
+		j := n0.ToWord(&gn, wbuf[:])
 		w = append(w, wbuf[:j]...)
 		reduced = reduced && j == 0
 		if e != 0 || i >= n {
@@ -684,7 +690,7 @@ func (g *gtWord) appendSubPart(a []uint32) int {
 // gen_leech2_op_word_leech2 with back = 0.
 func leech2OpWordLeech2(v uint32, a []uint32) uint32 {
 	buf := [1]uint32{v}
-	genLeech2OpWordLeech2Many(buf[:], a, false)
+	leech.GenLeech2OpWordLeech2Many(buf[:], a, false)
 	return buf[0]
 }
 

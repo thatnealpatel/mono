@@ -1,4 +1,4 @@
-package cgt
+package qstate12
 
 import (
 	"encoding/json"
@@ -991,7 +991,7 @@ func TestOrder(t *testing.T) {
 }
 
 // qMatrix decodes the Q (quadratic-form) block of a
-// raw qstate data slice exactly as qsCheck reads it:
+// raw qstate data slice exactly as QsCheck reads it:
 // Q[i][j] is bit (ncols+j) of data[i], for an
 // nrows x nrows symmetric matrix. It does NOT
 // normalize; it reports the bits as stored.
@@ -1009,9 +1009,9 @@ func qMatrix(ncols int, data []uint64) [][]int {
 
 // qAsymPairs returns every (i,j) with j<i where the
 // raw stored Q is asymmetric: Q[i][j] != Q[j][i].
-// Row 0's diagonal Q[0][0] is excluded (qsCheck
+// Row 0's diagonal Q[0][0] is excluded (QsCheck
 // clears it). Mirrors the err-accumulation loop in
-// qsCheck (qstate.go:164-170).
+// QsCheck (qstate.go:164-170).
 func qAsymPairs(ncols int, data []uint64) [][2]int {
 	q := qMatrix(ncols, data)
 	var out [][2]int
@@ -1025,10 +1025,10 @@ func qAsymPairs(ncols int, data []uint64) [][2]int {
 	return out
 }
 
-// qsCheckMirror applies qsCheck's normalization
+// qsCheckMirror applies QsCheck's normalization
 // (clear Q[0,0], copy Q[0,i] into Q[i,0]) to a copy
 // of data and returns it, WITHOUT panicking. This is
-// the lower-triangle->upper repair qsCheck does in
+// the lower-triangle->upper repair QsCheck does in
 // qstate.go:162-166 before the symmetry test.
 func qsCheckMirror(ncols int, data []uint64) []uint64 {
 	out := make([]uint64, len(data))
@@ -1045,7 +1045,7 @@ func qsCheckMirror(ncols int, data []uint64) []uint64 {
 	return out
 }
 
-// qsWouldPanic reports whether qsCheck(data) panics:
+// qsWouldPanic reports whether QsCheck(data) panics:
 // after mirroring row 0, is any Q[i][j] (i,j>=1)
 // asymmetric? Returns the offending pairs.
 func qsWouldPanic(ncols int, data []uint64) [][2]int {
@@ -1055,7 +1055,7 @@ func qsWouldPanic(ncols int, data []uint64) [][2]int {
 
 // TestMatMulInputSymmetry checks whether each raw
 // input fixture in TestMatMul satisfies the Q-symmetry
-// invariant that NewQState(mode=0)/qsCheck enforces.
+// invariant that NewQState(mode=0)/QsCheck enforces.
 // This isolates whether the panic comes from a bad
 // INPUT fixture vs. the MatMul OUTPUT.
 func TestMatMulInputSymmetry(t *testing.T) {
@@ -1085,8 +1085,8 @@ func TestMatMulInputSymmetry(t *testing.T) {
 			// Diagnostic only (not an assertion against
 			// qstate.go): records that these fixtures
 			// store Q strictly lower-triangular, which
-			// qsCheck (and mmgroup) correctly reject.
-			t.Logf("%s: AFTER qsCheck mirror, Q[%d][%d]=%d != Q[%d][%d]=%d -> qsCheck would PANIC (malformed fixture)",
+			// QsCheck (and mmgroup) correctly reject.
+			t.Logf("%s: AFTER QsCheck mirror, Q[%d][%d]=%d != Q[%d][%d]=%d -> QsCheck would PANIC (malformed fixture)",
 				f.label, p[0], p[1], qMir[p[0]][p[1]], p[1], p[0], qMir[p[1]][p[0]])
 		}
 	}
@@ -1161,7 +1161,7 @@ func floatsToComplex(p []float64) []complex128 {
 
 // TestMatMulFixedSymmetric proves the fix: with the
 // corrected SYMMETRIC fixture data (mode 0), MatMul
-// matches mmgroup's @ product. This shows qsMatmul /
+// matches mmgroup's @ product. This shows QsMatmul /
 // qsProductInto are correct; the failure was the
 // malformed (lower-triangular) input fixtures.
 func TestMatMulFixedSymmetric(t *testing.T) {

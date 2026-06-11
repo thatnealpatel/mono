@@ -1721,12 +1721,6 @@
           type: ""
           default: True
       calls: [gen_leech2_type, mm_aux_index_extern_to_sparse]
-    - name: MMToQX0
-      py: MM_to_Q_x0
-      return: ""
-      params:
-        - name: g
-          type: ""
     - name: NewXLeech2
       py: XLeech2.__init__
       note: "constructor family; see also: NewXLeech2FromInt, NewXLeech2Random, NewXLeech2RandomType, NewXLeech2FromShort, NewXLeech2FromPLoop, NewXLeech2Copy, NewXLeech2FromMM, NewXLeech2FromBasisVector, NewXLeech2FromName"
@@ -1738,34 +1732,12 @@
       params:
         - name: x
           type: "*XLeech2"
-    - name: NewXLeech2FromBasisVector
-      py: XLeech2.__init__
-      return: "*XLeech2"
-      params:
-        - name: tag
-          type: "byte"
-        - name: i0
-          type: "int"
-        - name: i1
-          type: "int"
     - name: NewXLeech2FromInt
       py: XLeech2.__init__
       return: "*XLeech2"
       params:
         - name: v
           type: "uint32"
-    - name: NewXLeech2FromMM
-      py: XLeech2.__init__
-      return: "*XLeech2"
-      params:
-        - name: g
-          type: "*MM"
-    - name: NewXLeech2FromName
-      py: XLeech2.__init__
-      return: "*XLeech2"
-      params:
-        - name: name
-          type: "string"
     - name: NewXLeech2FromPLoop
       py: XLeech2.__init__
       return: "*XLeech2"
@@ -1774,22 +1746,10 @@
           type: "*PLoop"
         - name: c
           type: "*Cocode"
-    - name: NewXLeech2FromShort
-      py: XLeech2.__init__
-      return: "*XLeech2"
-      params:
-        - name: index
-          type: "int"
     - name: NewXLeech2Random
       py: XLeech2.__init__
       return: "*XLeech2"
       params: []
-    - name: NewXLeech2RandomType
-      py: XLeech2.__init__
-      return: "*XLeech2"
-      params:
-        - name: vtype
-          type: "int"
     - name: OrbitsRaw
       py: leech2_orbits_raw
       return: ""
@@ -1800,13 +1760,6 @@
           type: ""
           default: False
       calls: [gen_leech2_op_word_matrix24, gen_ufind_lin2_add, gen_ufind_lin2_dim, gen_ufind_lin2_get_map, gen_ufind_lin2_init, gen_ufind_lin2_n_orbits, gen_ufind_lin2_orbits, gen_ufind_lin2_size]
-    - name: RandXleech2Type
-      py: rand_xleech2_type
-      return: ""
-      params:
-        - name: vtype
-          type: ""
-      calls: [gen_leech2_type, mm_aux_index_extern_to_sparse, mm_aux_index_sparse_to_leech2]
     - name: ValueFromPloop
       py: value_from_ploop
       return: ""
@@ -5925,6 +5878,12 @@
           type: ""
           default: 0
       calls: [xsp2co1_elem_from_mapping]
+    - name: MMToQX0
+      py: MM_to_Q_x0
+      return: ""
+      params:
+        - name: g
+          type: ""
     - name: MMV
       py: MMV
       return: ""
@@ -6224,6 +6183,40 @@
           type: ""
           default: None
       calls: [gen_rng_uniform_to_dist]
+    - name: NewXLeech2FromBasisVector
+      py: XLeech2.__init__
+      return: "*XLeech2"
+      params:
+        - name: tag
+          type: "byte"
+        - name: i0
+          type: "int"
+        - name: i1
+          type: "int"
+    - name: NewXLeech2FromMM
+      py: XLeech2.__init__
+      return: "*XLeech2"
+      params:
+        - name: g
+          type: "*MM"
+    - name: NewXLeech2FromName
+      py: XLeech2.__init__
+      return: "*XLeech2"
+      params:
+        - name: name
+          type: "string"
+    - name: NewXLeech2FromShort
+      py: XLeech2.__init__
+      return: "*XLeech2"
+      params:
+        - name: index
+          type: "int"
+    - name: NewXLeech2RandomType
+      py: XLeech2.__init__
+      return: "*XLeech2"
+      params:
+        - name: vtype
+          type: "int"
     - name: NortonGenerators
       py: Norton_generators
       return: ""
@@ -6401,6 +6394,13 @@
           type: ""
         - name: value
           type: ""
+    - name: RandXleech2Type
+      py: rand_xleech2_type
+      return: ""
+      params:
+        - name: vtype
+          type: ""
+      calls: [gen_leech2_type, mm_aux_index_extern_to_sparse, mm_aux_index_sparse_to_leech2]
     - name: ReduceViaPower
       py: reduce_via_power
       return: ""

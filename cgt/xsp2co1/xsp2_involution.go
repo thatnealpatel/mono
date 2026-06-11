@@ -1,8 +1,10 @@
-package cgt
+package xsp2co1
 
 import (
 	"patel.codes/cgt/generator"
+	"patel.codes/cgt/leech"
 	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/n0"
 	"patel.codes/cgt/swar"
 )
 
@@ -12,11 +14,11 @@ import (
 // needed to conjugate an involution to a standard
 // form. Ported here alongside xsp2.go.
 
-// The N_0 word algebra (mm_group_n.c) lives in
-// monster.go: the N0Elem type, nMul, nMulElement,
-// nConjugateElement, nMulWordScan, nReduceElement,
-// nToWord, nConjToQx0 and the index constants
-// iT..iPi are reused here.
+// The N_0 word algebra (mm_group_n.c) lives in the
+// cgt/n0 package: the n0.N0Elem type, n0.Mul,
+// n0.MulElement, n0.ConjugateElement, n0.MulWordScan,
+// n0.ReduceElement, n0.ToWord and n0.ConjToQx0 are
+// reused here.
 
 /*************************************************************************
 *** Conversion between G_x0 and N_0
@@ -28,9 +30,9 @@ import (
 func xsp2co1ElemToN0(elem []uint64, g []uint32) error {
 	var a [10]uint32
 	lenA := xsp2co1ElemToWord(elem, a[:])
-	ng := (*N0Elem)(g)
-	*ng = N0Elem{}
-	if int(nMulWordScan(ng, a[:lenA])) < lenA {
+	ng := (*n0.N0Elem)(g)
+	*ng = n0.N0Elem{}
+	if int(n0.MulWordScan(ng, a[:lenA])) < lenA {
 		return errNotInGx0
 	}
 	return nil
@@ -41,11 +43,11 @@ func xsp2co1ElemToN0(elem []uint64, g []uint32) error {
 // if g is not in G_{x0}.
 func xsp2co1ElemFromN0(elem []uint64, g []uint32) error {
 	var g1 [5]uint32
-	nReduceElement((*N0Elem)(g))
+	n0.ReduceElement((*n0.N0Elem)(g))
 	if g[0] != 0 {
 		return errNotInGx0
 	}
-	lenG := nToWord((*N0Elem)(g), g1[:])
+	lenG := n0.ToWord((*n0.N0Elem)(g), g1[:])
 	return xsp2co1SetElemWord(elem, g1[:lenG])
 }
 
@@ -70,18 +72,18 @@ func xsp2co1ConjugateElem(elem []uint64, a []uint32) error {
 				break
 			}
 		}
-		var aN N0Elem
-		k = int(nMulWordScan(&aN, a))
+		var aN n0.N0Elem
+		k = int(n0.MulWordScan(&aN, a))
 		if k == 0 {
 			return errNotInGx0
 		}
 		a = a[k:]
-		if nReduceElement(&aN) == 0 {
+		if n0.ReduceElement(&aN) == 0 {
 			continue
 		}
 		if aN[0] == 0 {
 			var aNword [5]uint32
-			lenANword := int(nToWord(&aN, aNword[:]))
+			lenANword := int(n0.ToWord(&aN, aNword[:]))
 			if xsp2co1SetElemWordScan(elemA[:], aNword[:lenANword], aPending) != lenANword {
 				return errNotInGx0
 			}
@@ -92,11 +94,11 @@ func xsp2co1ConjugateElem(elem []uint64, a []uint32) error {
 			xsp2co1ConjElem(elem, elemA[:], elem)
 			aPending = false
 		}
-		var eN N0Elem
+		var eN n0.N0Elem
 		if err := xsp2co1ElemToN0(elem, eN[:]); err != nil {
 			return err
 		}
-		nConjugateElement(&eN, &aN, &eN)
+		n0.ConjugateElement(&eN, &aN, &eN)
 		if err := xsp2co1ElemFromN0(elem, eN[:]); err != nil {
 			return err
 		}
@@ -180,7 +182,7 @@ func xsp2co1InvolutionInvariants(elem, invar []uint64) int32 {
 		if t1 == 0 {
 			goto finalEchelonize
 		}
-		leech2MatrixOrthogonal(pa[8:], data[:], 16)
+		leech.Leech2MatrixOrthogonal(pa[8:], data[:], 16)
 		invar[0] = data[0] & 0xffffff
 		invar[0] |= 0x4000000
 		t0 := leechTypeMod2(invar[0])
@@ -495,9 +497,9 @@ func xsp2co1ElemConjGx0ToQx0(elem []uint64, a []uint32, baby bool) int32 {
 	}
 	var length int
 	if baby {
-		length = genLeech2ReduceType2Ortho(uint32(v), a)
+		length = leech.GenLeech2ReduceType2Ortho(uint32(v), a)
 	} else {
-		length = genLeech2ReduceType4(uint32(v), a)
+		length = leech.GenLeech2ReduceType4(uint32(v), a)
 	}
 	if length < 0 {
 		return -1
@@ -509,7 +511,7 @@ func xsp2co1ElemConjGx0ToQx0(elem []uint64, a []uint32, baby bool) int32 {
 	if err := xsp2co1ElemToN0(elem1[:], eN[:]); err != nil {
 		return -1
 	}
-	v = nConjToQx0(eN[:])
+	v = n0.ConjToQx0(eN[:])
 	if v < 0 {
 		return -1
 	}
@@ -541,15 +543,15 @@ func xsp2co1ElemConjugateInvolution(elem []uint64, a []uint32) int32 {
 	}
 	switch generator.Leech2Type(uint32(v)) {
 	case 2:
-		l1 := genLeech2ReduceType2(uint32(v), a[length:])
+		l1 := leech.GenLeech2ReduceType2(uint32(v), a[length:])
 		if l1 < 0 {
 			return -1
 		}
-		v = int32(Leech2OpWord(uint32(v), a[length:length+l1]))
+		v = int32(leech.Leech2OpWord(uint32(v), a[length:length+l1]))
 		length += l1
 		if v&0x1000000 != 0 {
 			a[length] = 0xb0000200
-			v = int32(Leech2OpAtom(uint32(v), a[length]))
+			v = int32(leech.Leech2OpAtom(uint32(v), a[length]))
 			length++
 		}
 		if v != 0x200 {
@@ -560,11 +562,11 @@ func xsp2co1ElemConjugateInvolution(elem []uint64, a []uint32) int32 {
 	default:
 		return -1
 	}
-	l1 := genLeech2ReduceType4(uint32(v), a[length:])
+	l1 := leech.GenLeech2ReduceType4(uint32(v), a[length:])
 	if l1 < 0 {
 		return -1
 	}
-	v = int32(Leech2OpWord(uint32(v), a[length:length+l1]))
+	v = int32(leech.Leech2OpWord(uint32(v), a[length:length+l1]))
 	if v & ^int32(0x1000000) != 0x800000 {
 		return -1
 	}
@@ -578,12 +580,13 @@ func xsp2co1ElemConjugateInvolution(elem []uint64, a []uint32) int32 {
 *** Public involution methods
 *************************************************************************/
 
-// errNotInvolution is the panic value raised by
-// ConjugateInvolution when its receiver is not an
-// involution. conjugateInvolutionGx0 (misc.go)
-// recovers exactly this value to fail a trial
-// closed; any other panic is a genuine bug.
-const errNotInvolution = "cgt: element is not an involution"
+// ErrNotInvolution is the panic value (a string)
+// raised by ConjugateInvolution when its receiver is
+// not an involution. The flat cgt trial loop
+// (conjugateInvolutionGx0 in misc.go) recovers exactly
+// this value to fail a trial closed; any other panic is
+// a genuine bug.
+const ErrNotInvolution = "cgt: element is not an involution"
 
 // InGx0 reports whether g lies in the subgroup
 // G_{x0}. Elements of this type are always in
@@ -592,9 +595,29 @@ func (g *Xsp2Co1) InGx0() bool {
 	return true
 }
 
-// ConjugateInvolution returns (I, h) where h is
-// an element conjugating the involution g to the
-// standard representative z, i.e. h^{-1} g h = z
+// Word is a word of monster generator atoms in the
+// standard mmgroup encoding. It is the public form
+// of a conjugating word produced by
+// ConjugateInvolution; the flat cgt (mm) layer wraps
+// it as a monster element *MM. Word exists so the
+// involution algorithm can return its result without
+// exposing a raw []uint32 and without xsp2co1 needing
+// to import the mm-level *MM type.
+type Word struct {
+	atoms []uint32
+}
+
+// Atoms returns the underlying word of monster
+// generator atoms. The caller must not mutate the
+// returned slice.
+func (w Word) Atoms() []uint32 {
+	return w.atoms
+}
+
+// ConjugateInvolution returns (I, w) where w is the
+// word of monster generators conjugating the
+// involution g to the standard representative z,
+// i.e. z = applying w as h gives h^{-1} g h = z
 // (I = 0 for the identity, 1 for a 2A and 2 for a
 // 2B involution).
 //
@@ -603,25 +626,25 @@ func (g *Xsp2Co1) InGx0() bool {
 // generators: it carries a triality atom t^e
 // whenever the N_0 form needs t^e to land in
 // Q_{x0}, which is the case for essentially every
-// 2B input. h is therefore returned as a general
-// monster element *MM (matching Python's
-// Xsp2_Co1.conjugate_involution, which returns
-// mmgroup('a', a)); it is not in general an element
-// of G_{x0}, so it cannot be re-wrapped as
-// *Xsp2Co1.
+// 2B input. w is therefore a general monster word
+// (matching Python's Xsp2_Co1.conjugate_involution,
+// which returns mmgroup('a', a)); it is not in
+// general an element of G_{x0}, so it cannot be
+// re-wrapped as *Xsp2Co1. The mm layer wraps it as
+// *MM (see ConjugateInvolutionType in flat cgt).
 //
 // ConjugateInvolution panics if g is not an
 // involution.
-func (g *Xsp2Co1) ConjugateInvolution() (int, *MM) {
+func (g *Xsp2Co1) ConjugateInvolution() (int, Word) {
 	var a [15]uint32
 	res := xsp2co1ElemConjugateInvolution(g.data[:], a[:])
 	if res < 0 {
-		panic(errNotInvolution)
+		panic(ErrNotInvolution)
 	}
 	length := int(res & 0xff)
 	out := make([]uint32, length)
 	copy(out, a[:length])
-	return int(res >> 8), &MM{data: out}
+	return int(res >> 8), Word{atoms: out}
 }
 
 /*************************************************************************

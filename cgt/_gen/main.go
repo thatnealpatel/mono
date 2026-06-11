@@ -8,9 +8,16 @@
 // Usage:
 //
 //	go run -C _gen . -out ../mat24_gen.go
-//	go run -C _gen . -out ../mm_op_xi_gen.go
 //	go run -C _gen . -out ../mm_op_p_gen.go
 //	go run -C _gen . -out ../monster_order_gen.go
+//
+// The xi operation tables (formerly mm_op_xi_gen.go)
+// are no longer emitted here: package cgt builds them
+// at init from generator.XiOpXiShort, and the
+// independent first-principles derivation that used
+// to verify the emitted file now lives as a
+// regression cross-check in
+// cgt/mm_op_xi_regress_test.go.
 //
 // -out names both the generator to run (selected by
 // the file's basename) and the path to write. The
@@ -37,7 +44,6 @@ import (
 // locate them; mm_op_p_gen.go ignores it.
 var generators = map[string]func(w io.Writer, cgtDir string) error{
 	"mat24_gen.go":         genMat24Tables,
-	"mm_op_xi_gen.go":      genXiTables,
 	"mm_op_p_gen.go":       genMMOpP,
 	"monster_order_gen.go": genOrderVector,
 }
@@ -47,7 +53,7 @@ func main() {
 	log.SetFlags(0)
 
 	out := flag.String("out", "", "output file to generate "+
-		"(mat24_gen.go, mm_op_xi_gen.go, mm_op_p_gen.go or "+
+		"(mat24_gen.go, mm_op_p_gen.go or "+
 		"monster_order_gen.go)")
 	flag.Parse()
 
@@ -60,7 +66,7 @@ func main() {
 	gen, ok := generators[filepath.Base(*out)]
 	if !ok {
 		log.Fatalf("unknown -out %q (want one of mat24_gen.go, "+
-			"mm_op_xi_gen.go, mm_op_p_gen.go, monster_order_gen.go)", *out)
+			"mm_op_p_gen.go, monster_order_gen.go)", *out)
 	}
 
 	var buf bytes.Buffer

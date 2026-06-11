@@ -1,23 +1,12 @@
-package cgt
+package generator
 
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
-
-	"patel.codes/cgt/generator"
 )
-
-// pyListU32 renders a uint32 slice as a Python list literal
-// for the oracle scripts in this file.
-func pyListU32(g []uint32) string {
-	parts := make([]string, len(g))
-	for i, v := range g {
-		parts[i] = fmt.Sprintf("%d", v)
-	}
-	return "[" + strings.Join(parts, ",") + "]"
-}
 
 // bitMat is a test-only GroupElem: an invertible n x n bit
 // matrix over GF(2) whose rows are stored as integers
@@ -41,7 +30,7 @@ func (m bitMat) Mul(other GroupElem) GroupElem {
 	o := other.(bitMat)
 	res := make([]uint32, m.n)
 	for i := uint32(0); i < m.n; i++ {
-		res[i] = generator.UFindLin2MulAffine(m.rows[i], append(append([]uint32(nil), o.rows...), 0), m.n)
+		res[i] = UFindLin2MulAffine(m.rows[i], append(append([]uint32(nil), o.rows...), 0), m.n)
 	}
 	return bitMat{n: m.n, rows: res}
 }
@@ -60,7 +49,7 @@ func (m bitMat) Pow(e int) GroupElem {
 		mm := make([]uint32, m.n+1)
 		copy(mm, m.rows)
 		inv := make([]uint32, m.n+1)
-		if generator.MatInverseAff(mm, m.n, inv) != 0 {
+		if MatInverseAff(mm, m.n, inv) != 0 {
 			panic("bitMat.Pow(-1): not invertible")
 		}
 		return bitMat{n: m.n, rows: inv[:m.n]}
@@ -176,7 +165,7 @@ func TestOrbitLin2SmallLinear(t *testing.T) {
 		want := orbitOracleInts(t, gens, fmt.Sprintf("sorted(int(x) for x in o.orbit(%d))", v))
 		// The engine's orbit order is not sorted; compare as
 		// sets by sorting the Go result.
-		sortU32(got)
+		slices.Sort(got)
 		if !equalU32Int64(got, want) {
 			t.Errorf("Orbit(%d)=%v want %v", v, got, want)
 		}
@@ -264,7 +253,7 @@ func TestOrbitLin2MapWord(t *testing.T) {
 			if e.Sign < 0 {
 				m = gg[1][e.Gen]
 			}
-			cur = generator.UFindLin2MulAffine(cur, append(append([]uint32(nil), m.rows...), 0), 3)
+			cur = UFindLin2MulAffine(cur, append(append([]uint32(nil), m.rows...), 0), 3)
 		}
 		if int(cur) != o.OrbitRep(v) {
 			t.Errorf("MapVWordG(%d) word maps %d to %d, want rep %d", v, v, cur, o.OrbitRep(v))

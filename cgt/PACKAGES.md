@@ -35,22 +35,32 @@ xsp2co1     — Xsp2Co1 (G_{x0} element), involution analysis, traces
 ### generator
 - `gen_xi.go` — XiGGray, XiGCocode, XiOpXi, XiLeechToShort, XiShortToLeech,
   Leech2Mul, Leech2Subtype, Leech2Type, Leech2Type2
-- `gen_leech2.go` — genLeech2PrefixGx0, genLeech2MapStdSubframe, genExtractBC,
-  genSubframeValue, genOpDeltaTagABC
-- `xsp2_reduce.go` — genLeech2StartType24, genLeech2StartType4,
-  genLeech2ReduceType2, genLeech2ReduceType4, genLeech2ReduceType2Ortho,
-  reduceType2Ortho, reduceType4 (all gen_leech_reduce.c provenance)
 - `rng.go` — Rng (xoshiro256**), NewRng, NewRngSeed, BytesModP, ModP
 - `misc.go` (partial) — UFindInit, UFindUnion, UFindFind, UFindFindAllMin,
   UFindPartition, UFindMakeMap, BitParity, BitWeight, HadamardSign
 
 ### leech
-- `leech.go` — XLeech2, NewXLeech2, Leech2Scalprod, Leech2To3Short,
-  Leech3To2Short, short3Reduce, Leech2Pow, Leech2OpAtom, vectToGcodeRaw,
-  getLeech2Basis, Leech2MatrixBasis, Leech2MatrixRadical, leech2MatrixOrthogonal,
-  leech3OpPi, leech3OpY, leech3OpXi, Leech3OpVectorWord
+- `leech.go` — XLeech2, NewXLeech2, NewXLeech2FromInt, XLeech2FromInt,
+  NewXLeech2Copy, NewXLeech2FromPLoop, NewXLeech2Random, Leech2Scalprod,
+  Leech2To3Short, Leech3To2Short, Short3Reduce, Leech2Pow, Leech2OpAtom,
+  Leech2OpWord, GenLeech2OpWordMany, GenLeech2OpWordLeech2Many, VectToGcodeRaw,
+  getLeech2Basis, Leech2MatrixBasis, Leech2MatrixRadical, Leech2MatrixOrthogonal,
+  Leech3OpPi, Leech3OpY, Leech3OpXi, Leech3OpVectorWord
 - `leech.go` (bm64 subset) — bm64RestoreCapH, bm64CapH (leech-specific composites
   built on the swar bm64 primitives)
+- `xsp2_reduce.go` — GenLeech2StartType24, GenLeech2StartType4,
+  GenLeech2ReduceType2, GenLeech2ReduceType4, GenLeech2ReduceType2Ortho,
+  reduceType2Ortho, reduceType4, applyPerm, findOctadPermutation
+  (all gen_leech_reduce.c provenance; routed here, not generator, because
+  the reducers call the leech-level Leech2OpAtom)
+- `leech_orbits.go` — Leech2OpWordMatrix24, Leech2OrbitsRaw,
+  Leech2OrbitsResult, Leech2OrbitGen
+
+The mm-coupled XLeech2 constructors (NewXLeech2RandomType, RandXleech2Type,
+NewXLeech2FromShort, NewXLeech2FromMM, MMToQX0, NewXLeech2FromBasisVector,
+NewXLeech2FromName) do NOT live here: they take/yield an *MM, parse a named
+q-element, or index the mm-rep short-vector table, so they sit in flat cgt
+(mm) in `xleech2_mm.go` and construct through the exported leech surface.
 
 ### swar
 - `qstate.go` (bm64 block, lines ~348-580) — bm64RotBits, bm64XchBits,
@@ -82,6 +92,14 @@ xsp2co1     — Xsp2Co1 (G_{x0} element), involution analysis, traces
   AsSparse, AsTuples, Mul, MulExp, Projection, ParseVector
 - `mm_op_p_gen.go` — genSwar table, all genOp* field-generic SWAR operations
 - `mm_op_xi_gen.go` — xi permutation/sign tables (generated)
+- `gen_leech2.go` — genLeech2PrefixGx0, genLeech2MapStdSubframe, genExtractBC,
+  genSubframeValue, genOpDeltaTagABC (routed here, not generator: genExtractBC,
+  genSubframeValue and genOpDeltaTagABC take genSwar/[]uint64 mm-rep arguments
+  and are consumed by mm_op_p_gen.go)
+- `xleech2_mm.go` — the mm-coupled XLeech2 constructors split from leech.go:
+  NewXLeech2RandomType, RandXleech2Type, NewXLeech2FromShort, NewXLeech2FromMM,
+  MMToQX0, NewXLeech2FromBasisVector, NewXLeech2FromName (build via
+  leech.NewXLeech2FromInt)
 - `monster.go` — MM type, N0Elem, atom encoding, N_0 word algebra (nMul,
   nMulDeltaPi, nMulWordScan, nReduceElement, nToWord, etc.), parseMMWord,
   NewMM, MMIdentity, MMGen, MMRand, MMRandIn, MMFromInt, Mul/Inv/Pow/String
@@ -153,10 +171,12 @@ Key dependency evidence:
   bm64ReverseBits
 - xsp2co1 → qstate12: qs12 type, qsPauliVector, qsReduce, qsEchelonize,
   qsMulAv, bm64 functions (via qstate.go definitions)
-- xsp2co1 → leech: Leech2To3Short, Leech3To2Short, short3Reduce,
-  short3Scalprod, leech3OpPi/Y/Xi, Leech2OpAtom
-- xsp2co1 → generator: genLeech2ReduceType4 (xsp2_reduce.go → bimm.go),
-  Leech2Subtype, Leech2Type2
+- xsp2co1 → leech: Leech2To3Short, Leech3To2Short, Short3Reduce,
+  Leech3OpPi/Y/Xi, Leech2OpAtom, Leech2OpWord, GenLeech2ReduceType2/4,
+  GenLeech2ReduceType2Ortho, Leech2MatrixOrthogonal, GenLeech2OpWordMany
+  (GenLeech2Reduce* live in xsp2_reduce.go, now routed to leech, since the
+  reducers call the leech-level Leech2OpAtom)
+- xsp2co1 → generator: Leech2Subtype, Leech2Type2
 - mm → xsp2co1: xsp2co1SetElemWordScan, xsp2co1ElemSubtype, xsp2co1ElemToWord,
   xsp2co1MulElemWord, xsp2co1ElemToN0 (in mm_op_group.go PrepareOpABC)
 - mm → leech: Leech2MatrixBasis, Leech2MatrixRadical (monster_order.go)

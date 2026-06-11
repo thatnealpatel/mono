@@ -16,6 +16,7 @@ package cgt
 import (
 	"math/bits"
 
+	"patel.codes/cgt/leech"
 	"patel.codes/cgt/mat24"
 )
 
@@ -241,7 +242,7 @@ func findInGx0(v []uint64, g []uint32) int {
 	// monomial part is irrelevant to find_in_Gx0.
 	work := append([]uint64(nil), v[:48]...)
 
-	lenG := genLeech2ReduceType4(wType4, g)
+	lenG := leech.GenLeech2ReduceType4(wType4, g)
 	if lenG < 0 {
 		return lenG
 	}

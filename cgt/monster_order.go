@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"patel.codes/cgt/generator"
+	"patel.codes/cgt/leech"
 	"patel.codes/cgt/mat24"
 )
 
@@ -93,7 +94,7 @@ func genLeech3To2(v3 uint64) uint64 {
 	var gcodev, cocodev, h, w, w1, x1, syn, t, res uint32
 	omega := uint32(0)
 	vtype := ^uint64(0)
-	v3 = short3Reduce(v3)
+	v3 = leech.Short3Reduce(v3)
 	h = uint32(((v3 >> 24) | v3) & 0xffffff)
 	w = mat24.Bw24(h)
 	switch w {
@@ -231,7 +232,7 @@ func genLeech3To2(v3 uint64) uint64 {
 	default:
 		return vtype
 	}
-	gc, ok := vectToGcodeRaw(gcodev)
+	gc, ok := leech.VectToGcodeRaw(gcodev)
 	if !ok || gc&0xfffff000 != 0 {
 		return ^uint64(0)
 	}
@@ -291,7 +292,7 @@ func reduce2AAxisType(v []uint64) uint32 {
 			return 0xA1000000
 		}
 		if rank == 23 {
-			v2 := Leech3To2Short(v3) & 0xffffff
+			v2 := leech.Leech3To2Short(v3) & 0xffffff
 			valA := mmEvalA(v, v2)
 			switch valA {
 			case 4:
@@ -475,7 +476,7 @@ func getShort(v []uint64, value0, value1 uint32, p *ovAxesReduce) {
 // get_span.
 func getSpan(v []uint64, value uint32, p *ovAxesReduce) {
 	getShort(v, value, 0, p)
-	basis := Leech2MatrixBasis(p.vLeech2)
+	basis := leech.Leech2MatrixBasis(p.vLeech2)
 	dim := len(basis)
 	if dim > 10 {
 		dim = 10
@@ -488,7 +489,7 @@ func getSpan(v []uint64, value uint32, p *ovAxesReduce) {
 // value. C function get_radical.
 func getRadical(v []uint64, value uint32, p *ovAxesReduce) {
 	getShort(v, value, 0, p)
-	basis := Leech2MatrixRadical(p.vLeech2)
+	basis := leech.Leech2MatrixRadical(p.vLeech2)
 	dim := len(basis)
 	if dim > 10 {
 		dim = 10
@@ -734,7 +735,7 @@ func vLeech2AdjustSign(v []uint64, v2 uint32) uint32 {
 // returns its length, or a negative value on failure.
 // C function transform_v4.
 func transformV4(v []uint64, v4 uint32, targetAxes [2]uint32, r []uint32, work []uint64) int {
-	lenR := genLeech2ReduceType4(v4, r)
+	lenR := leech.GenLeech2ReduceType4(v4, r)
 	if lenR < 0 {
 		return -1000 + lenR
 	}
@@ -775,11 +776,11 @@ func reduceVAxisFinal(vt uint32, r []uint32, lenR int, stdAxis bool) int {
 		lenR++
 		return lenR
 	}
-	lenR1 := genLeech2ReduceType2(vt, r[lenR:])
+	lenR1 := leech.GenLeech2ReduceType2(vt, r[lenR:])
 	if lenR1 < 0 {
 		return -10003
 	}
-	vt = Leech2OpWord(vt, r[lenR:lenR+lenR1])
+	vt = leech.Leech2OpWord(vt, r[lenR:lenR+lenR1])
 	lenR += lenR1
 	if vt&0x1000000 != 0 {
 		r[lenR] = 0xB0000200
@@ -900,7 +901,7 @@ func mmReduceMapAxis(vt *uint32, v []uint64, a []uint32, n int, work []uint64) i
 			return -1
 		}
 		q := [1]uint32{*vt}
-		n0 := genLeech2OpWordMany(q[:], a[:n])
+		n0 := leech.GenLeech2OpWordMany(q[:], a[:n])
 		*vt = q[0]
 		if n0 == n {
 			return 0
@@ -932,20 +933,20 @@ func mmReduceMapAxis(vt *uint32, v []uint64, a []uint32, n int, work []uint64) i
 func reduceVBabyAxisFinal(vp, vn uint32, r []uint32, lenR int) int {
 	v4 := generator.Leech2Mul(vp, vn)
 	if v4&0xffffff != 0 {
-		lenR1 := genLeech2ReduceType4(v4, r[lenR:])
+		lenR1 := leech.GenLeech2ReduceType4(v4, r[lenR:])
 		if lenR1 < 0 {
 			return -20012
 		}
-		v4 = Leech2OpWord(v4, r[lenR:lenR+lenR1])
-		vn = Leech2OpWord(vn, r[lenR:lenR+lenR1])
+		v4 = leech.Leech2OpWord(v4, r[lenR:lenR+lenR1])
+		vn = leech.Leech2OpWord(vn, r[lenR:lenR+lenR1])
 		lenR += lenR1
 		if v4&0xffffff != 0x800000 {
 			return -20013
 		}
 		e := 1 + ((v4 >> 24) & 1)
 		r[lenR] = 0xD0000003 - e
-		v4 = Leech2OpWord(v4, r[lenR:lenR+1])
-		vn = Leech2OpWord(vn, r[lenR:lenR+1])
+		v4 = leech.Leech2OpWord(v4, r[lenR:lenR+1])
+		vn = leech.Leech2OpWord(vn, r[lenR:lenR+1])
 		lenR++
 	}
 	if v4 != 0x1000000 {
@@ -1013,7 +1014,7 @@ func opAxis(axis *uint32, w []uint32) bool {
 		return false
 	}
 	q := [1]uint32{*axis}
-	if genLeech2OpWordMany(q[:], w) != len(w) {
+	if leech.GenLeech2OpWordMany(q[:], w) != len(w) {
 		return true
 	}
 	*axis = q[0]
@@ -1211,13 +1212,13 @@ func reduceVectorShortcut(stage, mode, axis uint32, r []uint32) int {
 		return -10001
 	}
 	if mode&1 != 0 && axis != vPlus {
-		lenR1 := genLeech2ReduceType2(axis, r[lenR:])
+		lenR1 := leech.GenLeech2ReduceType2(axis, r[lenR:])
 		if lenR1 < 0 {
 			return -10002
 		}
 		lenR += lenR1
 		q := [1]uint32{axis}
-		if genLeech2OpWordMany(q[:], r[1:lenR]) != lenR-1 {
+		if leech.GenLeech2OpWordMany(q[:], r[1:lenR]) != lenR-1 {
 			return -0x11000
 		}
 		axis = q[0]

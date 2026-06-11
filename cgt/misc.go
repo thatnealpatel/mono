@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/bits"
 	"math/rand/v2"
+
+	"patel.codes/cgt/xsp2co1"
 )
 
 // p3Incidences[x] is a bitmap of the nodes
@@ -1366,9 +1368,9 @@ func conjugateInvolution(g *MM, check bool, ntrials int) (int, *MM, bool) {
 		panic("cgt: element is not an involution in the monster")
 	}
 	if h := g.checkInGx0(); h != nil {
-		elem := NewXsp2Co1(atomsFromWord(h)...)
-		it, hx := elem.ConjugateInvolution()
-		return it, hx, true
+		elem := xsp2co1.NewXsp2Co1(atomsFromWord(h)...)
+		it, hw := elem.ConjugateInvolution()
+		return it, &MM{data: hw.Atoms()}, true
 	}
 	for i := 0; i < ntrials; i++ {
 		var s *MM
@@ -1429,14 +1431,14 @@ func conjugateInvolution(g *MM, check bool, ntrials int) (int, *MM, bool) {
 func conjugateInvolutionGx0(w []uint32) (itype int, h *MM, ok bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			if s, isStr := r.(string); isStr && s == errNotInvolution {
+			if s, isStr := r.(string); isStr && s == xsp2co1.ErrNotInvolution {
 				itype, h, ok = 0, nil, false
 				return
 			}
 			panic(r)
 		}
 	}()
-	elem := NewXsp2Co1(atomsFromWord(w)...)
-	it, hx := elem.ConjugateInvolution()
-	return it, hx, true
+	elem := xsp2co1.NewXsp2Co1(atomsFromWord(w)...)
+	it, hw := elem.ConjugateInvolution()
+	return it, &MM{data: hw.Atoms()}, true
 }

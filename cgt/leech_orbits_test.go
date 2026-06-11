@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"patel.codes/cgt/leech"
 )
 
 // leechOrbitsOracle runs the leech2_orbits_raw driver inline
@@ -54,7 +56,7 @@ r=(n_sets, indices, data)
 func TestLeech2OpWordMatrix24(t *testing.T) {
 	words := []string{"'l', 1", "'p', 12345", "'y', 0x123"}
 	for _, w := range words {
-		got := Leech2OpWordMatrix24(mustMM(t, mmWordFromPy(w)).Mmdata(), false)
+		got := leech.Leech2OpWordMatrix24(mustMM(t, mmWordFromPy(w)).Mmdata(), false)
 		out := leechMatrix24Oracle(t, w)
 		if !equalU32Int64(got, out) {
 			t.Errorf("Leech2OpWordMatrix24(%s)=%v want %v", w, got, out)
@@ -109,11 +111,11 @@ func TestLeech2OrbitsRaw(t *testing.T) {
 		t.Skip("skipping 2^24 Leech orbit computation in -short mode")
 	}
 	words := []string{"'l', 1", "'p', 12345"}
-	gList := []leech2OrbitGen{
+	gList := []leech.Leech2OrbitGen{
 		mustMM(t, "l_1"),
 		mustMM(t, "p_12345"),
 	}
-	res := Leech2OrbitsRaw(gList, false)
+	res := leech.Leech2OrbitsRaw(gList, false)
 
 	wantNSets := int(int64FromJSON(t, leechOrbitsOracle(t, words, "int(r[0])")))
 	if res.NSets != wantNSets {
@@ -139,6 +141,18 @@ func TestLeech2OrbitsRaw(t *testing.T) {
 	if !equalU32Int64(gotReps, wantReps) {
 		t.Fatalf("orbit reps=%v want %v", gotReps, wantReps)
 	}
+}
+
+func equalU32Int64(a []uint32, b []int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if int64(a[i]) != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func int64FromJSON(t *testing.T, raw []byte) int64 {
