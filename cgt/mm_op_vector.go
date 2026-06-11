@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"patel.codes/cgt/generator"
+	"patel.codes/cgt/mmindex"
 )
 
 // newData allocates the backing slice for a vector
@@ -421,7 +422,7 @@ func (v *MMVector) Set(tag Tag, i0, i1, value int) {
 // Entry returns the i-th coordinate in linear
 // (external) order. C/Python v['E', i].
 func (v *MMVector) Entry(i int) int {
-	sp := IndexExternToSparse(i)
+	sp := mmindex.IndexExternToSparse(i)
 	return int(mmvGetSparse(v.p, v.data, sp) & uint32(v.p))
 }
 

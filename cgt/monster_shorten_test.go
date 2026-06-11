@@ -3,6 +3,8 @@ package cgt
 import (
 	"fmt"
 	"testing"
+
+	"patel.codes/cgt/reduce"
 )
 
 // shortenSetup defines Python helpers that call the C
@@ -56,7 +58,7 @@ func TestGtWordShortenOracle(t *testing.T) {
 	for _, g := range randomShortenWords(t) {
 		for _, mode := range []int{1} {
 			out := make([]uint32, maxOut)
-			got := gtWordShorten(append([]uint32(nil), g...), out, maxOut, mode)
+			got := reduce.GtWordShorten(append([]uint32(nil), g...), out, maxOut, mode)
 			want := oracleLeech(t, shortenSetup,
 				fmt.Sprintf("shorten(%s, %d)", u32List(g), mode))
 			if len(want) == 0 {

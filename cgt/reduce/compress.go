@@ -1,4 +1,4 @@
-package cgt
+package reduce
 
 import (
 	"fmt"
@@ -6,24 +6,36 @@ import (
 	"patel.codes/cgt/generator"
 	"patel.codes/cgt/leech"
 	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/mmindex"
 	"patel.codes/cgt/n0"
 	"patel.codes/cgt/xsp2co1"
 )
 
-// Word compression and expansion for the monster
-// group. This file ports the integer encoding of a
+// Package reduce ports the integer encoding of a
 // reduced monster word from the C modules
 // mm_compress.c and mm_shorten.c (the GtWord
-// reduction engine).
+// reduction engine). It depends only on the lower
+// algebra packages (xsp2co1, n0, leech, mmindex and
+// below) and never on the flat cgt package.
 //
 // An element of the monster is encoded as a 255-bit
 // integer held as four uint64 digits (lowest digit
 // first). The public Go surface in monster.go
 // exposes this as a single uint64; for the elements
 // it is applied to the value fits in 64 bits and the
-// upper three digits are zero. mmCompressAsInt
-// returns the lowest digit and mmExpandInt reads it
+// upper three digits are zero. CompressAsInt
+// returns the lowest digit and ExpandInt reads it
 // back from the lowest digit.
+
+// invertWord inverts the word w in place.
+func invertWord(w []uint32) {
+	for i := range w {
+		w[i] ^= 0x80000000
+	}
+	for i, j := 0, len(w)-1; i < j; i, j = i+1, j-1 {
+		w[i], w[j] = w[j], w[i]
+	}
+}
 
 //////////////////////////////////////////////////
 // Bit-field helpers on a 256-bit little-endian
@@ -350,11 +362,11 @@ func mmCompressPC(pc *mmCompress, pN *[4]uint64) int {
 			} else {
 				return -20002
 			}
-			ki := IndexLeech2ToSparse(c)
+			ki := mmindex.IndexLeech2ToSparse(c)
 			if ki == 0 {
 				return -20003
 			}
-			ke := IndexSparseToExtern(ki)
+			ke := mmindex.IndexSparseToExtern(ki)
 			if ke < 300 || ke >= 300+98280 {
 				return -20004
 			}
@@ -424,7 +436,7 @@ func mmCompressPCExpandInt(pN *[4]uint64) ([]uint32, error) {
 		case mat24.Mat24Order + 2:
 			c := extractInt256(pN, 17, posN)
 			posN += 17
-			sp := IndexExternToSparse(int(c))
+			sp := mmindex.IndexExternToSparse(int(c))
 			if sp == 0 {
 				return nil, compressError(-3)
 			}
@@ -435,7 +447,7 @@ func mmCompressPCExpandInt(pN *[4]uint64) ([]uint32, error) {
 			// the zero check is required. The sentinel is
 			// unambiguous: 0 is the zero vector (type 0),
 			// never a valid short/type-2 result.
-			v := IndexSparseToLeech2(sp)
+			v := mmindex.IndexSparseToLeech2(sp)
 			if v == 0 {
 				return nil, compressError(-4)
 			}
@@ -522,12 +534,12 @@ func (s *gtSubword) clear() {
 	s.eof = false
 }
 
-// gtWord is the reduction buffer holding a monster
+// GtWord is the reduction buffer holding a monster
 // word as a circular doubly-linked list of subwords.
 // node is the slice of nodes; end is the EOF index;
 // cur is the current node index; free is the head of
 // the recycled-node free list (-1 if empty).
-type gtWord struct {
+type GtWord struct {
 	node       []gtSubword
 	end        int
 	cur        int
@@ -535,14 +547,14 @@ type gtWord struct {
 	reduceMode int
 }
 
-// newGtWord returns an empty reduction buffer in the
+// NewGtWord returns an empty reduction buffer in the
 // given reduce mode. Mirrors C gt_word_alloc with the
 // list initialized by set_eof_word.
-func newGtWord(mode int) *gtWord {
+func NewGtWord(mode int) *GtWord {
 	if mode > 2 {
 		mode = 1
 	}
-	g := &gtWord{free: -1, reduceMode: mode}
+	g := &GtWord{free: -1, reduceMode: mode}
 	end := g.newNode()
 	g.end = end
 	g.cur = end
@@ -556,7 +568,7 @@ func newGtWord(mode int) *gtWord {
 // newNode allocates a fresh node index, reusing the
 // free list when possible. Mirrors the allocation in
 // _gt_word_new_subword / gt_word_insert.
-func (g *gtWord) newNode() int {
+func (g *GtWord) newNode() int {
 	if g.free >= 0 {
 		idx := g.free
 		g.free = g.node[idx].next
@@ -568,7 +580,7 @@ func (g *gtWord) newNode() int {
 
 // insert adds an empty subword after the current node
 // and makes it current. Mirrors C gt_word_insert.
-func (g *gtWord) insert() {
+func (g *GtWord) insert() {
 	idx := g.newNode()
 	g.node[idx].clear()
 	cur := g.cur
@@ -584,7 +596,7 @@ func (g *gtWord) insert() {
 // predecessor current. Mirrors C gt_word_delete. It
 // returns a negative value on an attempt to delete the
 // EOF mark.
-func (g *gtWord) delete() int {
+func (g *GtWord) delete() int {
 	cur := g.cur
 	if g.node[cur].eof {
 		return gtErr(1, 2)
@@ -599,10 +611,10 @@ func (g *gtWord) delete() int {
 	return 0
 }
 
-// reduceWord reduces a G_x0 word a to canonical form,
+// ReduceWord reduces a G_x0 word a to canonical form,
 // returning the reduced word. It is the Go equivalent
 // of C xsp2co1_reduce_word.
-func reduceWord(a []uint32) ([]uint32, int) {
+func ReduceWord(a []uint32) ([]uint32, int) {
 	// 26 = the G_x0 element word count (xsp2co1's
 	// internal representation: 1 Leech-mod-3 word + 25
 	// qstate words).
@@ -619,7 +631,7 @@ func reduceWord(a []uint32) ([]uint32, int) {
 // a to the current subword, returning the number of
 // atoms consumed or a negative value on failure.
 // Mirrors C gt_word_append_sub_part.
-func (g *gtWord) appendSubPart(a []uint32) int {
+func (g *GtWord) appendSubPart(a []uint32) int {
 	cur := g.cur
 	if g.node[cur].eof {
 		return 0
@@ -656,7 +668,7 @@ func (g *gtWord) appendSubPart(a []uint32) int {
 			reduced = false
 		}
 		if uint32(len(w)) > maxGtWordData+40-6 {
-			rw, res := reduceWord(w)
+			rw, res := ReduceWord(w)
 			if res < 0 {
 				return gtVarErr(1, res)
 			}
@@ -668,7 +680,7 @@ func (g *gtWord) appendSubPart(a []uint32) int {
 	}
 	g.node[cur].tExp = e
 	if uint32(len(w)) > maxGtWordData-1 {
-		rw, res := reduceWord(w)
+		rw, res := ReduceWord(w)
 		if res < 0 {
 			return gtVarErr(2, res)
 		}
@@ -744,7 +756,7 @@ func overComplex(a []uint32, lWeight uint32) bool {
 // reduceSub reduces the current subword. Mode bit 0
 // forces reduction; bit 1 also moves an N_x0 prefix to
 // the previous subword. Mirrors C gt_word_reduce_sub.
-func (g *gtWord) reduceSub(subMode uint32) int {
+func (g *GtWord) reduceSub(subMode uint32) int {
 	cur := g.cur
 	if g.node[cur].eof || len(g.node[cur].data) == 0 {
 		g.node[cur].reduced = true
@@ -759,7 +771,7 @@ func (g *gtWord) reduceSub(subMode uint32) int {
 			}
 		}
 		if reduce != 0 {
-			rw, res := reduceWord(g.node[cur].data)
+			rw, res := ReduceWord(g.node[cur].data)
 			if res < 0 {
 				return gtVarErr(3, res)
 			}
@@ -796,7 +808,7 @@ func (g *gtWord) reduceSub(subMode uint32) int {
 // repositions cur to the first changed node), 0
 // otherwise, or a negative value on error. Mirrors C
 // gt_word_rule_join.
-func (g *gtWord) ruleJoin() int {
+func (g *GtWord) ruleJoin() int {
 	cur := g.cur
 	if g.node[cur].eof {
 		return 0
@@ -804,7 +816,7 @@ func (g *gtWord) ruleJoin() int {
 	prev := g.node[cur].prev
 	if g.node[prev].eof {
 		if g.node[cur].imgOmega == omegaFrame && g.node[cur].tExp == 0 {
-			rw, res := reduceWord(g.node[cur].data)
+			rw, res := ReduceWord(g.node[cur].data)
 			if res < 0 {
 				return gtVarErr(4, res)
 			}
@@ -839,7 +851,7 @@ func (g *gtWord) ruleJoin() int {
 		if g.cur != prev {
 			return gtErr(3, 2)
 		}
-		rw, res := reduceWord(g.node[cur].data)
+		rw, res := ReduceWord(g.node[cur].data)
 		if res < 0 {
 			return gtVarErr(6, res)
 		}
@@ -862,7 +874,7 @@ func (g *gtWord) ruleJoin() int {
 // predecessor. It returns 1 if applied, 0 otherwise,
 // or a negative value on error. Mirrors C
 // gt_word_rule_t_xi_t.
-func (g *gtWord) ruleTxiT() int {
+func (g *GtWord) ruleTxiT() int {
 	cur := g.cur
 	if g.node[cur].eof {
 		return 0
@@ -937,7 +949,7 @@ func (g *gtWord) ruleTxiT() int {
 // reduceInput applies the join and t-xi-t rules across
 // the word as it is built. Mirrors C
 // gt_word_reduce_input.
-func (g *gtWord) reduceInput() int {
+func (g *GtWord) reduceInput() int {
 	for !g.node[g.cur].eof {
 		res := g.ruleJoin()
 		if res < 0 {
@@ -956,9 +968,9 @@ func (g *gtWord) reduceInput() int {
 	return 0
 }
 
-// appendWord appends the monster word a to g. Mirrors
+// AppendWord appends the monster word a to g. Mirrors
 // C gt_word_append.
-func (g *gtWord) appendWord(a []uint32) int {
+func (g *GtWord) AppendWord(a []uint32) int {
 	g.cur = g.node[g.end].prev
 	i := 0
 	for i < len(a) {
@@ -982,10 +994,10 @@ func (g *gtWord) appendWord(a []uint32) int {
 	return 0
 }
 
-// reduce performs the full reduction of the word in g.
+// Reduce performs the full reduction of the word in g.
 // Mirrors C gt_word_reduce. It returns a subgroup code
 // (>=4 for G_x0 . N_0) or a negative value on error.
-func (g *gtWord) reduce() int {
+func (g *GtWord) Reduce() int {
 	subMode := uint32(3)
 	if g.reduceMode == 2 {
 		subMode = 2
@@ -1027,9 +1039,9 @@ func (g *gtWord) reduce() int {
 
 // toMmCompress reduces g and stores it in pc. Mirrors
 // C gt_word_to_mm_compress.
-func (g *gtWord) toMmCompress(pc *mmCompress) int {
+func (g *GtWord) toMmCompress(pc *mmCompress) int {
 	mmCompressPCInit(pc)
-	if status := g.reduce(); status < 0 {
+	if status := g.Reduce(); status < 0 {
 		return status
 	}
 	fst := g.node[g.end].next
@@ -1060,13 +1072,13 @@ func (g *gtWord) toMmCompress(pc *mmCompress) int {
 	return 0
 }
 
-// gtWordStore writes the word held in g to out and
+// GtWordStore writes the word held in g to out and
 // returns its length, or a negative value if out is
 // too small (capacity maxlen). Each subword
 // contributes its reduced G_x0 word followed by a tau
 // atom 0x50000000 + tExp when tExp is nonzero. Mirrors
 // C gt_word_store.
-func (g *gtWord) gtWordStore(out []uint32, maxlen int) int {
+func (g *GtWord) GtWordStore(out []uint32, maxlen int) int {
 	n := 0
 	for cur := g.node[g.end].next; !g.node[cur].eof; cur = g.node[cur].next {
 		data := g.node[cur].data
@@ -1085,6 +1097,60 @@ func (g *gtWord) gtWordStore(out []uint32, maxlen int) int {
 		}
 	}
 	return n
+}
+
+//////////////////////////////////////////////////
+// The gt_word shortener wrapper (mm_shorten.c).
+//////////////////////////////////////////////////
+
+// GtWordShorten reduces the monster word g and stores
+// the reduced word in out (capacity n1max), returning
+// its length. mode selects the reduce mode as in
+// NewGtWord. It returns a negative value on failure,
+// e.g. if the reduced word would exceed n1max. C
+// function gt_word_shorten.
+func GtWordShorten(g []uint32, out []uint32, n1max int, mode int) int {
+	gw := NewGtWord(mode)
+	res := gw.AppendWord(g)
+	if res < 0 {
+		return gtShortenErr(2, res)
+	}
+	res = gw.Reduce()
+	if res < 0 {
+		return gtShortenErr(3, res)
+	}
+	n1 := gtWordLength(gw)
+	if n1 > n1max {
+		return gtShortenErr(4, -1)
+	}
+	res = gw.GtWordStore(out, n1)
+	if res >= 0 {
+		return res
+	}
+	return gtShortenErr(5, res)
+}
+
+// gtShortenErr encodes the (status, res) failure pair
+// of GtWordShorten the same way C gt_word_shorten does:
+// ((-status << 24) + res) | 0x80000000, returned as a
+// signed value.
+func gtShortenErr(status, res int) int {
+	return int(int32(uint32((-status<<24)+res) | 0x80000000))
+}
+
+// gtWordLength returns the length of the word held in
+// gw, counting each subword's reduced G_x0 word plus a
+// tau atom when tExp is nonzero. C function
+// gt_word_length.
+func gtWordLength(gw *GtWord) int {
+	length := 0
+	for cur := gw.node[gw.end].next; !gw.node[cur].eof; cur = gw.node[cur].next {
+		length += len(gw.node[cur].data)
+		if gw.node[cur].tExp != 0 {
+			length++
+		}
+	}
+	return length
 }
 
 //////////////////////////////////////////////////
@@ -1109,31 +1175,31 @@ func compressError(status int32) error {
 	return fmt.Errorf("cgt: word expansion failed, status %d", status)
 }
 
-// mmCompressAsInt maps the reduced word w to its
+// CompressAsInt maps the reduced word w to its
 // 255-bit integer identifier and returns its lowest
 // 64-bit digit. It runs the GtWord reduction engine
 // and the compressor. It panics on an internal
 // failure, mirroring the contract of GtWord.as_int.
-func mmCompressAsInt(w []uint32) uint64 {
-	g := newGtWord(1)
-	if res := g.appendWord(w); res < 0 {
-		panic(fmt.Sprintf("mmCompressAsInt: gt_word_append failed, status %d", res))
+func CompressAsInt(w []uint32) uint64 {
+	g := NewGtWord(1)
+	if res := g.AppendWord(w); res < 0 {
+		panic(fmt.Sprintf("CompressAsInt: gt_word_append failed, status %d", res))
 	}
 	var pc mmCompress
 	if res := g.toMmCompress(&pc); res < 0 {
-		panic(fmt.Sprintf("mmCompressAsInt: gt_word_to_mm_compress failed, status %d", res))
+		panic(fmt.Sprintf("CompressAsInt: gt_word_to_mm_compress failed, status %d", res))
 	}
 	var pN [4]uint64
 	if res := mmCompressPC(&pc, &pN); res != 0 {
-		panic(fmt.Sprintf("mmCompressAsInt: mm_compress_pc failed, status %d", res))
+		panic(fmt.Sprintf("CompressAsInt: mm_compress_pc failed, status %d", res))
 	}
 	return pN[0]
 }
 
-// mmExpandInt reconstructs an atom word from the
+// ExpandInt reconstructs an atom word from the
 // 255-bit integer identifier held in the lowest 64-bit
 // digit n.
-func mmExpandInt(n uint64) ([]uint32, error) {
+func ExpandInt(n uint64) ([]uint32, error) {
 	pN := [4]uint64{n, 0, 0, 0}
 	return mmCompressPCExpandInt(&pN)
 }

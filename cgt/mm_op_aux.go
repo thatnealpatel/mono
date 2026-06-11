@@ -1,5 +1,7 @@
 package cgt
 
+import "patel.codes/cgt/mmindex"
+
 // This file ports the field-access primitives and
 // representation conversions from mm_aux.c.
 
@@ -30,7 +32,7 @@ func putMMV(p int, value uint8, mv []uint64, i uint32) {
 	j := uint(mmvConst(p) & 7)
 	v1 := uint64(value) & uint64(p)
 	mask := uint64(p)
-	iTwin := IndexCheckIntern(int(i))
+	iTwin := mmindex.IndexCheckIntern(int(i))
 	if iTwin < 0 {
 		return
 	}
@@ -56,7 +58,7 @@ func addMMV(p int, value uint8, mv []uint64, i uint32) {
 	pb := uint((c >> 15) & 15)
 	v1 := uint64(value) & uint64(p)
 	mask := uint64(p)
-	iTwin := IndexCheckIntern(int(i))
+	iTwin := mmindex.IndexCheckIntern(int(i))
 	if iTwin < 0 {
 		return
 	}
@@ -519,7 +521,7 @@ func mmvExtractSparse(p int, mv []uint64, sp []uint32, length int) {
 		if sp[i]&mmSpaceTagY == 0 {
 			continue
 		}
-		iIntern := IndexSparseToIntern(sp[i])
+		iIntern := mmindex.IndexSparseToIntern(sp[i])
 		k := (uint32(getMMV(p, mv, uint32(iIntern))) ^ sp[i]) & uint32(p)
 		sp[i] = (sp[i] & 0xffffff00) + k
 	}
@@ -540,7 +542,7 @@ func mmvAddSparse(p int, sp []uint32, length int, mv []uint64) {
 		return
 	}
 	for i := 0; i < length; i++ {
-		iIntern := IndexSparseToIntern(sp[i])
+		iIntern := mmindex.IndexSparseToIntern(sp[i])
 		addMMV(p, uint8(sp[i]), mv, uint32(iIntern))
 	}
 }
@@ -552,7 +554,7 @@ func mmvSetSparse(p int, mv []uint64, sp []uint32, length int) {
 		return
 	}
 	for i := 0; i < length; i++ {
-		iIntern := IndexSparseToIntern(sp[i])
+		iIntern := mmindex.IndexSparseToIntern(sp[i])
 		putMMV(p, uint8(sp[i]), mv, uint32(iIntern))
 	}
 }

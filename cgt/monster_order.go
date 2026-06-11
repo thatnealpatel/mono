@@ -17,6 +17,8 @@ import (
 	"patel.codes/cgt/generator"
 	"patel.codes/cgt/leech"
 	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/mmindex"
+	"patel.codes/cgt/reduce"
 )
 
 //////////////////////////////////////////////////
@@ -434,7 +436,7 @@ convert:
 	total := pstart + rev
 
 	// TODO(nealpatel): re-evaluate after porting;
-	// mmAuxIndexInternToLeech2 reports ok=false on
+	// mmindex.IndexInternToLeech2 reports ok=false on
 	// failure. Inputs come from emit() which only
 	// enqueues valid B/C lower-triangle (col<row,
 	// both <24) and contiguous T/X internal indices,
@@ -443,7 +445,7 @@ convert:
 	// in the result unconditionally with no zero
 	// check, so the ok flag is intentionally discarded.
 	for j := 0; j < total; j++ {
-		leech2, _ := mmAuxIndexInternToLeech2(out[j] & 0xffffff)
+		leech2, _ := mmindex.IndexInternToLeech2(out[j] & 0xffffff)
 		out[j] = (out[j] & 0xff000000) | (leech2 & 0xffffff)
 	}
 	return total
@@ -718,7 +720,7 @@ func findType4(p *ovAxesReduce, v2 uint32) uint32 {
 // set to match the sign of the axis v. C function
 // v_leech2_adjust_sign.
 func vLeech2AdjustSign(v []uint64, v2 uint32) uint32 {
-	ind := IndexLeech2ToSparse(v2 & 0xffffff)
+	ind := mmindex.IndexLeech2ToSparse(v2 & 0xffffff)
 	sp := []uint32{ind}
 	mmvExtractSparse(15, v, sp, 1)
 	signBit := uint32(0)
@@ -1126,58 +1128,10 @@ func mmReduceVectorV1(v []uint64, r []uint32, work []uint64) int {
 //////////////////////////////////////////////////
 // Part 11b: staged reduction entry points
 // (mm_reduce_vector_shortcut, *_incomplete,
-// *_shorten) and the gt_word shortener wrapper.
+// *_shorten). The gt_word shortener wrapper
+// (reduce.GtWordShorten) and the GtWord reduction
+// engine it drives live in package reduce.
 //////////////////////////////////////////////////
-
-// gtWordShorten reduces the monster word g and stores
-// the reduced word in out (capacity n1max), returning
-// its length. mode selects the reduce mode as in
-// newGtWord. It returns a negative value on failure,
-// e.g. if the reduced word would exceed n1max. C
-// function gt_word_shorten.
-func gtWordShorten(g []uint32, out []uint32, n1max int, mode int) int {
-	gw := newGtWord(mode)
-	res := gw.appendWord(g)
-	if res < 0 {
-		return gtShortenErr(2, res)
-	}
-	res = gw.reduce()
-	if res < 0 {
-		return gtShortenErr(3, res)
-	}
-	n1 := gtWordLength(gw)
-	if n1 > n1max {
-		return gtShortenErr(4, -1)
-	}
-	res = gw.gtWordStore(out, n1)
-	if res >= 0 {
-		return res
-	}
-	return gtShortenErr(5, res)
-}
-
-// gtShortenErr encodes the (status, res) failure pair
-// of gtWordShorten the same way C gt_word_shorten does:
-// ((-status << 24) + res) | 0x80000000, returned as a
-// signed value.
-func gtShortenErr(status, res int) int {
-	return int(int32(uint32((-status<<24)+res) | 0x80000000))
-}
-
-// gtWordLength returns the length of the word held in
-// gw, counting each subword's reduced G_x0 word plus a
-// tau atom when tExp is nonzero. C function
-// gt_word_length.
-func gtWordLength(gw *gtWord) int {
-	length := 0
-	for cur := gw.node[gw.end].next; !gw.node[cur].eof; cur = gw.node[cur].next {
-		length += len(gw.node[cur].data)
-		if gw.node[cur].tExp != 0 {
-			length++
-		}
-	}
-	return length
-}
 
 // mmReduceVectorShortcut simulates the staged steps of
 // the reduction of a monster element through the marker
@@ -1305,14 +1259,14 @@ func mmReduceVectorShorten(a []uint32, r []uint32) int {
 		return -0x20000
 	}
 
-	gw := newGtWord(1)
-	if res := gw.appendWord(a); res < 0 {
+	gw := reduce.NewGtWord(1)
+	if res := gw.AppendWord(a); res < 0 {
 		return res
 	}
-	if res := gw.appendWord(r[:lenStart]); res < 0 {
+	if res := gw.AppendWord(r[:lenStart]); res < 0 {
 		return res
 	}
-	res := gw.reduce()
+	res := gw.Reduce()
 	if res < 0 {
 		return res
 	}
@@ -1320,7 +1274,7 @@ func mmReduceVectorShorten(a []uint32, r []uint32) int {
 		return -0x7000000 - (res & 0xffffff)
 	}
 	var outBuf [12]uint32
-	res = gw.gtWordStore(outBuf[:], len(outBuf))
+	res = gw.GtWordStore(outBuf[:], len(outBuf))
 	if res < 0 {
 		return res
 	}

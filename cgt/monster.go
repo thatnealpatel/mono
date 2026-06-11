@@ -8,6 +8,7 @@ import (
 
 	"patel.codes/cgt/mat24"
 	"patel.codes/cgt/n0"
+	"patel.codes/cgt/reduce"
 	"patel.codes/cgt/xsp2co1"
 )
 
@@ -473,7 +474,7 @@ func MMRandIn(sub Subgroup) *MM {
 // MMFromInt reconstructs a monster element from the
 // 255-bit integer produced by AsInt.
 func MMFromInt(n uint64) *MM {
-	g, err := mmExpandInt(n)
+	g, err := reduce.ExpandInt(n)
 	if err != nil {
 		panic("MMFromInt: " + err.Error())
 	}
@@ -656,8 +657,8 @@ func reductionStrategy(a []uint32) int {
 //
 // It mirrors C prereduce. Strategy 1 collapses an N_0
 // element to standard form via n0.ToWordStd; strategy 2
-// reduces a G_x0 word via reduceWord; the general
-// strategy runs the GtWord shortening engine.
+// reduces a G_x0 word via reduce.ReduceWord; the
+// general strategy runs the GtWord shortening engine.
 func prereduce(a []uint32) ([]uint32, int) {
 	switch reductionStrategy(a) {
 	case 1:
@@ -669,22 +670,22 @@ func prereduce(a []uint32) ([]uint32, int) {
 		k := n0.ToWordStd(&gn, buf[:])
 		return append([]uint32(nil), buf[:k]...), 0
 	case 2:
-		out, n := reduceWord(a)
+		out, n := reduce.ReduceWord(a)
 		if n < 0 {
 			return nil, 2
 		}
 		return out, 0
 	default:
-		gw := newGtWord(1)
-		if gw.appendWord(a) < 0 {
+		gw := reduce.NewGtWord(1)
+		if gw.AppendWord(a) < 0 {
 			return nil, 2
 		}
-		status := gw.reduce()
+		status := gw.Reduce()
 		if status < 0 {
 			return nil, 2
 		}
 		out := make([]uint32, gtPrereduceBuf)
-		n := gw.gtWordStore(out, gtPrereduceBuf)
+		n := gw.GtWordStore(out, gtPrereduceBuf)
 		if n < 0 {
 			return nil, 2
 		}
@@ -995,7 +996,7 @@ func (g *MM) InQx0() bool {
 // identifier. The element is reduced first.
 func (g *MM) AsInt() uint64 {
 	g.Reduce()
-	return mmCompressAsInt(g.data)
+	return reduce.CompressAsInt(g.data)
 }
 
 //////////////////////////////////////////////////
@@ -1254,9 +1255,9 @@ func orderVector15() *MMVector {
 // vector v_1 of the representation mod 15. It is
 // implemented in monster_order.go.
 
-// mmCompressAsInt (GtWord.as_int) and mmExpandInt
-// (mm_compress_pc_expand_int) are implemented in
-// monster_compress.go.
+// reduce.CompressAsInt (GtWord.as_int) and
+// reduce.ExpandInt (mm_compress_pc_expand_int) are
+// implemented in package reduce (reduce/compress.go).
 
 //////////////////////////////////////////////////
 // 2A axes (mmgroup.tests.axes.axis)

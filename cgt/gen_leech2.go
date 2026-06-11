@@ -5,6 +5,7 @@ import (
 
 	"patel.codes/cgt/generator"
 	"patel.codes/cgt/leech"
+	"patel.codes/cgt/mmindex"
 )
 
 // gen_leech2.go holds the field-independent helpers
@@ -176,7 +177,7 @@ func genExtractBC(p int, vIn []uint64, a []uint32, vOut []uint64) error {
 // p. It reports false if c does not map to a short
 // sparse index. C extract_BC inner body.
 func genSubframeValue(s *genSwar, p int, vIn []uint64, c uint32) (int, bool) {
-	sparse := IndexLeech2ToSparse(c)
+	sparse := mmindex.IndexLeech2ToSparse(c)
 	if sparse == 0 {
 		return 0, false
 	}

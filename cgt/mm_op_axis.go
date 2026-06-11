@@ -1,6 +1,9 @@
 package cgt
 
-import "patel.codes/cgt/xsp2co1"
+import (
+	"patel.codes/cgt/mmindex"
+	"patel.codes/cgt/xsp2co1"
+)
 
 // This file ports mm_op*_mul_std_axis (Griess
 // algebra product with the standard axis v+) and
@@ -248,7 +251,7 @@ func OpStoreAxis(p int, x uint32, dst []uint64) {
 	}
 
 	// Add the central diagonal entry for the axis.
-	ind := IndexLeech2ToSparse(x) + 2
+	ind := mmindex.IndexLeech2ToSparse(x) + 2
 	if x&0x1000000 == 0 {
 		ind ^= uint32(p)
 	}

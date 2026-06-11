@@ -7,6 +7,7 @@ import (
 	"patel.codes/cgt/generator"
 	"patel.codes/cgt/leech"
 	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/mmindex"
 )
 
 // The mm-coupled XLeech2 constructors: the ones that
@@ -43,9 +44,9 @@ func RandXleech2Type(vtype int) uint32 {
 		return 0
 	case 2:
 		ve := 300 + rand.IntN(98280) // randint(300, 98579)
-		vs := IndexExternToSparse(ve)
+		vs := mmindex.IndexExternToSparse(ve)
 		sign := uint32(rand.IntN(2))
-		return IndexSparseToLeech2(vs) ^ (sign << 24)
+		return mmindex.IndexSparseToLeech2(vs) ^ (sign << 24)
 	case 3, 4:
 		for i := 0; i < 1000; i++ {
 			v := uint32(rand.IntN(0x2000000)) // randint(0, 0x1ffffff)
@@ -69,8 +70,8 @@ func NewXLeech2FromShort(index int) *leech.XLeech2 {
 	if index < 0 || index >= 98280 {
 		panic(fmt.Sprintf("NewXLeech2FromShort: index %d out of range [0, 98280)", index))
 	}
-	vs := IndexExternToSparse(index + 300)
-	return leech.NewXLeech2FromInt(IndexSparseToLeech2(vs))
+	vs := mmindex.IndexExternToSparse(index + 300)
+	return leech.NewXLeech2FromInt(mmindex.IndexSparseToLeech2(vs))
 }
 
 // NewXLeech2FromMM extracts the Q_{x0} component of
@@ -138,7 +139,7 @@ func NewXLeech2FromBasisVector(tag byte, i0, i1 int) *leech.XLeech2 {
 		panic(fmt.Sprintf("NewXLeech2FromBasisVector: tag %q does not yield a Q_x0 element", string(tag)))
 	}
 	a0 := a[0]
-	d := IndexSparseToLeech2(a0)
+	d := mmindex.IndexSparseToLeech2(a0)
 	switch a0 & 0xff {
 	case 0xfe: // scalar -1: negate
 		d ^= 0x1000000

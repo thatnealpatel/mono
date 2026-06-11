@@ -3891,14 +3891,6 @@
           type: "[]uint64"
         - name: i
           type: "uint32"
-    - name: AuxArrayExternToSparse
-      c: mm_aux_array_extern_to_sparse
-      py: mm_aux_array_extern_to_sparse
-      params:
-        - name: a
-          type: "[]uint32"
-        - name: len
-          type: "uint32"
     - name: AuxBytesToMmv
       c: mm_aux_bytes_to_mmv
       py: mm_aux_bytes_to_mmv
@@ -3951,55 +3943,6 @@
           type: "[]uint64"
         - name: skip
           type: "uint32"
-    - name: AuxIndexCheckIntern
-      c: mm_aux_index_check_intern
-      py: mm_aux_index_check_intern
-      return: "int32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexExternToIntern
-      c: mm_aux_index_extern_to_intern
-      py: mm_aux_index_extern_to_intern
-      return: "int32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexExternToSparse
-      c: mm_aux_index_extern_to_sparse
-      py: mm_aux_index_extern_to_sparse
-      return: "uint32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexInternToLeech2
-      c: mm_aux_index_intern_to_leech2
-      py: mm_aux_index_intern_to_leech2
-      return: "uint32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexInternToSparse
-      c: mm_aux_index_intern_to_sparse
-      py: mm_aux_index_intern_to_sparse
-      return: "uint32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexLeech2ToInternFast
-      c: mm_aux_index_leech2_to_intern_fast
-      py: mm_aux_index_leech2_to_intern_fast
-      return: "uint32"
-      params:
-        - name: v2
-          type: "uint32"
-    - name: AuxIndexLeech2ToSparse
-      c: mm_aux_index_leech2_to_sparse
-      py: mm_aux_index_leech2_to_sparse
-      return: "uint32"
-      params:
-        - name: v2
-          type: "uint32"
     - name: AuxIndexMmv
       c: mm_aux_index_mmv
       py: mm_aux_index_mmv
@@ -4012,36 +3955,6 @@
         - name: a
           type: "[]uint16"
         - name: l
-          type: "uint32"
-    - name: AuxIndexSparseToExtern
-      c: mm_aux_index_sparse_to_extern
-      py: mm_aux_index_sparse_to_extern
-      return: "int32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexSparseToIntern
-      c: mm_aux_index_sparse_to_intern
-      py: mm_aux_index_sparse_to_intern
-      return: "int32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexSparseToLeech
-      c: mm_aux_index_sparse_to_leech
-      py: mm_aux_index_sparse_to_leech
-      return: "int32"
-      params:
-        - name: i
-          type: "uint32"
-        - name: v
-          type: "[]int32"
-    - name: AuxIndexSparseToLeech2
-      c: mm_aux_index_sparse_to_leech2
-      py: mm_aux_index_sparse_to_leech2
-      return: "uint32"
-      params:
-        - name: i
           type: "uint32"
     - name: AuxLeech2OpWordSparse
       c: mm_aux_leech2_op_word_sparse
@@ -8799,6 +8712,96 @@
       recv: RandomBabyAxis
       return: ""
       params: []
+
+- package: mmindex
+  funcs:
+    - name: AuxArrayExternToSparse
+      c: mm_aux_array_extern_to_sparse
+      py: mm_aux_array_extern_to_sparse
+      params:
+        - name: a
+          type: "[]uint32"
+        - name: len
+          type: "uint32"
+    - name: AuxIndexCheckIntern
+      c: mm_aux_index_check_intern
+      py: mm_aux_index_check_intern
+      return: "int32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: AuxIndexExternToIntern
+      c: mm_aux_index_extern_to_intern
+      py: mm_aux_index_extern_to_intern
+      return: "int32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: AuxIndexExternToSparse
+      c: mm_aux_index_extern_to_sparse
+      py: mm_aux_index_extern_to_sparse
+      return: "uint32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: AuxIndexInternToLeech2
+      c: mm_aux_index_intern_to_leech2
+      py: mm_aux_index_intern_to_leech2
+      return: "uint32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: AuxIndexInternToSparse
+      c: mm_aux_index_intern_to_sparse
+      py: mm_aux_index_intern_to_sparse
+      return: "uint32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: AuxIndexLeech2ToInternFast
+      c: mm_aux_index_leech2_to_intern_fast
+      py: mm_aux_index_leech2_to_intern_fast
+      return: "uint32"
+      params:
+        - name: v2
+          type: "uint32"
+    - name: AuxIndexLeech2ToSparse
+      c: mm_aux_index_leech2_to_sparse
+      py: mm_aux_index_leech2_to_sparse
+      return: "uint32"
+      params:
+        - name: v2
+          type: "uint32"
+    - name: AuxIndexSparseToExtern
+      c: mm_aux_index_sparse_to_extern
+      py: mm_aux_index_sparse_to_extern
+      return: "int32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: AuxIndexSparseToIntern
+      c: mm_aux_index_sparse_to_intern
+      py: mm_aux_index_sparse_to_intern
+      return: "int32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: AuxIndexSparseToLeech
+      c: mm_aux_index_sparse_to_leech
+      py: mm_aux_index_sparse_to_leech
+      return: "int32"
+      params:
+        - name: i
+          type: "uint32"
+        - name: v
+          type: "[]int32"
+    - name: AuxIndexSparseToLeech2
+      c: mm_aux_index_sparse_to_leech2
+      py: mm_aux_index_sparse_to_leech2
+      return: "uint32"
+      params:
+        - name: i
+          type: "uint32"
 
 - package: qstate12
   funcs:

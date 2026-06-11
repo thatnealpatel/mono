@@ -1267,6 +1267,29 @@ var moduleFnPkgOverride = map[string]string{
 	"rand_xleech2_type": "mm",
 }
 
+// cfuncPkgOverride reroutes a C function from the package its pkgRules
+// prefix would assign to a different home package (P3g0). It is the
+// C-side counterpart of moduleFnPkgOverride and is keyed by the C symbol.
+// The mm_index.c index-conversion family ports to the mmindex package (it
+// mirrors C's mm_basics/mm_index.c, the layer below both mm and reduce),
+// so these twelve symbols leave the mm package even though the mm_ prefix
+// routes there by default. mm_aux_index_mmv stays in mm: it is mm_aux.ske
+// and takes an mmv vector, not a bare index.
+var cfuncPkgOverride = map[string]string{
+	"mm_aux_index_extern_to_sparse":      "mmindex",
+	"mm_aux_array_extern_to_sparse":      "mmindex",
+	"mm_aux_index_sparse_to_extern":      "mmindex",
+	"mm_aux_index_sparse_to_leech":       "mmindex",
+	"mm_aux_index_sparse_to_leech2":      "mmindex",
+	"mm_aux_index_leech2_to_sparse":      "mmindex",
+	"mm_aux_index_leech2_to_intern_fast": "mmindex",
+	"mm_aux_index_intern_to_sparse":      "mmindex",
+	"mm_aux_index_sparse_to_intern":      "mmindex",
+	"mm_aux_index_extern_to_intern":      "mmindex",
+	"mm_aux_index_intern_to_leech2":      "mmindex",
+	"mm_aux_index_check_intern":          "mmindex",
+}
+
 // renameOverrides maps a C symbol to the Go name it must use, bypassing
 // the computed name from goName. It resolves collisions that arise when
 // collapsing width-bearing C prefixes into a single package: e.g.
@@ -1458,6 +1481,9 @@ func groupGo(cfuncs []cythonFunc) ([]goPackage, error) {
 		pkg, rem, ok := packageOf(cf.Name)
 		if !ok {
 			return nil, fmt.Errorf("no package rule for %q", cf.Name)
+		}
+		if ov, has := cfuncPkgOverride[cf.Name]; has {
+			pkg = ov
 		}
 		name := goName(rem)
 		if ov, has := renameOverrides[cf.Name]; has {
@@ -2657,17 +2683,17 @@ var typeSupplements = []typeSupplement{
 	// ---- clifford12.QState12 (D3 pass 2) ----------------------------------
 	{
 		Key:    "QState12.__eq__",
-		Return: "bool", // qstate12_equal; raises on non-QState12 operand
+		Return: "bool",                              // qstate12_equal; raises on non-QState12 operand
 		Source: "dev/clifford12/clifford12.pyx:732", // other left blank: TypeError on non-QState12
 	},
 	{
 		Key:    "QState12.__mul__",
-		Return: "*QState12", // copy().__imul__; scalar-or-state, return is a state
+		Return: "*QState12",                         // copy().__imul__; scalar-or-state, return is a state
 		Source: "dev/clifford12/clifford12.pyx:804", // value polymorphic (Complex or QState12)
 	},
 	{
 		Key:    "QState12.__imul__",
-		Return: "*QState12", // in-place scalar/state multiply returns self
+		Return: "*QState12",                         // in-place scalar/state multiply returns self
 		Source: "dev/clifford12/clifford12.pyx:782", // value polymorphic (Complex or QState12)
 	},
 	{
@@ -2677,7 +2703,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "QState12.__truediv__",
-		Return: "*QState12", // copy().__itruediv__; scalar divide
+		Return: "*QState12",                         // copy().__itruediv__; scalar divide
 		Source: "dev/clifford12/clifford12.pyx:816", // value is a scalar (Complex); polymorphic, left blank
 	},
 	{
@@ -2727,7 +2753,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "Cocode.__mod__",
-		Return: "*Parity", // Parity(self.parity) % other
+		Return: "*Parity",                  // Parity(self.parity) % other
 		Source: "structures/cocode.py:235", // other polymorphic, left blank
 	},
 	{
@@ -2760,7 +2786,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "GCode.__mod__",
-		Return: "*Parity", // Parity(self.parity) % other
+		Return: "*Parity",                 // Parity(self.parity) % other
 		Source: "structures/gcode.py:404", // other polymorphic, left blank
 	},
 	{
@@ -2783,7 +2809,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "GcVector.__mod__",
-		Return: "*Parity", // Parity(self.parity) % other
+		Return: "*Parity",                 // Parity(self.parity) % other
 		Source: "structures/gcode.py:776", // other polymorphic, left blank
 	},
 	{
@@ -2815,7 +2841,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "PLoop.__mod__",
-		Return: "*Parity", // inherited from GCode: Parity(self.parity) % other
+		Return: "*Parity",                 // inherited from GCode: Parity(self.parity) % other
 		Source: "structures/gcode.py:404", // other polymorphic, left blank
 	},
 	{
@@ -2923,7 +2949,7 @@ var typeSupplements = []typeSupplement{
 	{
 		Key:    "BabyAxis.display_sym",
 		Params: map[string]string{"text": "string", "end": "string"}, // part/mod/diff/ind polymorphic
-		Source: "tests/axes/axis.py:590 (Axis.display_sym)",            // void return: prints; left blank
+		Source: "tests/axes/axis.py:590 (Axis.display_sym)",          // void return: prints; left blank
 	},
 	// BabyAxis.__getitem__ and .in_space left blank, mirroring Axis pass 1:
 	// __getitem__ is index-shape polymorphic, in_space yields an arbitrary
@@ -2985,7 +3011,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "MMVectorCRT.__itruediv__",
-		Return: "*MMVectorCRT", // in-place scalar divide returns self
+		Return: "*MMVectorCRT",                         // in-place scalar divide returns self
 		Source: "structures/abstract_rep_space.py:129", // other already typed int by walker
 	},
 	{
@@ -3060,7 +3086,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "MMVectorCRT.projection",
-		Return: "*MMVectorCRT", // projection onto a subspace yields a vector
+		Return: "*MMVectorCRT",                            // projection onto a subspace yields a vector
 		Source: "structures/abstract_mm_rep_space.py:328", // args is variadic tuples, left blank
 	},
 	{
@@ -3116,7 +3142,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "BiMM.__ne__",
-		Return: "bool", // not __eq__
+		Return: "bool",                            // not __eq__
 		Source: "structures/abstract_group.py:72", // other polymorphic, left blank
 	},
 	{
@@ -3164,12 +3190,12 @@ var typeSupplements = []typeSupplement{
 	// ---- bimm.P3_node (D3 pass 2) -----------------------------------------
 	{
 		Key:    "P3_node.__eq__",
-		Return: "bool", // isinstance + _ord compare
+		Return: "bool",               // isinstance + _ord compare
 		Source: "bimm/inc_p3.py:140", // other polymorphic, left blank
 	},
 	{
 		Key:    "P3_node.__ne__",
-		Return: "bool", // not __eq__
+		Return: "bool",               // not __eq__
 		Source: "bimm/inc_p3.py:142", // other polymorphic, left blank
 	},
 	{
@@ -3234,12 +3260,12 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "GtWord.__eq__",
-		Return: "bool", // object-default identity comparison
+		Return: "bool",                           // object-default identity comparison
 		Source: "dev/mm_reduce/mm_reduce.pyx:62", // value polymorphic, left blank
 	},
 	{
 		Key:    "GtWord.__ne__",
-		Return: "bool", // object-default identity comparison
+		Return: "bool",                           // object-default identity comparison
 		Source: "dev/mm_reduce/mm_reduce.pyx:62", // value polymorphic, left blank
 	},
 	// GtWord.reduce left blank (void). GtWord.mmdata left blank: returns a
@@ -3260,7 +3286,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "Xsp2_Co1_Group.from_qs",
-		Return: "*Xsp2Co1", // builds an element from a quadratic state
+		Return: "*Xsp2Co1",                           // builds an element from a quadratic state
 		Params: map[string]string{"qs": "*QState12"}, // x is an index; left blank
 		Source: "structures/xsp2_co1.py:646",
 	},
@@ -3291,7 +3317,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "Xsp2_Co1_Group.__eq__",
-		Return: "bool", // singleton group equality
+		Return: "bool",                                // singleton group equality
 		Source: "structures/abstract_mm_group.py:277", // value polymorphic, left blank
 	},
 	{
@@ -3324,7 +3350,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "Orbit_Lin2.mul_v_g",
-		Return: "int", // gen_ufind_lin2_mul_affine
+		Return: "int",                         // gen_ufind_lin2_mul_affine
 		Params: map[string]string{"v": "int"}, // g is a group element, left blank
 		Source: "general/orbit_lin2.py:332",
 	},
@@ -3336,7 +3362,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "Orbit_Lin2.stabilizer",
-		Return: "*OrbitLin2", // a stabilizer subgroup
+		Return: "*OrbitLin2",                                                     // a stabilizer subgroup
 		Params: map[string]string{"v": "int", "nGen": "int", "compress": "bool"}, // map_ polymorphic, left blank
 		Source: "general/orbit_lin2.py:385",
 	},
@@ -3375,7 +3401,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "Orbit_Lin2.__eq__",
-		Return: "bool", // object-default identity comparison
+		Return: "bool",                     // object-default identity comparison
 		Source: "general/orbit_lin2.py:96", // value polymorphic, left blank
 	},
 	{
@@ -3391,7 +3417,7 @@ var typeSupplements = []typeSupplement{
 	// ---- general.Orbit_Elem2 (D3 pass 2) ----------------------------------
 	{
 		Key:    "Orbit_Elem2.structure_2",
-		Return: "[]int", // list(reversed(exponents))
+		Return: "[]int",                                 // list(reversed(exponents))
 		Params: map[string]string{"fields": "[][2]int"}, // list of (m,n) int pairs
 		Source: "general/orbit_lin2.py:671",
 	},
@@ -3402,7 +3428,7 @@ var typeSupplements = []typeSupplement{
 	},
 	{
 		Key:    "Orbit_Elem2.__eq__",
-		Return: "bool", // object-default identity comparison
+		Return: "bool",                      // object-default identity comparison
 		Source: "general/orbit_lin2.py:546", // value polymorphic, left blank
 	},
 	{
@@ -3622,6 +3648,13 @@ func goSiteForModuleFn(fn pyModuleFn) (pkg, name string) {
 	// different home than its module rule assigns, keeping the computed name
 	// (P3a: the mm-coupled xleech2 module functions move from leech to mm).
 	if ov, has := moduleFnPkgOverride[fn.Name]; has && pkg != "" {
+		pkg = ov
+	}
+	// The same C-symbol reroute groupGo applies to the C entry must apply to
+	// the Python entry that correlates onto it, or the folded entry would
+	// land in the prefix-default package (mm) while its C twin lives in
+	// mmindex, splitting them (P3g0). fn.Name is the C symbol for these.
+	if ov, has := cfuncPkgOverride[fn.Name]; has && pkg != "" {
 		pkg = ov
 	}
 	return pkg, name

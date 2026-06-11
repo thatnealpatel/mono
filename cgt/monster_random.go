@@ -7,6 +7,7 @@ import (
 	"patel.codes/cgt/generator"
 	"patel.codes/cgt/leech"
 	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/mmindex"
 )
 
 //////////////////////////////////////////////////
@@ -331,7 +332,7 @@ func randType4Vector() uint32 {
 func randCo2CosetNo() uint32 {
 	for {
 		ve := 300 + rand.IntN(98579-300+1) // randint(300, 98579)
-		vs := IndexExternToSparse(ve)
+		vs := mmindex.IndexExternToSparse(ve)
 		// TODO(nealpatel): re-evaluate after porting;
 		// IndexSparseToLeech2 returns 0 on failure.
 		// Input ve ∈ [300, 98579] is always a valid
@@ -342,7 +343,7 @@ func randCo2CosetNo() uint32 {
 		// rejects and the loop retries. C origin
 		// _rand_Co_2_coset_No (random_mm.py:194)
 		// also ignores the sentinel.
-		v2 := IndexSparseToLeech2(vs)
+		v2 := mmindex.IndexSparseToLeech2(vs)
 		v4 := v2 ^ betaLeech2
 		if generator.Leech2Type(v4) == 4 {
 			return v4

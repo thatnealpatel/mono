@@ -15,6 +15,7 @@ generator   — gen_leech2/gen_xi/gen_rng/ufind primitives, orbit machinery
 leech       — XLeech2 type, Leech lattice mod-2/mod-3 ops, leech3matrix
 mat24       — M24 permutations, Golay code, Parker loop, AutPL, Cocode, PLoop
 mm          — MMVector, MM (monster element), BiMM, P3/AutP3, axis/order machinery
+mmindex     — mm_index.c index-conversion layer (extern/intern/sparse/leech2 maps)
 qstate12    — QState (quadratic state), qs12 internals, bm64 bit-matrix ops
 reduce      — GtWord / gtSubword, word compression/expansion, reduction engine
 swar        — bm64* bit-matrix primitives (exported), BitWeight/BitParity helpers
@@ -74,9 +75,25 @@ q-element, or index the mm-rep short-vector table, so they sit in flat cgt
   qsComplex, qsToSigns, qsCompareSigns, scanAffine, fillAffine, qsPrepMul,
   qsProduct, qsMatmul, NewQState, UnitMatrix, and the full exported QState API
 
+### mmindex
+- `mmindex/mmindex.go` — the mm_index.c index-conversion layer (C
+  mm_basics/mm_index.c): the OfsA../XofsA../SpaceTagA.. tag constants, the
+  mmAuxTblABC table, the eight Index* converters (IndexExternToSparse,
+  IndexSparseToExtern, IndexExternToIntern, IndexSparseToIntern,
+  IndexInternToSparse, IndexCheckIntern, IndexSparseToLeech2,
+  IndexLeech2ToSparse), the two intern<->leech2 converters
+  (IndexLeech2ToInternFast, IndexInternToLeech2), and the mat24 inline
+  wrappers. Imports only mat24; sits below both mm and reduce so the legal
+  C downward edge (mm_reduce/mm_compress.c -> mm_index.c) no longer reads as
+  mm-coupling inside reduce.
+
 ### mm
-- `mm_op.go` — Tag, Tuple, MMVector layout, mmAuxOfs constants, index
-  conversion (IndexExternToSparse, etc.), mmvConst helpers
+- `mm_op.go` — Tag, Tuple, MMVector layout, the mmvConst helpers, and the
+  mm_aux.c vector surface (Characteristics, MMVSize, the reduce tables).
+  The index-conversion slice moved to package mmindex (mm_op.go keeps an
+  unexported mmAuxOfs/mmAuxXofs/mmSpaceTag alias block over mmindex's
+  exported constants, plus a flat vectToCocode the generated
+  mm_op_p_gen.go depends on)
 - `mm_op_aux.go` — getMMV, putMMV, addMMV, readMMV24/32, writeMMV24/32,
   mmvToBytes, bytesToMMV, zeroMMV, reduceMMV, checkMMV, mmvToSparse,
   mmvExtractSparse, Hash, MmAuxExtractSparseSigns, MmAuxMulSparse
