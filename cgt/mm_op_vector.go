@@ -331,7 +331,7 @@ func (v *MMVector) MulScalar(a int) *MMVector {
 // Hash returns a hash value of the vector. C/Python
 // hash.
 func (v *MMVector) Hash() uint64 {
-	return Hash(v.p, v.data, 0)
+	return hash(v.p, v.data, 0)
 }
 
 // Equal reports whether v and other are equal,
@@ -376,7 +376,7 @@ func (v *MMVector) AsTuples() []Tuple {
 	sp := v.AsSparse()
 	out := make([]Tuple, 0, len(sp))
 	for _, i := range sp {
-		if i&0xe000000 == 0 {
+		if i&mmSpaceTagY == 0 {
 			continue
 		}
 		out = append(out, Tuple{

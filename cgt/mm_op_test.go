@@ -342,7 +342,7 @@ func TestPrepPi64(t *testing.T) {
 		expr := fmt.Sprintf("[int(x) for x in (lambda a:(mmgroup.mm_op.mm_sub_test_prep_pi_64(%d,%d,a),a)[1])(__import__('numpy').zeros(759*7,dtype='uint32'))]", c.delta, c.pi)
 		want := oracleInts(t, expr)
 		out := make([]uint32, 759*7)
-		SubTestPrepPi64(c.delta, c.pi, out)
+		subTestPrepPi64(c.delta, c.pi, out)
 		if len(out) != len(want) {
 			t.Fatalf("PrepPi64 len = %d, want %d", len(out), len(want))
 		}
@@ -375,10 +375,10 @@ func TestSubTestPrepXY(t *testing.T) {
 		expr := fmt.Sprintf("[int(x) for x in (lambda a:(mmgroup.mm_op.mm_sub_test_prep_xy(%d,%d,%d,%d,a),a)[1])(__import__('numpy').zeros(2048,dtype='uint32'))]", c.f, c.e, c.eps, c.mode)
 		want := oracleInts(t, expr)
 		out := make([]uint32, 2048)
-		SubTestPrepXY(c.f, c.e, c.eps, c.mode, out)
+		subTestPrepXY(c.f, c.e, c.eps, c.mode, out)
 		for i := range want {
 			if int64(out[i]) != want[i] {
-				t.Fatalf("SubTestPrepXY(%d,%d,%d,%d)[%d] = %d, want %d", c.f, c.e, c.eps, c.mode, i, out[i], want[i])
+				t.Fatalf("subTestPrepXY(%d,%d,%d,%d)[%d] = %d, want %d", c.f, c.e, c.eps, c.mode, i, out[i], want[i])
 			}
 		}
 	}

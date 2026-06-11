@@ -150,14 +150,6 @@ func MMVSize(p int) int {
 	return 247488 >> (mmvConst(p) & 7)
 }
 
-// mmAuxV24Ints returns the number of uint64 entries
-// needed to hold 24 entries of a vector modulo p. C
-// function mm_aux_v24_ints. The caller must pass a
-// supported modulus p.
-func mmAuxV24Ints(p int) int {
-	return 32 >> (mmvConst(p) & 7)
-}
-
 /**********************************************************************
  * Index conversion (mm_index.c)
  **********************************************************************/
@@ -472,7 +464,10 @@ func IndexSparseToLeech2(sp uint32) uint32 {
 		if i >= 759 {
 			return 0
 		}
-		cocode := suboctadToCocodeInline(j, i)
+		cocode, ok := suboctadToCocodeInline(j, i)
+		if !ok {
+			return 0
+		}
 		gcode := uint32(mat24OctDecTable[i]) & 0xfff
 		gcode ^= suboctadWeight(j) << 11
 		cocode ^= uint32(mat24ThetaTable[gcode&0x7ff]) & 0xfff
@@ -484,7 +479,7 @@ func IndexSparseToLeech2(sp uint32) uint32 {
 		cocode := vectToCocode(1 << j)
 		theta := uint32(mat24ThetaTable[i&0x7ff])
 		w := ((theta >> 12) & 1) ^ (i & cocode)
-		w = parity12(w)
+		w = Parity12(w)
 		gcode := i ^ (w << 11)
 		cocode ^= theta & 0xfff
 		return (gcode << 12) + cocode
@@ -507,7 +502,7 @@ func IndexLeech2ToSparse(v2 uint32) uint32 {
 			return 0
 		}
 		scalar = (v2 >> 12) & v2
-		scalar = parity12(scalar)
+		scalar = Parity12(scalar)
 		if scalar != 0 {
 			return 0
 		}
@@ -543,11 +538,12 @@ func cocodeToSuboctadInline(c, v, strict uint32) uint32 {
 
 // suboctadToCocodeInline mirrors the C inline
 // mat24_inline_suboctad_to_cocode. It returns
-// 0xffffffff if octad >= 759 (no panic), matching
-// the C inline rather than SuboctadToCocode.
-func suboctadToCocodeInline(sub, octad uint32) uint32 {
+// (cocode, true), or (0, false) if octad >= 759
+// (no panic), matching the C inline rather than
+// SuboctadToCocode.
+func suboctadToCocodeInline(sub, octad uint32) (uint32, bool) {
 	if octad >= 759 {
-		return 0xffffffff
+		return 0, false
 	}
 	pOctad := mat24OctadElementTable[octad<<3:]
 	pSub := mat24OctadIndexTable[(sub&0x3f)<<2:]
@@ -555,12 +551,12 @@ func suboctadToCocodeInline(sub, octad uint32) uint32 {
 		mat24RecipBasis[pOctad[pSub[1]]] ^
 		mat24RecipBasis[pOctad[pSub[2]]] ^
 		mat24RecipBasis[pOctad[pSub[3]]]
-	return c & 0xfff
+	return c & 0xfff, true
 }
 
 // vectToCocode returns the cocode element of vector
 // v. C mat24_vect_to_cocode.
-func vectToCocode(v uint32) uint32 { return vintern(v) & 0xfff }
+func vectToCocode(v uint32) uint32 { return Vintern(v) & 0xfff }
 
 // mmAuxIndexLeech2ToInternFast converts a short
 // Leech-lattice-mod-2 vector v2 to an internal
@@ -591,7 +587,7 @@ func mmAuxIndexLeech2ToInternFast(v2 uint32) uint32 {
 	theta := uint32(mat24ThetaTable[gc])
 	j := uint32(pOct[7])
 	c := uint32(mat24SyndromeTable[(theta^v2^mat24RecipBasis[j])&0x7ff])
-	syn := synFromTable(c)
+	syn := SynFromTable(c)
 	var sub uint32
 	if (syn>>j)&1 != 0 {
 		sub = 0
@@ -609,42 +605,45 @@ func mmAuxIndexLeech2ToInternFast(v2 uint32) uint32 {
 
 // mmAuxIndexInternToLeech2 converts an internal
 // index i to a short Leech-lattice-mod-2 vector. C
-// mm_aux_index_intern_to_leech2. Returns 0 on
-// failure.
-func mmAuxIndexInternToLeech2(i uint32) uint32 {
+// mm_aux_index_intern_to_leech2. Returns
+// (vector, true), or (0, false) on failure.
+func mmAuxIndexInternToLeech2(i uint32) (uint32, bool) {
 	if i < mmAuxOfsT { // tags B, C
 		t := uint32(0x2A540>>((i>>8)<<1)) & 3
 		i0 := i - t*0x300
 		i1 := i0 & 31
 		i0 >>= 5
 		if t == 0 || i0 == i1 || i1 > 24 {
-			return 0
+			return 0, false
 		}
 		v := mat24RecipBasis[i0] ^ mat24RecipBasis[i1]
-		return (v & 0xfff) + ((t - 1) << 23)
+		return (v & 0xfff) + ((t - 1) << 23), true
 	} else if i < mmAuxOfsX { // tag T
 		i -= mmAuxOfsT
 		i0 := i >> 6
 		i1 := i & 0x3f
-		cocode := suboctadToCocodeInline(i1, i0)
+		cocode, ok := suboctadToCocodeInline(i1, i0)
+		if !ok {
+			return 0, false
+		}
 		gcode := uint32(mat24OctDecTable[i0]) & 0xfff
 		gcode ^= suboctadWeight(i1) << 11
 		cocode ^= uint32(mat24ThetaTable[gcode&0x7ff]) & 0xfff
-		return (gcode << 12) + cocode
+		return (gcode << 12) + cocode, true
 	} else if i < mmAuxOfsZ {
 		i -= mmAuxOfsX
 		i0 := i >> 5
 		i1 := i & 0x1f
 		if i1 > 24 {
-			return 0
+			return 0, false
 		}
 		cocode := vectToCocode(1 << i1)
 		theta := uint32(mat24ThetaTable[i0&0x7ff])
 		w := ((theta >> 12) & 1) ^ (i0 & cocode)
-		w = parity12(w)
+		w = Parity12(w)
 		gcode := i0 ^ (w << 11)
 		cocode ^= theta & 0xfff
-		return (gcode << 12) + cocode
+		return (gcode << 12) + cocode, true
 	}
-	return 0
+	return 0, false
 }

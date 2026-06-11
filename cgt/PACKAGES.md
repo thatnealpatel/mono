@@ -1,388 +1,267 @@
-# Package Migration Plan
+# cgt package extraction plan
 
-Migration of the flat `package cgt` (`github.com/nealpatel/mono/cgt`) into the
-8 idiomatic packages crystallized in `cgt/_api/go.yaml` (`gen`, `gt`, `leech`,
-`mat24`, `mm`, `qstate12`, `swar`, `xsp2co1`).
+Regenerated against the current go.yaml (post B2 renames, D0b GtWord
+routing, drop tables, H11 collapse, manual constructors) and the flat
+`package cgt` source as of 2026-06-10.
 
-## Status of the inputs
+Re-derive any counts with `grep '^- package:' _api/go.yaml` and
+`ls *.go | grep -v '_test\|_gen'`.
 
-- **`_api/go.yaml` is a translation _plan_, not a description of the current
-  code.** It was auto-generated from `cython.yaml` + `python.yaml`
-  (`go.yaml:1`) and enumerates **1711** function entries (917 of them methods
-  via `recv:`) plus 5 constants. Many entries are **planned but unimplemented**
-  (see [Open Questions](#open-questions)).
-- The flat package today is **30 non-test, non-`_gen` `.go` files** plus 4
-  generated files (`mat24_gen.go`, `mm_op_xi_gen.go`, `mm_op_p_gen.go`,
-  `monster_order_gen.go`) and test files (ignored here per task).
-- **The plan's parameter/return types use placeholder C-struct names** that do
-  **not** match the Go type names already in the code. This is the single
-  biggest source of confusion when reading `go.yaml` against the source:
 
-  | `go.yaml` type string | Actual Go type (file)                    | Exported? |
-  |-----------------------|------------------------------------------|-----------|
-  | `*qstate12Type`       | `qs12` (`qstate.go:68`)                   | **no**    |
-  | `*qstate12SupportType`| `qsSupport` (`qstate.go:1078`)           | **no**    |
-  | `*gtWordType`         | `gtWord` (`monster_compress.go:521`)     | **no**    |
-  | `*gtSubwordType`      | `gtSubword` (`monster_compress.go:496`)  | **no**    |
-  | `*mmCompressType`     | `mmCompress` (`monster_compress.go:185`) | **no**    |
-
-  Every cross-package type referenced by the plan is currently an **unexported
-  struct**. Unexported identifiers are package-scoped in Go, so each of these
-  becomes a migration hazard the moment it must cross a package boundary.
-
----
-
-## Target Layout
-
-`go.yaml` package section line numbers: `gen` (15), `gt` (1414), `leech`
-(1588), `mat24` (1996), `mm` (3542), `qstate12` (9294), `swar` (10585),
-`xsp2co1` (11133), constants (12197).
-
-| Package    | Dir (proposed)   | Primary exported types (planned)                                                                 | Flat source files that move there |
-|------------|------------------|--------------------------------------------------------------------------------------------------|-----------------------------------|
-| `gen`      | `cgt/gen/`       | `OrbitElem2`, `OrbitLin2`, `RandomSubgroup` (all **unimplemented**); plus the `Rng` machinery     | `gen_xi.go`†, `rng.go`†, parts of `misc.go` (UFind*) |
-| `gt`       | `cgt/gt/`        | `GtWord`, `GtSubWord` (**unimplemented**); wraps `gtWord`/`gtSubword`/`mmCompress`                | `monster_compress.go`‡ |
-| `leech`    | `cgt/leech/`     | `XLeech2` (`leech.go:8`)                                                                          | `leech.go`, `gen_leech2.go`‡ |
-| `mat24`    | `cgt/mat24/`     | `GCode`,`Cocode`,`PLoop`,`PLoopIntersection`,`Parity`,`AutPL`,`AutPlGroup`,`GcVector`,`Octad`     | `mat24.go`, `ploop.go`, `mat24_gen.go` |
-| `mm`       | `cgt/mm/`        | `MM`,`MMVector`,`Axis`,`BiMM`,`AutP3`,`P3Node`,`Tag`,`Tuple`,`Subgroup`,`N0Elem`, +many planned   | `monster*.go`, `mm_op*.go`, `bimm.go`, `misc.go`†, `mm_op_xi_gen.go`, `mm_op_p_gen.go`, `monster_order_gen.go` |
-| `qstate12` | `cgt/qstate12/`  | `QState12` + `QStateMatrix` (plan) — **code has one type `QState`** (`qstate.go:42`) over `qs12`   | `qstate.go` |
-| `swar`     | `cgt/swar/`      | none (free functions only): `bitmatrix64_*`, `bitvector*`, `uint64_*` utils                       | **no single file** — code is the unexported `bm64*` helpers, currently split across `leech.go` + `qstate.go` |
-| `xsp2co1`  | `cgt/xsp2co1/`   | `Xsp2Co1` (`xsp2.go:35`), `Xsp2Co1Group` (**unimplemented**)                                       | `xsp2.go`, `xsp2_involution.go`, `xsp2_reduce.go` |
-
-† **File splits across packages** — these files do not map 1:1 to a package:
-- `misc.go` holds `P3Node`/`AutP3` (→ `mm`) **and** the `UFind*` family
-  (`misc.go:917-1193`, → `gen`) **and** bit/Hadamard helpers. Must be split.
-- `gen_xi.go` holds `Xi*` (plan → `gen`) **and** `Leech2Mul`/`Leech2Type*`
-  (`gen_xi.go:257-447`, plan → `gen` too, but semantically Leech). It is
-  internally consistent with `gen` but the file name is misleading.
-- `rng.go` defines `Rng` used by `mm_op_vector.go` (→ `mm`); see cross-deps.
-
-‡ **Misleadingly named files:**
-- `gen_leech2.go` declares `genSubframeValue(s *genSwar, …)`,
-  `genExtractBC`, `genOpDeltaTagABC` (`gen_leech2.go:131-196`) — these are
-  **`mm` modular-arithmetic** routines, not `gen`/`leech`. Routes to `mm`.
-- `monster_compress.go` is the home of the `gt`-package types
-  (`gtWord`/`gtSubword`/`mmCompress`), so it routes to `gt`, **not** `mm`,
-  despite the `monster_` prefix.
-
-### `_gen.go` routing
-
-| Generated file          | Target pkg | Evidence | Matches plan? |
-|-------------------------|------------|----------|---------------|
-| `mat24_gen.go`          | `mat24`    | `mat24*Table` data vars (`mat24_gen.go`)                 | yes |
-| `mm_op_xi_gen.go`       | `mm`       | `xiSign*`/`xiPerm*` ξ-operation tables                   | yes |
-| `mm_op_p_gen.go`        | `mm`       | `genSwar` type + `genOp*`/`genScalprod*`; calls `logIntFields` (`mm_op.go:121`) | yes — **but** note `genSwar` is **not** the planned `swar` package (see clash F) |
-| `monster_order_gen.go`  | `mm`       | `orderVectorTable`/`orderTagTable`                       | yes |
-
-All generated files are regenerated via `//go:generate` directives in
-`generate.go` (`generate.go:16-22`); per `CLAUDE.md` they must never be
-hand-edited, and the generators (`_gen`, `_api`) must emit into the new package
-directories after the split.
-
----
-
-## Dependency Graph
-
-Directional edges (`A → B` = "A imports B"), derived from actual type/function
-references in the flat code (not just the plan):
+## 1. Planned packages (go.yaml)
 
 ```
-            ┌────────────────────────── swar (leaf: bm64*/bitvector/uint64 utils)
-            │                              ▲   ▲   ▲
-            │                              │   │   │
-   gen ◄────┤                         leech│   │qstate12
-    ▲       │                              │   │   │
-    │       │                              │   │   │
-  mat24 ◄───┴── leech ◄── xsp2co1 ──► qstate12
-    ▲             ▲           ▲ │
-    │             │           │ │
-    └──── mm ─────┴───────────┘ │
-          ▲ │                   │
-          │ └───────────────────┘   (mm ⇄ xsp2co1 — SEE CYCLE)
-          │
-       gt (→ mm for mmCompress, OR mm → gt — SEE CYCLE)
+generator   — gen_leech2/gen_xi/gen_rng/ufind primitives, orbit machinery
+leech       — XLeech2 type, Leech lattice mod-2/mod-3 ops, leech3matrix
+mat24       — M24 permutations, Golay code, Parker loop, AutPL, Cocode, PLoop
+mm          — MMVector, MM (monster element), BiMM, P3/AutP3, axis/order machinery
+qstate12    — QState (quadratic state), qs12 internals, bm64 bit-matrix ops
+reduce      — GtWord / gtSubword, word compression/expansion, reduction engine
+swar        — bm64* bit-matrix primitives (exported), BitWeight/BitParity helpers
+xsp2co1     — Xsp2Co1 (G_{x0} element), involution analysis, traces
 ```
 
-Edges with evidence:
 
-- **`swar` is a leaf** (no outgoing edges). Everything that does bit-matrix
-  work depends on it: `leech`, `qstate12`, `xsp2co1` all call `bm64*`.
-- `mat24 → swar?` — `mat24.go` does not currently call `bm64*`; `mat24` is
-  effectively a second near-leaf (depends on `mat24_gen.go` data only). It is
-  referenced by almost everyone.
-- `leech → mat24` (unexported helpers `gcodeToVectInternal`, `parity12`,
-  `cocodeSyndrome`, `synFromTable`, `vintern` — see clash D), `leech → swar`
-  (`bm64EchelonH`/`bm64EchelonL`), `leech → gen` (`gen_leech2.go`).
-- `qstate12 → swar` (11 of the `bm64*` defs **and** uses live in `qstate.go`).
-- `xsp2co1 → qstate12` (7 functions take `*qs12`: `ChainShort3`, `ElemToQs`,
-  `ElemToQsI`, `MapShort3`, `MulQsV3Word`, `QsToElemI`, `RepMod3FromQs`, plus
-  the `qs*` helper family in `xsp2.go`), `xsp2co1 → swar`, `xsp2co1 → mat24`,
-  `xsp2co1 → leech`.
-- `mm → leech` (uses `XLeech2`, 10×, e.g. `bimm.go:285`), `mm → xsp2co1`
-  (uses `Xsp2Co1` / `NewXsp2Co1`, e.g. `monster.go:1299`), `mm → mat24`,
-  `mm → gen` (`Rng`, UFind).
-- `gt → mm` **or** `mm → gt` via `mmCompress` (clash A).
+## 2. Source file to package mapping
 
-### Cycles (hard blockers)
+### mat24
+- `mat24.go` — M24 permutation, Golay code, cocode, syndrome, octad, Parker loop
+  algebra, AutPL
+- `ploop.go` — Parity, GCode, Cocode, PLoop, Octad, AutPL types and arithmetic
+- `mat24_gen.go` — precomputed tables (mat24EncTable, mat24DecTable,
+  mat24SyndromeTable, mat24ThetaTable, mat24RecipBasis, mat24AutTable,
+  mat24OctDecTable, etc.)
 
-1. **`mm ⇄ xsp2co1`** (on unexported symbols). See clash B. **Confirmed.**
-2. **`gt ⇄ mm`** (on `mmCompress`). See clash A. **Risk, direction-dependent.**
+### generator
+- `gen_xi.go` — XiGGray, XiGCocode, XiOpXi, XiLeechToShort, XiShortToLeech,
+  Leech2Mul, Leech2Subtype, Leech2Type, Leech2Type2
+- `gen_leech2.go` — genLeech2PrefixGx0, genLeech2MapStdSubframe, genExtractBC,
+  genSubframeValue, genOpDeltaTagABC
+- `xsp2_reduce.go` — genLeech2StartType24, genLeech2StartType4,
+  genLeech2ReduceType2, genLeech2ReduceType4, genLeech2ReduceType2Ortho,
+  reduceType2Ortho, reduceType4 (all gen_leech_reduce.c provenance)
+- `rng.go` — Rng (xoshiro256**), NewRng, NewRngSeed, BytesModP, ModP
+- `misc.go` (partial) — UFindInit, UFindUnion, UFindFind, UFindFindAllMin,
+  UFindPartition, UFindMakeMap, BitParity, BitWeight, HadamardSign
 
----
+### leech
+- `leech.go` — XLeech2, NewXLeech2, Leech2Scalprod, Leech2To3Short,
+  Leech3To2Short, short3Reduce, Leech2Pow, Leech2OpAtom, vectToGcodeRaw,
+  getLeech2Basis, Leech2MatrixBasis, Leech2MatrixRadical, leech2MatrixOrthogonal,
+  leech3OpPi, leech3OpY, leech3OpXi, Leech3OpVectorWord
+- `leech.go` (bm64 subset) — bm64RestoreCapH, bm64CapH (leech-specific composites
+  built on the swar bm64 primitives)
 
-## Clashes
+### swar
+- `qstate.go` (bm64 block, lines ~348-580) — bm64RotBits, bm64XchBits,
+  bm64ReverseBits, bm64T, bm64Mul, bm64MaskRows, bm64AddDiag, bm64EchelonH,
+  bm64EchelonL, bm64Inv, bm64FindLowBit
+- `misc.go` (partial) — BitParity, BitWeight (also claimed by generator;
+  resolve by putting in swar with a re-export)
 
-### A. `mmCompress` / `mmCompressType` straddles `gt` and `mm`
+### qstate12
+- `qstate.go` (bulk) — QState, qs12, all qs* functions, gate operations,
+  qsComplex, qsToSigns, qsCompareSigns, scanAffine, fillAffine, qsPrepMul,
+  qsProduct, qsMatmul, NewQState, UnitMatrix, and the full exported QState API
 
-- The plan references `*mmCompressType` in package **`gt`** (1×) **and** package
-  **`mm`** (3×).
-  - `gt`: `WordToMmCompress(pGt *gtWordType, pC *mmCompressType)`
-    (`go.yaml:1579-1586`).
-  - `mm`: `CompressPcAddNx`, `CompressPcAddType2`, `CompressPcInit`
-    (`go.yaml:3978-4011`) all take `*mmCompressType`.
-- Actual type `mmCompress` is declared at `monster_compress.go:185`, in the
-  same file as the `gt` types `gtWord`/`gtSubword`. A single Go type can live
-  in **one** package. If `mmCompress` → `gt`, then `mm` imports `gt`; if
-  `mmCompress` → `mm`, then `gt` imports `mm`. Either way the type is currently
-  **unexported**, so it cannot cross the boundary without being exported.
-- **Hazard:** combined with the `GtWord` receiver-home conflict (clash C) and
-  `mm → gt`/`gt → mm` references, this risks a `gt ⇄ mm` cycle.
+### mm
+- `mm_op.go` — Tag, Tuple, MMVector layout, mmAuxOfs constants, index
+  conversion (IndexExternToSparse, etc.), mmvConst helpers
+- `mm_op_aux.go` — getMMV, putMMV, addMMV, readMMV24/32, writeMMV24/32,
+  mmvToBytes, bytesToMMV, zeroMMV, reduceMMV, checkMMV, mmvToSparse,
+  mmvExtractSparse, Hash, MmAuxExtractSparseSigns, MmAuxMulSparse
+- `mm_op_axis.go` — MulStdAxis, OpStoreAxis
+- `mm_op_eval.go` — OpNormA, CountShort, OpLoadLeech3Matrix, OpEvalARankMod3,
+  EvalA, AxisType
+- `mm_op_group.go` — opVectorAdd, opScalarMul, OpCheckzero, Scalprod,
+  ScalprodInd, xi perm/sign tables, subPrepPi64, subPrepXY, OpOmega, OpPi,
+  OpXY, OpWord, OpWordTagA, OpWordABC, PrepareOpABC
+- `mm_op_t.go` — OpTA, evalA15, leech3matrixRank, leech3Echelon
+- `mm_op_vector.go` — ZeroVector, MMV, NewVector, BasisVector, FromBytes,
+  FromSparse, RandVector, Copy, Add, Sub, MulScalar, Hash, Equal, AsBytes,
+  AsSparse, AsTuples, Mul, MulExp, Projection, ParseVector
+- `mm_op_p_gen.go` — genSwar table, all genOp* field-generic SWAR operations
+- `mm_op_xi_gen.go` — xi permutation/sign tables (generated)
+- `monster.go` — MM type, N0Elem, atom encoding, N_0 word algebra (nMul,
+  nMulDeltaPi, nMulWordScan, nReduceElement, nToWord, etc.), parseMMWord,
+  NewMM, MMIdentity, MMGen, MMRand, MMRandIn, MMFromInt, Mul/Inv/Pow/String
+- `monster_compress.go` — GtWord compression/expansion primitives (insertInt256,
+  extractInt256, mmCompressType4, mmCompress struct, mmCompressAsInt,
+  mmExpandInt), gtWord/gtSubword reduction engine (reduceWord, ruleJoin,
+  ruleTxiT, etc.)
+- `monster_gx0.go` — G_{x0} membership via order vector (findInGx0, findInQx0,
+  orderCheckInGx0, opWatermarkA)
+- `monster_order.go` — order-vector reduction engine (loadOrderVector,
+  genLeech3To2, reduce2AAxisType, analyzeAxis, reduceVAxis, mmReduceVectorVP,
+  mmReduceVectorVm, mmReduceVectorV1, rebaseAxis), precomputed tables
+- `monster_order_gen.go` — orderVectorTable, orderTagTable (generated)
+- `monster_random.go` — mmRand, mmRandIn, subgroup flags, iterRandMM,
+  appendTagsYXDP, randType4Vector
+- `misc.go` (P3/AutP3 block) — P3Node, AutP3, NewP3Node, NewAutP3,
+  P3Incidence, P3IsCollinear, P3PointSetType, p3 helpers
+- `bimm.go` — BiMM, xsp2co1Co1GetMapping, xsp2co1Co1MatrixToWord,
+  xsp2co1ElemFromMapping, P3 precomputation, autP3MM, Norton generators,
+  NewBiMM, P3BiMM, AutP3BiMM
 
-### B. `mm ⇄ xsp2co1` import cycle on the N_0 word algebra (unexported)
+### reduce
+- `monster_compress.go` (GtWord block) — gtSubword, gtWord, newGtWord,
+  appendSubPart, reduceSub, ruleJoin, ruleTxiT, reduceInput, appendWord,
+  reduce, toMmCompress, gtWordStore, compressError, mmCompressAsInt, mmExpandInt
 
-- `xsp2_involution.go` (→ `xsp2co1`) directly uses the N_0 machinery declared
-  in `monster.go` (→ `mm`):
-  - casts `(*N0Elem)(g)` (`xsp2_involution.go:25,38`) — `N0Elem` is
-    `monster.go:59`.
-  - calls unexported `nMulWordScan` (`xsp2_involution.go:27`) and
-    `nReduceElement` (`xsp2_involution.go:38`) — both `monster.go`.
-  - reuses the `iT..iPi` index constants — `monster.go`.
-  - The file's own header documents this reuse explicitly:
-    `xsp2_involution.go:9-13`.
-- `monster.go` (→ `mm`) calls `NewXsp2Co1` (→ `xsp2co1`) at
-  `monster.go:1299, 1338, 1435, 1476`.
-- **Result:** a hard bidirectional dependency on **unexported** functions
-  (`nMulWordScan`, `nReduceElement`) and an exported-named-but-internal type
-  (`N0Elem`). The plan papers over this by typing `ElemFromN0`/`ElemToN0` as
-  `g []uint32` (`go.yaml:11265, 11332`), hiding `N0Elem` at the API surface,
-  but the **implementation** still needs the `nMul*` family on both sides.
-- **This is the primary structural blocker for the migration.**
+  Note: monster_compress.go straddles mm and reduce. The low-level mmCompress*
+  primitives (bit-field packing, PC init/add/expand) stay in mm. The gtWord
+  reduction engine (linked-list, rule application, word store) moves to reduce.
+  This is the resolved form of Clash A (see below).
 
-### C. Receiver-home conflict: `GtWord` / `GtSubWord` methods in `mm`, free functions in `gt`
+### xsp2co1
+- `xsp2.go` — Xsp2Co1 type, XspAtom, constructors (NewXsp2Co1, Xsp2Co1Identity,
+  Xsp2FromXsp), G_{x0} element algebra (xsp2co1MulElem, xsp2co1InvElem,
+  xsp2co1PowerElem, xsp2co1ReduceElem), Leech2OpWord, genLeech2OpWordMany,
+  qs-to-elem conversions, symplectic row, Pauli vector, xi multiplication
+- `xsp2_involution.go` — involution invariants, conjugation to standard form,
+  involution class, traces (xsp2co1InvolutionInvariants,
+  xsp2co1ElemConjugateInvolution, xsp2co1ElemInvolutionClass, trace98280Fast)
+- `bimm.go` (xsp2co1 helpers) — xsp2co1Co1GetMapping, xsp2co1Co1MatrixToWord,
+  chi244096, xsp2co1ElemFromMapping. These live in bimm.go but their C
+  provenance is xsp2co1_map.c; they belong in xsp2co1 and bimm.go calls them.
 
-- The plan assigns the `gtWord` **C-style free functions** to package **`gt`**:
-  `WordAlloc`, `WordReduce`, `WordCompress`, … (`go.yaml:1421-1586`), all
-  taking `*gtWordType`.
-- The plan assigns the `gtWord` **methods** (from Python `GtWord.*`) to package
-  **`mm`**: `Append`, `Reduce`, `Mmdata`, `Subwords`, … (`go.yaml:7566-7645`,
-  `recv: GtWord`), and `GtSubWord` methods (`go.yaml:7550-7565`, `recv:
-  GtSubWord`).
-- In Go, methods must be declared in the same package as their receiver type.
-  `GtWord` cannot have methods in `mm` while being declared in `gt`. **One
-  package must own `GtWord`/`GtSubWord`** and hold both the free functions and
-  the methods.
-- Same shape applies to `EvalNodeVisitor`, `TaggedAtom`, `AtomDict`, `Vsparse`,
-  and the `Abstract*` group/space hierarchy — all placed in `mm` with `recv:`,
-  which is internally consistent *within* `mm`, so those are fine; only
-  `GtWord`/`GtSubWord` cross the `gt`/`mm` line.
 
-### D. Unexported `mat24` helpers called across boundaries
+## 3. Dependency graph
 
-`mat24`'s lowercase helpers (declared in `mat24.go`) are called from files that
-route to **other** packages. Each must be **exported** (most have an exported
-twin already, e.g. `cocodeSyndrome`→`CocodeSyndrome`), or the callers must be
-rewritten to call the exported form:
-
-| Unexported `mat24` helper | Called from (→ pkg)                                  | Count |
-|---------------------------|------------------------------------------------------|-------|
-| `parity12`                | `monster*.go`/`mm_op*.go` (→ mm); `leech.go`,`xsp2*.go` | 9 + 11 |
-| `vintern`                 | `monster*.go`/`mm_op*.go` (→ mm); `leech.go`         | 9 + 1 |
-| `cocodeSyndrome`          | `mm`; `leech.go`,`xsp2*.go`                          | 8 + 2 |
-| `synFromTable`            | `mm`; `leech.go`,`xsp2*.go`                          | 2 + 2 |
-| `gcodeToVectInternal`     | `leech.go`,`xsp2*.go` (→ leech/xsp2co1)              | 7 |
-| `cocodeToSuboctad`        | `mm`                                                 | 2 |
-| `suboctadWeight`          | `mm`                                                 | 2 |
-| `permCheck`               | `mm`                                                 | 1 |
-
-### E. `swar` primitives (`bm64*`) are unexported **and** split across two files
-
-- The planned `swar` package corresponds to the C `bitmatrix64_*` family,
-  implemented in the flat code as unexported `bm64*` functions.
-- **Defined in two files that route to different packages:**
-  - `leech.go`: `bm64RestoreCapH` (`leech.go:177`), `bm64CapH`
-    (`leech.go:207`).
-  - `qstate.go`: 11 defs — `bm64RotBits`, `bm64XchBits`, `bm64ReverseBits`,
-    `bm64T`, `bm64Mul`, `bm64MaskRows`, `bm64AddDiag`, `bm64EchelonH`,
-    `bm64EchelonL`, `bm64Inv`, `bm64FindLowBit` (`qstate.go:350-549`).
-- **Used in 4 files spanning 3 prospective packages:** `leech.go` (21×, leech),
-  `qstate.go` (43×, qstate12), `xsp2.go` (14×) + `xsp2_involution.go` (16×,
-  xsp2co1).
-- **Hazard:** these must be consolidated into the new `swar` package and
-  **exported**, then `leech`/`qstate12`/`xsp2co1` rewritten to call
-  `swar.EchelonH` etc. Until consolidation, the defs live in packages that the
-  callers cannot reach.
-
-### F. Two distinct "swar" concepts — name overload
-
-- The **planned `swar` package** = bit utilities (`bitmatrix64_*`,
-  `bitvector*`, `uint64_*`; `go.yaml:10585+`).
-- The flat code **also** has an internal `genSwar` type +
-  `genSwarFor`/`genSwarTable`/`logIntFields` in `mm_op_p_gen.go` — this is the
-  **modular-reduction SWAR** for the `mm` representation (depends on
-  `logIntFields`/`mmvConst` from `mm_op.go:121`), and is **unrelated** to the
-  planned `swar` package.
-- **Hazard:** do not route `mm_op_p_gen.go` / `genSwar` into `swar`. They stay
-  in `mm`. The name collision is cosmetic but easy to get wrong.
-
-### G. `qstate12` free-function name collisions (plan vs. existing code)
-
-The plan emits **low-level C wrappers** under bare names while the existing flat
-code already uses those bare names for **high-level constructors**, in the same
-target package `qstate12`. Two different signatures under one Go name in one
-package **will not compile**:
-
-| Go name (pkg `qstate12`) | Plan (C wrapper, mutate-in-place)                         | Existing flat code (constructor)              |
-|--------------------------|-----------------------------------------------------------|-----------------------------------------------|
-| `UnitMatrix`             | `UnitMatrix(*qstate12Type, nqb) int32` (`go.yaml:9934`)   | `UnitMatrix(nqb) *QState` (`qstate.go:2189`)  |
-| `PauliMatrix`            | `PauliMatrix(*qstate12Type, …) int32` (`go.yaml:9685`)    | `PauliMatrix(nqb, v) *QState` (`qstate.go:2222`) |
-| `FromSigns`              | `FromSigns([]uint64, n) int32` (`go.yaml:9446`)           | `FromSigns(bmap, n) *QState` (`qstate.go:2286`) |
-| `ColumnMonomialMatrix`   | py `qstate12_column_monomial_matrix` (`go.yaml:10003`)    | `ColumnMonomialMatrix(data) *QState` (`qstate.go:2262`) |
-| `RowMonomialMatrix`      | py `qstate12_row_monomial_matrix` (`go.yaml:10121`)       | `RowMonomialMatrix(data) *QState` (`qstate.go:2272`) |
-
-- `PauliVectorMul`/`PauliVectorExp`/`FlatProduct` also appear in both, but with
-  **matching** signatures (`go.yaml:9706-9727`, `qstate.go:2300-2313`) — not
-  collisions, just duplicate listings.
-- The plan provides `Qs`-prefixed alternates (`QsUnitMatrix`, `QsFromSigns`,
-  `QsPauliMatrix`, `QsRowMonomialMatrix`, `QsColumnMonomialMatrix`;
-  `go.yaml:10035-10120`) — evidence the plan's intended convention is "bare name
-  = C wrapper, `Qs`-prefix = high-level". The existing code chose the opposite.
-  **This is a naming-convention decision a human must make.**
-
-### H. `QState12` vs `QStateMatrix` — two planned receivers, one implemented type
-
-- The plan declares **two** receiver types in `qstate12`: `QState12` (62
-  methods, the low-level state) and `QStateMatrix` (the high-level matrix
-  wrapper). Both having identically-named methods (`Abs`, `Copy`, `Reduce`,
-  `ToSigns`, `Transpose`, …) is **legal** in Go — methods are namespaced by
-  receiver, so this is **not** a collision.
-- The flat code implements this split with different names: `qs12` (unexported,
-  mutable, "mirrors `qstate12_type`") and `QState` (exported wrapper), per the
-  doc comment at `qstate.go:5-9` / `qstate.go:42`.
-- **Not a clash, but a divergence:** the plan wants the low-level type
-  **exported** as `QState12`; the code keeps it unexported as `qs12`. If
-  `xsp2co1` is to consume `qs12` (clash B/cross-deps), `qs12`/`QState12`
-  **must be exported**. See Open Questions.
-
-### I. Name drift between plan and code (low severity, pervasive)
-
-The plan was generated from Python/C names; the code already hand-adjusted many.
-Examples (representative, not exhaustive):
-
-- `XiOpXiNosign` (plan, `go.yaml:942`) vs `XiOpXiNoSign` (`gen_xi.go:95`).
-- `Leech2To3Short` (`leech.go:69`) vs plan `Leech2to3Short` (`go.yaml:348`).
-- `M24numRandAdjustXY` (`mat24.go:2345`) vs plan `M24numRandAdjustXy`
-  (`go.yaml:2202`).
-
-These are not compile blockers (each lands in one package) but mean the
-generator output will **not** match existing exported names — a reconciliation
-pass is required so the public API does not churn.
-
----
-
-## Migration Order
-
-Extraction DAG (leaves first; a package may be extracted once all its
-dependencies are already extracted **and** every identifier it needs from them
-is exported):
+Edges are "A imports B". Only inter-package edges shown.
 
 ```
-Wave 0 (leaves, zero cross-deps once helpers are gathered):
-   swar     ← consolidate bm64* from leech.go+qstate.go, export them (clash E)
-   mat24    ← export the lowercase helpers used elsewhere (clash D); mat24_gen.go
-
-Wave 1 (depend only on Wave 0):
-   gen      ← gen_xi.go, rng.go, UFind* from misc.go; depends on mat24
-   leech    ← leech.go (+gen_leech2.go's leech parts); depends on swar,mat24,gen
-
-Wave 2 (depend on Wave 0–1):
-   qstate12 ← qstate.go; depends on swar. Resolve clash G (naming) + H (export qs12) first.
-
-Wave 3 (the tangled core — cannot be cleanly ordered as-is):
-   mm  ⇄  xsp2co1     ← BLOCKED by cycle (clash B)
-   gt  ?  mm          ← BLOCKED by mmCompress direction (clash A)
+mat24       → (none — leaf)
+swar        → (none — leaf)
+generator   → mat24, swar
+leech       → mat24, generator, swar
+qstate12    → swar
+xsp2co1     → mat24, generator, leech, qstate12, swar
+mm          → mat24, generator, leech, qstate12, swar, xsp2co1
+reduce      → mm, xsp2co1 (for mmCompress primitives and N0Elem)
 ```
 
-- **Waves 0–2 are mechanically extractable** once the export/consolidation
-  prerequisites (clashes D, E, G, H) are done. They form a clean DAG:
-  `swar` and `mat24` first, then `gen`, then `leech`, then `qstate12`.
-- **Wave 3 cannot be split without first breaking cycles B and A.** Options:
-  1. **Break B** by extracting the N_0 word algebra (`N0Elem`, `nMul*`,
-     `iT..iPi`) into a small shared lower package (e.g. `cgt/mmn0` or fold into
-     `gen`) that both `mm` and `xsp2co1` import. Then `mm → xsp2co1` only
-     (one direction), removing the cycle.
-  2. **Break A** by choosing `mmCompress`'s owner: put it in `mm` and let `gt`
-     import `mm` (natural, since `gt` words *contain* `mm` compress data), or
-     vice-versa. Export `mmCompress` either way.
-  3. If neither cut is acceptable, `mm` + `xsp2co1` (and possibly `gt`) ship as
-     **one package**, contradicting the 8-package plan for that cluster.
+Key dependency evidence:
+- generator → mat24: gen_xi.go uses mat24ThetaTable, mat24SyndromeTable,
+  mat24RecipBasis, mat24OctDecTable (all from mat24_gen.go)
+- generator → swar: BitParity, BitWeight (re-export or direct use)
+- leech → generator: Leech2Mul (gen_xi.go), Leech2OpAtom calls XiOpXi
+- leech → swar: bm64EchelonH, bm64RotBits, bm64XchBits, bm64T, bm64EchelonL,
+  bm64Mul, bm64ReverseBits in Leech2MatrixBasis/Leech2MatrixRadical
+- qstate12 → swar: bm64FindLowBit, bm64EchelonH, bm64RotBits, bm64XchBits,
+  bm64Mul, bm64T, bm64EchelonL, bm64Inv, bm64MaskRows, bm64AddDiag,
+  bm64ReverseBits
+- xsp2co1 → qstate12: qs12 type, qsPauliVector, qsReduce, qsEchelonize,
+  qsMulAv, bm64 functions (via qstate.go definitions)
+- xsp2co1 → leech: Leech2To3Short, Leech3To2Short, short3Reduce,
+  short3Scalprod, leech3OpPi/Y/Xi, Leech2OpAtom
+- xsp2co1 → generator: genLeech2ReduceType4 (xsp2_reduce.go → bimm.go),
+  Leech2Subtype, Leech2Type2
+- mm → xsp2co1: xsp2co1SetElemWordScan, xsp2co1ElemSubtype, xsp2co1ElemToWord,
+  xsp2co1MulElemWord, xsp2co1ElemToN0 (in mm_op_group.go PrepareOpABC)
+- mm → leech: Leech2MatrixBasis, Leech2MatrixRadical (monster_order.go)
+- reduce → mm: N0Elem, nMulWordScan, nToWord, nReduceElement, mmCompress*
+  primitives, IndexExternToSparse, IndexLeech2ToSparse
+- reduce → xsp2co1: xsp2co1ElemToWord, xsp2co1SetElemWordScan, reduceWord
+  calls xsp2co1 elem ops
 
----
 
-## Open Questions
+## 4. Surviving clashes
 
-These require a human decision before (or during) migration:
+### Clash A: mmCompress straddles reduce/mm
+**Status: RESOLVED (Q-h).** The mmCompress* bit-field helpers (insertInt256,
+extractInt256, mmCompressType4, mmCompressPCInit, mmCompressPCAddNx, etc.) stay
+in mm because they operate on MMVector internals. The gtWord reduction engine
+(gtSubword, gtWord linked-list, rule application) moves to reduce. The file
+monster_compress.go must be split at the boundary; the mmCompress struct and its
+methods stay in mm, and the gtWord struct and its methods go to reduce.
 
-1. **Cycle B resolution (highest priority).** Where does the N_0 word algebra
-   live? Extract `N0Elem`/`nMul*`/`iT..iPi` to a shared sub-package, or accept
-   `mm`+`xsp2co1` as one package? The plan's `[]uint32` API typing
-   (`ElemFromN0`) only hides the boundary at the surface; the implementation
-   coupling is real.
+### Clash B: mm <-> xsp2co1 cycle on N0Elem
+**Status: RESOLVED (Q-g).** Extract N0Elem and the N_0 word algebra (nMul,
+nMulDeltaPi, nMulWordScan, nReduceElement, nToWord, nMulElement, etc.) into a
+new `cgt/n0` package. Both mm and xsp2co1 import n0; the cycle breaks.
 
-2. **Cycle/edge A direction.** Does `mmCompress` belong to `gt` or `mm`? This
-   decides whether `mm → gt` or `gt → mm`, and whether `mmCompress` must be
-   exported.
+Note: n0 is not in go.yaml yet. It needs to be added. It is a small package
+(the N0Elem type + ~20 functions from monster.go lines 59-480).
 
-3. **`GtWord`/`GtSubWord` home (clash C).** Confirm both the C free functions
-   (plan → `gt`) and the `GtWord.*` methods (plan → `mm`) consolidate into a
-   single package. Recommend `gt` (it owns `gtWord`/`gtSubword`/`mmCompress`),
-   with `mm` importing `gt`.
+### Clash C: GtWord home
+**Status: DISSOLVED (D0b).** GtWord routing is settled: the type and its
+reduction engine live in reduce. No remaining ambiguity.
 
-4. **`qstate12` naming convention (clash G).** Bare name = C wrapper or = the
-   existing high-level constructor? The existing code and the plan disagree on
-   `UnitMatrix`/`PauliMatrix`/`FromSigns`/`ColumnMonomialMatrix`/
-   `RowMonomialMatrix`. Pick one; rename the other (the plan already offers
-   `Qs*` alternates).
+### Clash D: unexported mat24 helpers
+**Status: RESOLVED (Q-j).** Export the helpers (lsbit24, synFromTable, vintern,
+gcodeToVectInternal, oddSyn, gcodeToOctad, parity12). They are used by gen_xi.go
+and mm_op_t.go, which will be in different packages. Exporting is the simplest
+fix; the names already follow Go conventions once capitalized.
 
-5. **Export `qs12` as `QState12` (clash H)?** `xsp2co1` consumes `*qs12`. Either
-   export it (matching the plan's `QState12`), or keep `qstate12` and `xsp2co1`
-   able to share it some other way. The 7 `xsp2co1` functions affected:
-   `ChainShort3`, `ElemToQs`, `ElemToQsI`, `MapShort3`, `MulQsV3Word`,
-   `QsToElemI`, `RepMod3FromQs`.
+### Clash E: bm64* split across qstate.go, leech.go, xsp2.go, xsp2_involution.go
+**Status: NEEDS CONSOLIDATION.** The bm64 primitives are defined in qstate.go
+(lines ~348-580) and consumed by leech.go, xsp2.go, and xsp2_involution.go.
+All primitive bm64 functions move to swar. The two composite helpers in leech.go
+(bm64RestoreCapH, bm64CapH) stay in leech since they are leech-specific
+compositions. Callers in xsp2co1 and qstate12 import swar.
 
-6. **Export surface for `mat24` helpers (clash D).** Confirm the lowercase
-   helpers (`parity12`, `vintern`, `cocodeSyndrome`, `synFromTable`,
-   `gcodeToVectInternal`, …) should be exported, or that callers should be
-   rewritten to use existing exported twins. Some (`parity12`,
-   `gcodeToVectInternal`) have **no** exported twin and would need one.
+### Clash F: genSwar vs swar
+**Status: NO CLASH.** genSwar is the per-modulus SWAR table for MMVector
+field-generic operations (mm_op_p_gen.go). It stays in mm. The swar package is
+the bit-matrix primitive library (bm64*). The names do not collide: genSwar is
+unexported and internal to mm.
 
-7. **`Rng` placement.** The plan puts RNG (`RngSeed`, `RngUniform`, …) in `gen`,
-   but `Rng` (`rng.go:30`) is consumed by `mm_op_vector.go` (→ `mm`). Confirm
-   `Rng` → `gen` with `mm` importing it (creates a clean `mm → gen` edge), vs.
-   leaving it in `mm`.
+### Clash G: qstate12 bare-name collisions
+**Status: RESOLVED (Q-i).** The qs12 internal type and its ~50 free functions
+(qsReduce, qsPivot, qsEchelonize, etc.) have bare names that would collide in a
+flat namespace. Receiver disambiguation resolves this: qs12 becomes the
+unexported working type inside qstate12, and the free functions keep their qs*
+prefix (they are already unexported).
 
-8. **Scope of the unimplemented surface.** A large fraction of `go.yaml` is
-   **planned but not yet in the Go code** — e.g. the entire `gt` `GtWord`/
-   `GtSubWord` method set, `OrbitElem2`/`OrbitLin2`/`RandomSubgroup` (`gen`),
-   `Xsp2Co1Group` (`xsp2co1`), `QStateMatrix` (`qstate12`), and the `mm`
-   `Abstract*`/`Axis`/`BabyAxis`/`BiMM`-group hierarchy with Python-derived
-   (empty-typed) parameters. Decide whether migration extracts only the
-   **implemented** subset now and grows each package toward the plan, or blocks
-   on completing the translation first. The implemented exported types are:
-   `XLeech2`, `GCode`,`Cocode`,`PLoop`,`PLoopIntersection`,`Parity`,`AutPL`,
-   `Octad`, `MM`,`Axis`,`BiMM`,`AutP3`,`P3Node`,`Tag`,`Tuple`,`Subgroup`,
-   `ChiMap`,`N0Elem`,`Xsp2Co1`,`QState`,`Rng` (plus unexported `qs12`/
-   `qsSupport`/`gtWord`/`gtSubword`/`mmCompress`/`genSwar`). `GcVector` is
-   listed with 22 methods in `go.yaml` but is **not yet implemented**;
-   likewise `QStateMatrix`/`QState12` (`qstate12`), `GtWord`/`GtSubWord`
-   (`gt`), `Xsp2Co1Group` (`xsp2co1`), `GcVector`/`AutPlGroup` (`mat24`), and
-   `OrbitElem2`/`OrbitLin2`/`RandomSubgroup` (`gen`).
+### Clash H: qs12 export
+**Status: RESOLVED (Q-i).** The public API is QState (already exported). The
+qs12 type stays unexported inside qstate12. xsp2co1 accesses qs12 through
+package-internal helpers that qstate12 exports (e.g., a ToQS12/FromQS12 pair or
+direct field access). This requires either:
+  (a) xsp2co1 uses only the QState public API (preferred if feasible), or
+  (b) qstate12 exports a thin internal-access API for xsp2co1.
+Currently xsp2.go creates qs12 literals directly and calls ~15 unexported qs*
+functions. Option (b) is needed; the thin API is the set of qs* functions that
+xsp2.go calls.
+
+### Clash I: name drift
+**Status: DEFERRED (Q-e).** Renaming identifiers to match the go.yaml
+conventions (e.g., camelCase C names to Go PascalCase) is a mechanical pass
+done after extraction.
+
+
+## 5. Extraction order
+
+Based on the dependency DAG, extract leaf-first:
+
+```
+Phase 1 (leaves, parallel):
+  mat24    — no inter-package deps
+  swar     — no inter-package deps
+
+Phase 2 (depends only on Phase 1):
+  generator  → mat24, swar
+  qstate12   → swar
+
+Phase 3 (depends on Phase 1+2):
+  leech      → mat24, generator, swar
+
+Phase 4 (depends on Phase 1-3):
+  n0         → mat24 (new package for N0Elem; extract from monster.go)
+  xsp2co1    → mat24, generator, leech, qstate12, swar
+
+Phase 5 (depends on everything):
+  mm         → mat24, generator, leech, qstate12, swar, xsp2co1, n0
+  reduce     → mm, xsp2co1, n0
+```
+
+Within each phase the packages are independent and can be extracted in
+parallel. Phase 4 requires n0 to exist before xsp2co1 can be cleanly
+extracted (Clash B resolution).
+
+### Pre-extraction prerequisite
+
+Before any phase: resolve Clash D (export mat24 helpers) and Clash E
+(consolidate bm64 into swar). These are mechanical changes that unblock
+all subsequent extractions.

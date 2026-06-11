@@ -150,7 +150,7 @@ func convPauliVectorXspecial(x uint32) uint32 {
 	t := (x ^ (x >> 12)) & 0x800
 	x ^= (t << 12) ^ t
 	t = x & (x >> 12) & 0x7ff
-	t = parity12(t)
+	t = Parity12(t)
 	x ^= t << 24
 	return x
 }
@@ -175,17 +175,33 @@ func convConjugateBasis(s *qs12) {
 *************************************************************************/
 
 // short3Scalprod returns the scalar product of
-// two Leech-mod-3 vectors (0, 1 or 2).
+// two Leech-mod-3 vectors (0, 1 or 2). C
+// short_3_scalprod.
 func short3Scalprod(v31, v32 uint64) uint32 {
+	// zero has bit i clear where the product of
+	// entries i is 0 (one operand entry is 0).
 	zero := ((v31 ^ (v31 >> 24)) & (v32 ^ (v32 >> 24))) & 0xffffff
+	// res holds the 24 per-entry products, each in
+	// {0,1,2} as a 2-bit field; the high 24 bits are
+	// counted twice by the fold below.
 	res := (v31 ^ v32) & 0xffffff000000
 	res = (res & (zero << 24)) | (zero &^ (res >> 24))
+	// Horizontal popcount fold of the 48 bits. After
+	// the four steps res holds the byte-wise sums; the
+	// final two lines collapse to one value with
+	// 0 <= res <= 48 (24 entries times 2, high half
+	// counted twice).
 	res = (res & 0x555555555555) + ((res >> 1) & 0x555555555555)
 	res = (res & 0x333333333333) + ((res >> 2) & 0x333333333333)
 	res = (res & 0x0f0f0f0f0f0f) + ((res >> 4) & 0x0f0f0f0f0f0f)
 	res = (res & 0xffffff) + ((res >> 23) & 0x1fffffe)
 	res = ((res >> 16) + (res >> 8) + res) & 0xff
+	// Reduce 0 <= res <= 48 mod 3. After this step
+	// 0 <= res <= 19 (= 16 + 3), so res << 1 <= 38 and
+	// the table shift below stays within 64 bits.
 	res = (res & 3) + (res >> 2)
+	// 0x9249...924 is the 2-bit-per-slot table of
+	// n mod 3 for n in 0..31; index it by 2*res.
 	res = (0x924924924924924 >> (res << 1)) & 3
 	return uint32(res)
 }
@@ -349,8 +365,8 @@ func qsToSymplecticRow(s *qs12, n int) uint32 {
 	if (v>>uint(k))&mask != 0 {
 		panic("cgt: matrix is not invertible")
 	}
-	bm64XchBits(m, dRows, 2*k+1, (1<<uint(k))-1)
-	res := bm64EchelonL(m, dRows, 2*k+1, dRows)
+	Bm64XchBits(m, dRows, 2*k+1, (1<<uint(k))-1)
+	res := Bm64EchelonL(m, dRows, 2*k+1, dRows)
 	if res != dRows {
 		panic("cgt: matrix is not invertible")
 	}
@@ -371,7 +387,7 @@ func qsToSymplecticRow(s *qs12, n int) uint32 {
 	}
 	a &= (uint64(1) << uint(2*k)) - 1
 	one := []uint64{a}
-	bm64ReverseBits(one, 1, k, 0)
+	Bm64ReverseBits(one, 1, k, 0)
 	return uint32(one[0])
 }
 
@@ -679,7 +695,7 @@ func xsp2co1XspecialConjugate(elem []uint64, ax []uint64, sign bool) {
 		var data [24]uint64
 		xsp2co1ElemToBitmatrix(elem, data[:])
 		out := make([]uint64, len(ax))
-		bm64Mul(ax, data[:], len(ax), 24, out)
+		Bm64Mul(ax, data[:], len(ax), 24, out)
 		copy(ax, out)
 		return
 	}
@@ -792,7 +808,7 @@ func setQsY(s *qs12, y uint32) {
 		d := uint32(1) << uint(i)
 		thetaD := uint64(mat24ThetaTable[d&0x7ff])
 		sv := thetaD & uint64(y)
-		sv = uint64(parity12(uint32(sv)))
+		sv = uint64(Parity12(uint32(sv)))
 		assoc := uint64(mat24ThetaTable[(d^y)&0x7ff]) ^ thetaD ^ thetaY
 		data[i+1] = uint64(d) + (sv << 12) + ((assoc & 0x7ff) << 13)
 	}
@@ -823,7 +839,7 @@ func mulQsXi2(s *qs12) {
 // row of s (qstate12_xch_bits), shifting bits in
 // mask by sh.
 func qsXchBitsRaw(s *qs12, sh int, mask uint64) {
-	bm64XchBits(s.data, s.nrows, sh, mask)
+	Bm64XchBits(s.data, s.nrows, sh, mask)
 	s.reduced = false
 }
 
@@ -1091,15 +1107,15 @@ func xsp2co1OddOrderBitmatrix(bm []uint64) int {
 		bm1[i] = bm[i] & 0xffffff
 	}
 	for i := 0; i < 2; i++ {
-		bm64Mul(bm1[:], bm1[:], 24, 24, bm2[:])
-		bm64Mul(bm2[:], bm2[:], 24, 24, bm1[:])
+		Bm64Mul(bm1[:], bm1[:], 24, 24, bm2[:])
+		Bm64Mul(bm2[:], bm2[:], 24, 24, bm1[:])
 	}
 	if isNeutralCo1(bm1[:]) {
 		return 1
 	}
-	bm64Mul(bm1[:], bm1[:], 24, 24, bm2[:])
+	Bm64Mul(bm1[:], bm1[:], 24, 24, bm2[:])
 	for i := 3; i <= 39; i += 2 {
-		bm64Mul(bm1[:], bm2[:], 24, 24, bm1[:])
+		Bm64Mul(bm1[:], bm2[:], 24, 24, bm1[:])
 		if isNeutralCo1(bm1[:]) {
 			return i
 		}
@@ -1206,7 +1222,7 @@ func opYNoSign(q0, d uint32) uint32 {
 	thetaY := uint32(mat24ThetaTable[d&0x7ff])
 	o := (thetaY & (q0 >> 12)) ^ (q0 & d)
 	o ^= (thetaY >> 12) & 1 & odd
-	o = parity12(o)
+	o = Parity12(o)
 	eps := thetaQ0 ^ (thetaY & ^odd) ^ uint32(mat24ThetaTable[((q0>>12)^d)&0x7ff])
 	q0 ^= (eps & 0xfff) ^ ((d << 12) & 0xfff000 & odd)
 	q0 ^= o << 23
@@ -1486,12 +1502,12 @@ func xsp2co1Leech2CountType2(a []uint64, n int) uint32 {
 	}
 	// Track the data via an offset into a so the
 	// final restore (C: --a) is faithful.
-	bm64XchBits(a, n, 12, 0x800)
+	Bm64XchBits(a, n, 12, 0x800)
 	v := uint32(a[0])
 	off := 1
 	babysteps := 1
 	m := a[off:]
-	nEch := bm64EchelonH(m, n-1, 24, 24)
+	nEch := Bm64EchelonH(m, n-1, 24, 24)
 	var b [1 << lsteps]uint16
 	b[0] = 0
 	nh := 0
@@ -1571,7 +1587,7 @@ func xsp2co1Leech2CountType2(a []uint64, n int) uint32 {
 	}
 
 	// C: --a; n += nh + 1; xch_bits(a, n, ...)
-	bm64XchBits(a, n, 12, 0x800)
+	Bm64XchBits(a, n, 12, 0x800)
 	return count
 }
 
@@ -1600,7 +1616,7 @@ func xsp2co1Trace98280(elem []uint64, fFast func([]uint64) (int32, bool)) int32 
 		pa[i] = ((pa[i] & 0xffffff) << 24) ^ mask
 		mask <<= 1
 	}
-	nn := bm64EchelonH(pa, 24, 48, 24)
+	nn := Bm64EchelonH(pa, 24, 48, 24)
 	pa = pa[nn:]
 	n := 24 - nn
 	if n == 0 {
@@ -1612,7 +1628,7 @@ func xsp2co1Trace98280(elem []uint64, fFast func([]uint64) (int32, bool)) int32 
 		}
 	}
 	xsp2co1XspecialConjugate(elem, pa[:n], true)
-	idx := bm64EchelonH(pa, n, 25, 1)
+	idx := Bm64EchelonH(pa, n, 25, 1)
 	var res int32
 	if idx != 0 {
 		res = 0 - int32(xsp2co1Leech2CountType2(pa, n))

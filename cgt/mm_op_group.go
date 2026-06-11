@@ -131,16 +131,6 @@ func Scalprod(v1, v2 *MMVector) int {
 	return res % p
 }
 
-// ScalprodInd computes the scalar product of v1 and
-// v2 using the precomputed nonzero-index array ind. C
-// mm_op_scalprod_ind. Here we ignore ind and compute
-// directly (the result is identical).
-func ScalprodInd(p int, v1, v2 []uint64, ind []uint16) int {
-	a := &MMVector{p: p, data: v1}
-	b := &MMVector{p: p, data: v2}
-	return Scalprod(a, b)
-}
-
 /**********************************************************************
  * xi tables (mm_tables_xi.c)
  **********************************************************************/
@@ -302,10 +292,10 @@ func gcodeToOctadFast(v uint32) uint32 {
 	return uint32(mat24OctEncTable[v&0x7ff]) >> 1
 }
 
-// SubTestPrepPi64 writes the 759*(1+6) tag-T
+// subTestPrepPi64 writes the 759*(1+6) tag-T
 // preparation table to out (length 759*7). C
 // mm_sub_test_prep_pi_64.
-func SubTestPrepPi64(delta, pi int, out []uint32) {
+func subTestPrepPi64(delta, pi int, out []uint32) {
 	tbl := subPrepPi64(uint32(delta), uint32(pi))
 	o := 0
 	for i := 0; i < 759; i++ {
@@ -419,7 +409,7 @@ func subPrepXY(f, e, eps uint32) *subOpXY {
 			res := uint32(toSuboctad(vf, pOct))
 			res ^= uint32(toSuboctad(vef, pOct)) << 8
 			sign := d & eps
-			sign = parity12(sign)
+			sign = Parity12(sign)
 			sign ^= signE ^ pwrMap(d^e)
 			op.sT[oct] = uint16(res + (sign << 14) + ((eps & 0x800) << (15 - 11)))
 			p0 += 8
@@ -428,10 +418,10 @@ func subPrepXY(f, e, eps uint32) *subOpXY {
 	return op
 }
 
-// SubTestPrepXY writes components (selected by mode)
+// subTestPrepXY writes components (selected by mode)
 // of the xy preparation tables to out. C
 // mm_sub_test_prep_xy.
-func SubTestPrepXY(f, e, eps, mode int, out []uint32) {
+func subTestPrepXY(f, e, eps, mode int, out []uint32) {
 	op := subPrepXY(uint32(f), uint32(e), uint32(eps))
 	switch mode {
 	case 1:
@@ -580,13 +570,18 @@ func OpWordTagA(p int, v []uint64, g []uint32, length, e int) error {
 // dst. C mm_op*_word_ABC. PrepareOpABC (below)
 // supplies its word-preprocessing front end.
 //
-// OpWordABC panics: the general path is blocked on the
-// gen_leech2 subframe machinery (gen_leech2_prefix_Gx0,
+// The general path is fully ported: the gen_leech2
+// subframe machinery (gen_leech2_prefix_Gx0,
 // gen_leech2_map_std_subframe, the extract_BC subframe
 // extraction) and the tag-ABC tau/delta restricted ops
-// (mm_op*_t_ABC, mm_op*_delta_tag_ABC), none of which
-// are ported. Its word front end (PrepareOpABC) and the
-// tag-ABC xy/pi/xi ops are available.
+// (genOpTTagABC, genOpDeltaTagABC) are all available,
+// alongside the tag-ABC xy/pi/xi ops.
+//
+// OpWordABC panics if p is not a supported modulus.
+// It returns a non-nil error mirroring the negative
+// return codes of C mm{p}_op_word_ABC (prepared word
+// too long, word not in G_{x0}*N_0, subframe map
+// failure, or unconsumed trailing atoms).
 func OpWordABC(p int, src []uint64, g []uint32, length int, dst []uint64) error {
 	return genOpWordABC(p, src, g, length, dst)
 }

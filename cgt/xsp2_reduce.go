@@ -71,7 +71,7 @@ func xiReduceOctad(v uint32) int32 {
 // xi^e maps the subtype-0x46 vector v to subtype
 // 0x44, or -1 if none exists.
 func xiReduceDodecad(v uint32) int32 {
-	vect := gcodeToVectInternal(v >> 12)
+	vect := GcodeToVectInternal(v >> 12)
 	s1 := vect | (vect >> 2)
 	s1 = s1 | (s1 >> 1)
 	s0 := vect & (vect >> 2)
@@ -120,7 +120,7 @@ func findOctadPermutation(v uint32, pRes *uint32) int32 {
 	var src [8]byte
 	theta := uint32(mat24ThetaTable[(v>>12)&0x7ff])
 	w := ((theta >> 13) ^ (v >> 23) ^ 1) & 1
-	vect := gcodeToVectInternal((v ^ (w << 23)) >> 12)
+	vect := GcodeToVectInternal((v ^ (w << 23)) >> 12)
 	copy(src[:5], VectToList(vect, 5))
 	coc := (v ^ PloopTheta(v>>12)) & 0xfff
 	syn := CocodeSyndrome(coc, uint32(src[0])) & ^vect
@@ -129,7 +129,7 @@ func findOctadPermutation(v uint32, pRes *uint32) int32 {
 		v5 := (uint32(1) << src[0]) | (uint32(1) << src[1]) | (uint32(1) << src[2])
 		coc = VectToCocode(v5 | syn)
 		tab := uint32(mat24SyndromeTable[coc&0x7ff])
-		special := synFromTable(tab)
+		special := SynFromTable(tab)
 		src[3] = byte(lsbit24(special & vect))
 		src[4] = byte(lsbit24(vect & ^(special | v5)))
 		src[5] = byte(lsbit24(syn))
@@ -177,7 +177,7 @@ func genLeech2StartType24(v uint32) int32 {
 		w := ((theta >> 13) ^ (v >> 23)) & 1
 		v ^= (1 - w) << 23
 		coc := (v ^ theta ^ 0x200) & 0x7ff
-		octad := gcodeToVectInternal(v >> 12)
+		octad := GcodeToVectInternal(v >> 12)
 		if suboctadType(octad, w, coc) != 0 {
 			return 0x22
 		}
@@ -211,7 +211,7 @@ func genLeech2StartType4(v uint32) int32 {
 		return 0x40
 	}
 	scalar := (v >> 12) & v & 0xfff
-	scalar = parity12(scalar)
+	scalar = Parity12(scalar)
 	if scalar != 0 {
 		return -3
 	}
@@ -233,7 +233,7 @@ func genLeech2StartType4(v uint32) int32 {
 	}
 	w := ((theta >> 13) ^ (v >> 23)) & 1
 	v ^= (1 - w) << 23
-	octad := gcodeToVectInternal(v >> 12)
+	octad := GcodeToVectInternal(v >> 12)
 	coc = (v ^ theta) & 0x7ff
 	sub := suboctadType(octad, w, coc)
 	if sub == 0 {
@@ -273,7 +273,7 @@ func genLeech2ReduceType2(v uint32, pgOut []uint32) int {
 				var src [4]byte
 				theta := uint32(mat24ThetaTable[(v>>12)&0x7ff])
 				w := ((theta >> 13) ^ (v >> 23) ^ 1) & 1
-				vect := gcodeToVectInternal((v ^ (w << 23)) >> 12)
+				vect := GcodeToVectInternal((v ^ (w << 23)) >> 12)
 				copy(src[:4], VectToList(vect, 4))
 				res := applyPerm(v, src[:], lstd[:], 4, &pgOut[end])
 				if res < 0 {
@@ -342,7 +342,7 @@ func reduceType2Ortho(v, vtype uint32, pgOut []uint32) int {
 				var src [8]byte
 				theta := uint32(mat24ThetaTable[(v>>12)&0x7ff])
 				w := ((theta >> 13) ^ (v >> 23) ^ 1) & 1
-				vect := gcodeToVectInternal((v ^ (w << 23)) >> 12)
+				vect := GcodeToVectInternal((v ^ (w << 23)) >> 12)
 				src[2] = 2
 				src[3] = 3
 				var d, n int
@@ -354,7 +354,7 @@ func reduceType2Ortho(v, vtype uint32, pgOut []uint32) int {
 					v5 := (uint32(1) << src[4]) | (uint32(1) << src[5]) | (uint32(1) << src[6])
 					coc := VectToCocode(v5 | 0x0c)
 					tab := uint32(mat24SyndromeTable[coc&0x7ff])
-					special := synFromTable(tab)
+					special := SynFromTable(tab)
 					src[7] = byte(lsbit24(special & vect))
 					d, n = 2, 6
 				}
@@ -446,7 +446,7 @@ func reduceType4(v, vtype uint32, pgOut []uint32) int {
 		case 0x46:
 			if exp = xiReduceDodecad(v); exp < 0 {
 				var src [4]byte
-				vect := gcodeToVectInternal(v >> 12)
+				vect := GcodeToVectInternal(v >> 12)
 				copy(src[:4], VectToList(vect, 4))
 				res := applyPerm(v, src[:], lstd[:], 4, &pgOut[end])
 				if res < 0 {

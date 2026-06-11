@@ -342,236 +342,6 @@ func qsMulAv(s *qs12, v uint64) uint64 {
 }
 
 /*************************************************************************
-*** Permuting bit arguments (bitmatrix64.c)
-*************************************************************************/
-
-// bm64RotBits rotates columns n0..n0+nrot-1 of
-// the i-row bit matrix m by rot.
-func bm64RotBits(m []uint64, i, rot, nrot, n0 int) {
-	if nrot+n0 > 64 {
-		panic("cgt: qubit index out of range")
-	}
-	if nrot < 2 {
-		return
-	}
-	if rot < 0 {
-		rot += nrot*(-rot/nrot) + nrot
-	}
-	rot %= nrot
-	if rot == 0 {
-		return
-	}
-	nmax := nrot + n0
-	maskL := uint64(1) << uint(nmax-rot)
-	var maskH uint64
-	if nmax < 64 {
-		maskH = uint64(1) << uint(nmax)
-	}
-	maskH -= maskL
-	maskL -= uint64(1) << uint(n0)
-	mask := ^(maskL | maskH)
-	sh := uint(nrot - rot)
-	for k := 0; k < i; k++ {
-		m[k] = (m[k] & mask) | ((m[k] & maskL) << uint(rot)) | ((m[k] & maskH) >> sh)
-	}
-}
-
-// bm64XchBits exchanges column j with column
-// j+sh of the i-row bit matrix m when bit j of
-// mask is set.
-func bm64XchBits(m []uint64, i, sh int, mask uint64) {
-	if mask == 0 {
-		return
-	}
-	if sh >= 64 || mask&(mask>>uint(sh)) != 0 {
-		panic("cgt: qubit index out of range")
-	}
-	for k := 0; k < i; k++ {
-		v := (m[k] ^ (m[k] >> uint(sh))) & mask
-		m[k] ^= v ^ (v << uint(sh))
-	}
-}
-
-// bm64ReverseBits reverses n columns of the
-// i-row bit matrix m starting at column n0.
-func bm64ReverseBits(m []uint64, i, n, n0 int) {
-	if n+n0 > 64 {
-		panic("cgt: qubit index out of range")
-	}
-	if n < 2 {
-		return
-	}
-	for k := 0; k < i; k++ {
-		mask := uint64(1) << uint(n0)
-		v := m[k]
-		for sh := n - 1; sh > 0; sh -= 2 {
-			w := (v ^ (v >> uint(sh))) & mask
-			v ^= w ^ (w << uint(sh))
-			mask <<= 1
-		}
-		m[k] = v
-	}
-}
-
-// bm64T writes the transpose of the i x j bit
-// matrix m1 into m2.
-func bm64T(m1 []uint64, i, j int, m2 []uint64) {
-	for j1 := 0; j1 < j; j1++ {
-		var v uint64
-		for i1 := 0; i1 < i; i1++ {
-			v |= ((m1[i1] >> uint(j1)) & 1) << uint(i1)
-		}
-		m2[j1] = v
-	}
-}
-
-// bm64Mul writes the product m1*m2 into m3.
-// m1 has i1 rows, only the lowest i2 columns of
-// m1 are inspected. m3 may alias m1.
-func bm64Mul(m1, m2 []uint64, i1, i2 int, m3 []uint64) {
-	if i2 > 64 {
-		i2 = 64
-	}
-	for i := 0; i < i1; i++ {
-		mi := m1[i]
-		var mo uint64
-		for j := 0; j < i2; j++ {
-			mo ^= -((mi >> uint(j)) & 1) & m2[j]
-		}
-		m3[i] = mo
-	}
-}
-
-// bm64MaskRows ands mask into the first i rows.
-func bm64MaskRows(m []uint64, i int, mask uint64) {
-	for k := 0; k < i; k++ {
-		m[k] &= mask
-	}
-}
-
-// bm64AddDiag adds one to entries m[k, j+k].
-func bm64AddDiag(m []uint64, i, j int) {
-	if j >= 64 {
-		return
-	}
-	mask := uint64(1) << uint(j)
-	for k := 0; k < i; k++ {
-		m[k] ^= mask
-		mask <<= 1
-	}
-}
-
-// bm64EchelonH converts m to reduced echelon
-// form with leading bits the most significant,
-// pivoting columns j0-1..j0-n. It returns the
-// number of nonzero pivoted rows.
-func bm64EchelonH(m []uint64, i, j0, n int) int {
-	rowPos := 0
-	if j0 > 64 {
-		j0 = 64
-	}
-	if n > j0 {
-		n = j0
-	}
-	if i == 0 || n == 0 {
-		return 0
-	}
-	for col := j0 - 1; col >= j0-n; col-- {
-		colMask := uint64(1) << uint(col)
-		for k1 := i - 1; k1 >= rowPos; k1-- {
-			if m[k1]&colMask != 0 {
-				v := m[k1]
-				for k2 := k1 - 1; k2 >= 0; k2-- {
-					m[k2] ^= -((m[k2] >> uint(col)) & 1) & v
-				}
-				m[k1] = m[rowPos]
-				m[rowPos] = v
-				rowPos++
-				break
-			}
-		}
-	}
-	return rowPos
-}
-
-// bm64EchelonL converts m to reduced echelon
-// form with leading bits the least significant,
-// pivoting columns j0..j0+n-1. It returns the
-// number of nonzero pivoted rows.
-func bm64EchelonL(m []uint64, i, j0, n int) int {
-	rowPos := 0
-	if j0 >= 64 || i == 0 || n == 0 {
-		return 0
-	}
-	if j0+n > 64 {
-		n = 64 - j0
-	}
-	for col := j0; col < j0+n; col++ {
-		colMask := uint64(1) << uint(col)
-		for k1 := i - 1; k1 >= rowPos; k1-- {
-			if m[k1]&colMask != 0 {
-				v := m[k1]
-				for k2 := k1 - 1; k2 >= 0; k2-- {
-					m[k2] ^= -((m[k2] >> uint(col)) & 1) & v
-				}
-				m[k1] = m[rowPos]
-				m[rowPos] = v
-				rowPos++
-				break
-			}
-		}
-	}
-	return rowPos
-}
-
-// bm64Inv inverts the i x i bit matrix m in
-// place. It returns false if m is singular.
-func bm64Inv(m []uint64, i int) bool {
-	if i > 32 {
-		panic("cgt: bit matrix too large to invert")
-	}
-	if i == 0 {
-		return true
-	}
-	bm64MaskRows(m, i, (uint64(1)<<uint(i))-1)
-	bm64AddDiag(m, i, i)
-	bm64EchelonL(m, i, 0, 2*i)
-	if m[i-1]&((uint64(1)<<uint(i))-1) == 0 {
-		return false
-	}
-	bm64RotBits(m, i, i, 2*i, 0)
-	bm64MaskRows(m, i, (uint64(1)<<uint(i))-1)
-	return true
-}
-
-// bm64FindLowBit returns the lowest position k
-// (imin <= k < imax) of a set bit in m, or imax.
-func bm64FindLowBit(m []uint64, imin, imax int) int {
-	if imin >= imax {
-		return imax
-	}
-	n := imin >> 6
-	nmax := (imax + 63) >> 6
-	v := m[n] & -(uint64(1) << uint(imin&63))
-	if v != 0 {
-		return (n << 6) + bits.TrailingZeros64(v)
-	}
-	// C uses n <= nmax, which over-reads one word past the
-	// allocation when imax is a 64-multiple. The trailing word
-	// never contains in-range bits (res < imax discards them).
-	for n++; n < nmax; n++ {
-		if v = m[n]; v != 0 {
-			res := (n << 6) + bits.TrailingZeros64(v)
-			if res < imax {
-				return res
-			}
-			return imax
-		}
-	}
-	return imax
-}
-
-/*************************************************************************
 *** Reducing a state (qstate12.c)
 *************************************************************************/
 
@@ -1389,7 +1159,7 @@ func scanAffine(bmap []uint64, n int, s *qs12) {
 	}
 	s.grow(maxlen + 1)
 	m := s.data
-	m0 := uint64(bm64FindLowBit(bmap, 0, 2*maxlen) >> 1)
+	m0 := uint64(Bm64FindLowBit(bmap, 0, 2*maxlen) >> 1)
 	if m0 >= uint64(maxlen) {
 		s.nrows = 0
 		return
@@ -1400,7 +1170,7 @@ func scanAffine(bmap []uint64, n int, s *qs12) {
 		if mask&m0 == 0 {
 			imin := int((m0 & -mask) + mask)
 			imax := imin + int(mask)
-			imin = bm64FindLowBit(bmap, imin<<1, imax<<1) >> 1
+			imin = Bm64FindLowBit(bmap, imin<<1, imax<<1) >> 1
 			if imin < imax {
 				m[rows] = uint64(imin) ^ m0
 				rows++
@@ -1409,14 +1179,14 @@ func scanAffine(bmap []uint64, n int, s *qs12) {
 	}
 	for ; mask < uint64(1)<<uint(n); mask <<= 1 {
 		imax := int(mask << 1)
-		imin := bm64FindLowBit(bmap, int(mask)<<1, imax<<1) >> 1
+		imin := Bm64FindLowBit(bmap, int(mask)<<1, imax<<1) >> 1
 		if imin < imax {
 			m[rows] = uint64(imin) ^ m0
 			rows++
 		}
 	}
 	m[0] = m0 | uint64(maxlen)
-	bm64EchelonH(m, rows, n+1, n+1)
+	Bm64EchelonH(m, rows, n+1, n+1)
 	s.nrows = rows
 	m[0] &^= uint64(maxlen)
 }
@@ -1710,7 +1480,7 @@ func qsProduct(s1, s2 *qs12, nqb, nc int) *qs12 {
 func qsMatT(s *qs12) {
 	nqb := s.ncols - s.shape1
 	s.shape1 = nqb
-	bm64RotBits(s.data, s.nrows, nqb, s.ncols, 0)
+	Bm64RotBits(s.data, s.nrows, nqb, s.ncols, 0)
 	s.reduced = false
 }
 
@@ -1733,7 +1503,7 @@ func qsMatmul(s1, s2 *qs12) *qs12 {
 	}
 	a := s1.copy()
 	b := s2.copy()
-	bm64RotBits(a.data, a.nrows, -nqb, a.ncols, 0)
+	Bm64RotBits(a.data, a.nrows, -nqb, a.ncols, 0)
 	a.reduced = false
 	qsProductInto(a, b, nqb, nqb)
 	a.shape1 = cols
@@ -1998,23 +1768,23 @@ func qsToSymplectic(s *qs12) []uint64 {
 	if (v>>uint(k))&mask != 0 {
 		panic("cgt: matrix is not invertible")
 	}
-	bm64T(m, dRows, k, at)
+	Bm64T(m, dRows, k, at)
 	for j := 0; j < k; j++ {
 		pA[j] = at[j] & mask
 		at[j] >>= uint(k)
 	}
-	bm64XchBits(m, dRows, 2*k+1, (1<<uint(k))-1)
-	res := bm64EchelonL(m, dRows, 2*k+1, dRows)
+	Bm64XchBits(m, dRows, 2*k+1, (1<<uint(k))-1)
+	res := Bm64EchelonL(m, dRows, 2*k+1, dRows)
 	if res != dRows {
 		panic("cgt: matrix is not invertible")
 	}
-	bm64Mul(at, m[k:], k, dRows-k, at)
+	Bm64Mul(at, m[k:], k, dRows-k, at)
 	mask = (uint64(1) << uint(2*k)) - 1
 	for j := 0; j < k; j++ {
 		pA[j] = (pA[j] ^ at[j]) & mask
 		pA[k+j] = m[j] & mask
 	}
-	bm64ReverseBits(pA, 2*k, k, 0)
+	Bm64ReverseBits(pA, 2*k, k, 0)
 	return pA
 }
 
@@ -2024,7 +1794,7 @@ func qsToSymplectic(s *qs12) []uint64 {
 func qsPauliConjugateNoArg(s *qs12, v []uint64) []uint64 {
 	m := qsToSymplectic(s)
 	out := make([]uint64, len(v))
-	bm64Mul(v, m, len(v), len(m), out)
+	Bm64Mul(v, m, len(v), len(m), out)
 	return out
 }
 
@@ -2048,7 +1818,7 @@ func qsPauliConjugate(s *qs12, v []uint64) []uint64 {
 	}
 	m := q.data
 	aT := make([]uint64, 2*qsMaxCols/3+1)
-	bm64T(m, q.nrows, q.ncols, aT)
+	Bm64T(m, q.nrows, q.ncols, aT)
 	for j := 0; j < q.ncols; j++ {
 		aT[j] <<= uint(q.ncols)
 	}
@@ -2273,7 +2043,7 @@ func RowMonomialMatrix(data []uint64) *QState {
 	nqb := len(data) - 1
 	q := ColumnMonomialMatrix(data)
 	s := q.toQS12()
-	bm64RotBits(s.data, s.nrows, nqb, 2*nqb, 0)
+	Bm64RotBits(s.data, s.nrows, nqb, 2*nqb, 0)
 	s.reduced = false
 	q.store(s)
 	return q
@@ -2467,7 +2237,7 @@ func (q *QState) RotBits(rot, nrot, start int) *QState {
 	}
 	if nrot >= 2 {
 		s.reduced = false
-		bm64RotBits(s.data, s.nrows, rot, nrot, start)
+		Bm64RotBits(s.data, s.nrows, rot, nrot, start)
 	}
 	q.store(s)
 	return q
@@ -2482,7 +2252,7 @@ func (q *QState) XchBits(sh int, mask uint64) *QState {
 		if sh >= s.ncols || mask&((mask|(^uint64(0)<<uint(s.ncols)))>>uint(sh)) != 0 {
 			panic("cgt: qubit index out of range")
 		}
-		bm64XchBits(s.data, s.nrows, sh, mask)
+		Bm64XchBits(s.data, s.nrows, sh, mask)
 	}
 	q.store(s)
 	return q

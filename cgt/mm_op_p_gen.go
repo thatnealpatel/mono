@@ -256,7 +256,7 @@ func (s *genSwar) genFlipEntryInRow(v []uint64, off, i int) {
 func genScalprodDISign(d uint32, i int) int {
 	c := vectToCocode(1 << uint(i))
 	x := (d ^ (d >> 11)) & c
-	return int(parity12(x) & 1)
+	return int(Parity12(x) & 1)
 }
 
 // genOpDelta applies x_delta (the pure cocode
@@ -315,7 +315,7 @@ func genOpDelta(p int, src []uint64, delta int, dst []uint64) {
 	for i := 0; i < 759; i++ {
 		off := ts + i*s.wordsPer64
 		sign := uint32(mat24OctDecTable[i]) & uint32(delta)
-		neg := parity12(sign)&1 != 0
+		neg := Parity12(sign)&1 != 0
 		for w := 0; w < s.wordsPer64; w++ {
 			x := src[off+w]
 			if neg {
@@ -580,7 +580,7 @@ func genCocodeSign(delta, r uint32) uint32 {
 	// of delta & (Golay code word r). Tag A uses the
 	// same parity on its diagonal. All three tag bits
 	// share this parity in the delta-only operation.
-	s := parity12(delta & r & 0x7ff)
+	s := Parity12(delta & r & 0x7ff)
 	return s | (s << 1) | (s << 2)
 }
 

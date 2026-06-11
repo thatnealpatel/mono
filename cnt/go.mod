@@ -1,3 +1,3 @@
-module github.com/nealpatel/mono/cnt
+module patel.codes/cnt
 
-go 1.24
+go 1.26.3

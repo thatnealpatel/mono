@@ -102,25 +102,33 @@ func Solve(m []uint64, i, j int) (uint64, bool) {
 	return res, true
 }
 
-// Transpose writes the transpose of
-// the n×n bit matrix src into dst.
-func Transpose(dst, src []uint64, n int) {
-	for col := range n {
+// Transpose writes the transpose of the
+// i×j bit matrix src into dst. Bit
+// src[r,c] is (src[r]>>c)&1, so dst is
+// the j×i matrix with dst[c,r] = src[r,c].
+//
+// Transpose reads src[0:i] and writes
+// dst[0:j].
+func Transpose(dst, src []uint64, i, j int) {
+	for col := range j {
 		var v uint64
-		for row := range n {
+		for row := range i {
 			v |= ((src[row] >> uint(col)) & 1) << uint(row)
 		}
 		dst[col] = v
 	}
 }
 
-// MatMul multiplies n×n GF(2) bit
-// matrices a and b into dst.
+// MatMul multiplies GF(2) bit matrices
+// a and b into dst. a is len(a)×len(b);
+// b is len(b)×64. dst receives the
+// len(a)×64 product.
 //
-// MatMul panics if n > 64.
-func MatMul(dst, a, b []uint64, n int) {
+// MatMul panics if len(b) > 64.
+func MatMul(dst, a, b []uint64) {
+	n := len(b)
 	if n > 64 {
-		panic("matmul: n exceeds 64")
+		panic("matmul: len(b) exceeds 64")
 	}
 	for i := range a {
 		mi := a[i]
@@ -206,8 +214,7 @@ func rotBits(m []uint64, rot, nrot, n0 int) bool {
 // and returns rank(a) - dim(cap).
 //
 // a and b are modified in place.
-// dst is unused (signature compat).
-func CapH(dst, a, b []uint64, j0, n int) int {
+func CapH(a, b []uint64, j0, n int) int {
 	rows1 := EchelonH(a, j0, n)
 	rows2 := EchelonH(b, j0, n)
 	_ = rows2

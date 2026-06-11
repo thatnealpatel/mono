@@ -172,7 +172,7 @@ func TestTranspose(t *testing.T) {
 	}
 	for _, c := range cases {
 		dst := make([]uint64, c.n)
-		Transpose(dst, c.m, c.n)
+		Transpose(dst, c.m, c.n, c.n)
 		want := oracleF2Ints(t, f2Probe, fmt.Sprintf("tr(%s,%d)", f2List(c.m), c.n))
 		if !f2Eq(dst, want) {
 			t.Errorf("Transpose(%v,%d) = %v want %v", c.m, c.n, dst, want)
@@ -195,7 +195,7 @@ func TestMatMul(t *testing.T) {
 	}
 	for _, c := range cases {
 		dst := make([]uint64, len(c.a))
-		MatMul(dst, c.a, c.b, c.n)
+		MatMul(dst, c.a, c.b)
 		want := oracleF2Ints(t, f2Probe, fmt.Sprintf("mul(%s,%s)", f2List(c.a), f2List(c.b)))
 		if !f2Eq(dst, want) {
 			t.Errorf("MatMul(%v,%v,%d) = %v want %v", c.a, c.b, c.n, dst, want)
@@ -337,14 +337,14 @@ func TestMatMulAssociative(t *testing.T) {
 		c := randMatrix(rng, n, n)
 
 		ab := make([]uint64, n)
-		MatMul(ab, a, b, n)
+		MatMul(ab, a, b)
 		abc := make([]uint64, n)
-		MatMul(abc, ab, c, n)
+		MatMul(abc, ab, c)
 
 		bc := make([]uint64, n)
-		MatMul(bc, b, c, n)
+		MatMul(bc, b, c)
 		aBc := make([]uint64, n)
-		MatMul(aBc, a, bc, n)
+		MatMul(aBc, a, bc)
 
 		if !u64SliceEq(abc, aBc) {
 			t.Fatalf("MatMul not associative:\nA=%v\nB=%v\nC=%v\n(A*B)*C=%v\nA*(B*C)=%v", a, b, c, abc, aBc)
@@ -367,7 +367,7 @@ func TestMatInvRoundTrip(t *testing.T) {
 		}
 		invertible++
 		prod := make([]uint64, n)
-		MatMul(prod, orig, inv, n)
+		MatMul(prod, orig, inv)
 		if !u64SliceEq(prod, id) {
 			t.Fatalf("MatInv round-trip failed:\norig=%v\ninv=%v\norig*inv=%v\nwant identity %v", orig, inv, prod, id)
 		}
@@ -425,8 +425,7 @@ func TestCapH(t *testing.T) {
 	for _, c := range cases {
 		a := append([]uint64(nil), c.a...)
 		b := append([]uint64(nil), c.b...)
-		dst := make([]uint64, len(a))
-		l1 := CapH(dst, a, b, c.j0, c.n)
+		l1 := CapH(a, b, c.j0, c.n)
 		want := oracleF2Ints(t, f2Probe, fmt.Sprintf("cap(%s,%s,%d,%d)", f2List(c.a), f2List(c.b), c.j0, c.n))
 		wantL1 := want[0]
 		wantA := want[3 : 3+len(a)]

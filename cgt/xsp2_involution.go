@@ -126,7 +126,7 @@ func squareMat24Nonzero(m []uint64) uint64 {
 func leechTypeMod2(v uint64) uint64 {
 	x := v
 	x &= x >> 12
-	return uint64(parity12(uint32(x)))
+	return uint64(Parity12(uint32(x)))
 }
 
 // xsp2co1InvolutionInvariants computes invariant
@@ -152,7 +152,7 @@ func xsp2co1InvolutionInvariants(elem, invar []uint64) int32 {
 	if squareMat24Nonzero(pa) != 0 {
 		return -1
 	}
-	n := bm64EchelonH(pa, 24, 24, 24)
+	n := Bm64EchelonH(pa, 24, 24, 24)
 
 	if n == 0 {
 		invar[0] = uint64(xsp2co1XspecialVector(elem)) & 0xffffff
@@ -164,9 +164,9 @@ func xsp2co1InvolutionInvariants(elem, invar []uint64) int32 {
 	}
 
 	if n == 8 {
-		bm64RotBits(pa[8:], 16, 32, 64, 0)
+		Bm64RotBits(pa[8:], 16, 32, 64, 0)
 		xsp2co1XspecialConjugate(elem, pa[8:8+16], true)
-		bm64EchelonH(pa[8:], 16, 25, 1)
+		Bm64EchelonH(pa[8:], 16, 25, 1)
 		t1 := (pa[8] >> 24) & 1
 		for i := 0; i < 8; i++ {
 			invar[int(t1)+i] = pa[i]
@@ -197,11 +197,11 @@ func xsp2co1InvolutionInvariants(elem, invar []uint64) int32 {
 	}
 
 finalEchelonize:
-	bm64XchBits(invar, n, 12, 0x800)
-	bm64RotBits(invar, n, 1, 12, 0)
-	bm64EchelonH(invar, n, 27, 27)
-	bm64RotBits(invar, n, 11, 12, 0)
-	bm64XchBits(invar, n, 12, 0x800)
+	Bm64XchBits(invar, n, 12, 0x800)
+	Bm64RotBits(invar, n, 1, 12, 0)
+	Bm64EchelonH(invar, n, 27, 27)
+	Bm64RotBits(invar, n, 11, 12, 0)
+	Bm64XchBits(invar, n, 12, 0x800)
 	invar[0] &= ((invar[0] & 0x4000000) << 2) - 1
 	return int32(n)
 }
@@ -243,17 +243,30 @@ func xsp2co1InvolutionOrthogonal(invar []uint64, col uint32) int32 {
 	for i := 0; i < n; i++ {
 		M[i] = pA[i]
 	}
-	bm64RotBits(M[:], n, 32, 64, 0)
-	bm64T(M[:], n, 24, T[:])
-	bm64RotBits(M[:], n, 32, 64, 0)
-	bm64RotBits(M[:], n, 12, 24, 0)
-	bm64Mul(M[:], T[:], n, 24, M[:])
-	if !bm64Inv(M[:], n) {
+	Bm64RotBits(M[:], n, 32, 64, 0)
+	Bm64T(M[:], n, 24, T[:])
+	Bm64RotBits(M[:], n, 32, 64, 0)
+	Bm64RotBits(M[:], n, 12, 24, 0)
+	Bm64Mul(M[:], T[:], n, 24, M[:])
+	if !Bm64Inv(M[:], n) {
 		return -1
 	}
 	vv := []uint64{v}
-	bm64Mul(vv, M[:], 1, n, vv)
-	bm64Mul(vv, pA, 1, 24, vv)
+	Bm64Mul(vv, M[:], 1, n, vv)
+	// Multiply by pA reading exactly n rows. The
+	// column count is capped at n (not 24) because
+	// the preceding Bm64Mul sets v = c·J where each
+	// row of J = Bm64Inv(M, n) is an inverted n×n
+	// matrix row with only bits 0..n-1 set; hence
+	// bits >= n of v are zero and rows pA[n..23] are
+	// always masked out of the product. pA is invar
+	// (or invar[1:]) with at most 12 rows, so reading
+	// 24 rows would be out of bounds. The C original
+	// (involutions.ske:493, xsp2co1_involution_orthogonal)
+	// reads 24 rows from a uint64_t invar[12] stack
+	// buffer — genuine UB, harmless for this same
+	// masking reason. See UPSTREAM.md.
+	Bm64Mul(vv, pA, 1, n, vv)
 	return int32(vv[0] & 0xffffff)
 }
 
@@ -559,6 +572,13 @@ func xsp2co1ElemConjugateInvolution(elem []uint64, a []uint32) int32 {
 *** Public involution methods
 *************************************************************************/
 
+// errNotInvolution is the panic value raised by
+// ConjugateInvolution when its receiver is not an
+// involution. conjugateInvolutionGx0 (misc.go)
+// recovers exactly this value to fail a trial
+// closed; any other panic is a genuine bug.
+const errNotInvolution = "cgt: element is not an involution"
+
 // InGx0 reports whether g lies in the subgroup
 // G_{x0}. Elements of this type are always in
 // G_{x0} by construction.
@@ -568,23 +588,34 @@ func (g *Xsp2Co1) InGx0() bool {
 
 // ConjugateInvolution returns (I, h) where h is
 // an element conjugating the involution g to the
-// standard representative z (I = 0 for the
-// identity, 1 for a 2A and 2 for a 2B
-// involution). ConjugateInvolution panics if g is
-// not an involution or the conjugating element is
-// not in G_{x0}.
-func (g *Xsp2Co1) ConjugateInvolution() (int, *Xsp2Co1) {
+// standard representative z, i.e. h^{-1} g h = z
+// (I = 0 for the identity, 1 for a 2A and 2 for a
+// 2B involution).
+//
+// The conjugating word emitted by
+// xsp2co1ElemConjGx0ToQx0 is a word of monster
+// generators: it carries a triality atom t^e
+// whenever the N_0 form needs t^e to land in
+// Q_{x0}, which is the case for essentially every
+// 2B input. h is therefore returned as a general
+// monster element *MM (matching Python's
+// Xsp2_Co1.conjugate_involution, which returns
+// mmgroup('a', a)); it is not in general an element
+// of G_{x0}, so it cannot be re-wrapped as
+// *Xsp2Co1.
+//
+// ConjugateInvolution panics if g is not an
+// involution.
+func (g *Xsp2Co1) ConjugateInvolution() (int, *MM) {
 	var a [15]uint32
 	res := xsp2co1ElemConjugateInvolution(g.data[:], a[:])
 	if res < 0 {
-		panic("cgt: element is not an involution")
+		panic(errNotInvolution)
 	}
 	length := int(res & 0xff)
-	out := &Xsp2Co1{}
-	if err := xsp2co1SetElemWord(out.data[:], a[:length]); err != nil {
-		panic(err.Error())
-	}
-	return int(res >> 8), out
+	out := make([]uint32, length)
+	copy(out, a[:length])
+	return int(res >> 8), &MM{data: out}
 }
 
 /*************************************************************************

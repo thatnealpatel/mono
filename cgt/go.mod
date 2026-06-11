@@ -1,7 +1,7 @@
-module github.com/nealpatel/mono/cgt
+module patel.codes/cgt
 
-go 1.24
+go 1.26.3
 
-require github.com/nealpatel/mono/cnt v0.0.0
+require patel.codes/cnt v0.0.0
 
-replace github.com/nealpatel/mono/cnt => ../cnt
+replace patel.codes/cnt => ../cnt

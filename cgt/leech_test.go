@@ -64,7 +64,7 @@ func xspPy(atoms []XspAtom) string {
 func TestXLeech2Ord(t *testing.T) {
 	t.Parallel()
 	for _, v := range []uint32{0, 0x800000, 0x1000, 0x800001, 0x1fffff, 0x3ffffff} {
-		got := NewXLeech2(v).Ord()
+		got := NewXLeech2FromInt(v).Ord()
 		want := oracleUint(t, fmt.Sprintf("mmgroup.XLeech2(%d).ord", v))
 		if uint64(got) != want {
 			t.Errorf("XLeech2(%#x).Ord()=%#x want %#x", v, got, want)
@@ -75,7 +75,7 @@ func TestXLeech2Ord(t *testing.T) {
 func TestXLeech2Type(t *testing.T) {
 	t.Parallel()
 	for _, v := range []uint32{0, 0x800000, 0x800800, 0x1000, 0x200} {
-		x := NewXLeech2(v)
+		x := NewXLeech2FromInt(v)
 		gotT := x.Type()
 		wantT := oracleUint(t, fmt.Sprintf("mmgroup.generators.gen_leech2_type(%d)", v))
 		if uint64(gotT) != wantT {
@@ -104,7 +104,7 @@ func bytesEq(a []byte, b []int64) bool {
 func TestXLeech2Bitvector(t *testing.T) {
 	t.Parallel()
 	for _, v := range []uint32{1, 0x800000, 0x123456, 0x1000, 0xabcdef, 0x1800001} {
-		got := NewXLeech2(v).Bitvector()
+		got := NewXLeech2FromInt(v).Bitvector()
 		want := oracleInts(t, fmt.Sprintf("[int(x) for x in mmgroup.XLeech2(%d).as_Leech2_bitvector()]", v))
 		if !bytesEq(got, want) {
 			t.Errorf("XLeech2(%#x).Bitvector()=%v want %v", v, got, want)

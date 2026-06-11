@@ -102,7 +102,7 @@ func evalA15(v []uint64, v2 uint32) int {
 		lsb := lsbit24(vect)
 		coc ^= mat24RecipBasis[lsb]
 		syn := uint32(mat24SyndromeTable[coc&0x7ff])
-		cocodev := synFromTable(syn) ^ (1 << lsb)
+		cocodev := SynFromTable(syn) ^ (1 << lsb)
 		res = 4 * uint64(evalA15Aux(v, vect, cocodev, 24))
 	default:
 		return -1

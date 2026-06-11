@@ -123,7 +123,7 @@ func genLeech3To2(v3 uint64) uint64 {
 	w = Bw24(h)
 	switch w {
 	case 22:
-		syn = cocodeSyndrome(vintern(uint32(v3)), 0)
+		syn = CocodeSyndromeRaw(Vintern(uint32(v3)), 0)
 		gcodev = (uint32(v3) ^ syn) & 0xffffff
 		t = h & syn
 		cocodev = t | (0xffffff &^ h)
@@ -138,7 +138,7 @@ func genLeech3To2(v3 uint64) uint64 {
 		} else {
 			x1 = uint32(v3>>24) & 0xffffff
 		}
-		syn = cocodeSyndrome(vintern(x1), 0)
+		syn = CocodeSyndromeRaw(Vintern(x1), 0)
 		cocodev = ^h & 0xffffff
 		if syn&h != 0 {
 			syn = cocodev
@@ -155,7 +155,7 @@ func genLeech3To2(v3 uint64) uint64 {
 		cocodev = uint32(v3) & 0xfffffff
 		vtype = 4
 	case 13, 10:
-		syn = cocodeSyndrome(vintern(h&0xffffff), 24)
+		syn = CocodeSyndromeRaw(Vintern(h&0xffffff), 24)
 		if syn&0xff000000 != 0 {
 			return vtype
 		}
@@ -171,7 +171,7 @@ func genLeech3To2(v3 uint64) uint64 {
 		omega = (w1 >> 1) + parity24(syn&uint32(v3)) + w
 		vtype = 4
 	case 7:
-		syn = cocodeSyndrome(vintern(h), 0)
+		syn = CocodeSyndromeRaw(Vintern(h), 0)
 		if syn&(syn-1) != 0 {
 			return vtype
 		}
@@ -191,14 +191,14 @@ func genLeech3To2(v3 uint64) uint64 {
 		omega = 1
 		vtype = 4
 	case 24:
-		cocodev = cocodeSyndrome(vintern(uint32(v3)), 0)
+		cocodev = CocodeSyndromeRaw(Vintern(uint32(v3)), 0)
 		gcodev = (uint32(v3) ^ cocodev) & 0xffffff
 		if cocodev == 0 || cocodev&(cocodev-1) != 0 {
 			return vtype
 		}
 		vtype = 3
 	case 21:
-		syn = cocodeSyndrome(vintern(uint32(v3)), 0)
+		syn = CocodeSyndromeRaw(Vintern(uint32(v3)), 0)
 		gcodev = (uint32(v3) ^ syn) & 0xffffff
 		cocodev = 0xffffff &^ h
 		if syn&cocodev != syn {
@@ -207,7 +207,7 @@ func genLeech3To2(v3 uint64) uint64 {
 		vtype = 3
 	case 12:
 		gcodev = h
-		syn = cocodeSyndrome(vintern(h), 0)
+		syn = CocodeSyndromeRaw(Vintern(h), 0)
 		_ = syn
 		cocodev = uint32(v3) & 0xffffff
 		w1 = Bw24(cocodev)
@@ -217,7 +217,7 @@ func genLeech3To2(v3 uint64) uint64 {
 		omega = (w1 >> 1) + 1
 		vtype = 3
 	case 9:
-		syn = cocodeSyndrome(vintern(h), 0)
+		syn = CocodeSyndromeRaw(Vintern(h), 0)
 		if h&syn != syn {
 			return vtype
 		}
@@ -256,16 +256,17 @@ func genLeech3To2(v3 uint64) uint64 {
 	default:
 		return vtype
 	}
-	gcodev = vectToGcodeRaw(gcodev)
-	if gcodev&0xfffff000 != 0 {
+	gc, ok := vectToGcodeRaw(gcodev)
+	if !ok || gc&0xfffff000 != 0 {
 		return ^uint64(0)
 	}
+	gcodev = gc
 	cocodev = VectToCocode(cocodev)
 	cocodev ^= uint32(mat24ThetaTable[gcodev&0x7ff]) & 0xfff
 	gcodev ^= (omega & 1) << 11
 	res = (gcodev << 12) ^ cocodev
 	if w >= 19 {
-		w1 = (uint32(vtype) ^ parity12(res&(res>>12))) & 1
+		w1 = (uint32(vtype) ^ Parity12(res&(res>>12))) & 1
 		res ^= (0 - w1) & 0x800000
 	}
 	return uint64(res) | (vtype << 24)
@@ -457,15 +458,16 @@ convert:
 	total := pstart + rev
 
 	// TODO(nealpatel): re-evaluate after porting;
-	// mmAuxIndexInternToLeech2 returns 0 on failure.
-	// Inputs come from emit() which only enqueues
-	// valid B/C lower-triangle (col<row, both <24)
-	// and contiguous T/X internal indices, so the
-	// conversion never fails. C origin find_short_all
-	// (mm15_op_eval_X.c:168) also masks in the result
-	// unconditionally with no zero check.
+	// mmAuxIndexInternToLeech2 reports ok=false on
+	// failure. Inputs come from emit() which only
+	// enqueues valid B/C lower-triangle (col<row,
+	// both <24) and contiguous T/X internal indices,
+	// so the conversion never fails. C origin
+	// find_short_all (mm15_op_eval_X.c:168) also masks
+	// in the result unconditionally with no zero
+	// check, so the ok flag is intentionally discarded.
 	for j := 0; j < total; j++ {
-		leech2 := mmAuxIndexInternToLeech2(out[j] & 0xffffff)
+		leech2, _ := mmAuxIndexInternToLeech2(out[j] & 0xffffff)
 		out[j] = (out[j] & 0xff000000) | (leech2 & 0xffffff)
 	}
 	return total
@@ -1142,6 +1144,215 @@ func mmReduceVectorV1(v []uint64, r []uint32, work []uint64) int {
 	}
 	r[0] = ovMarkError
 	r[1] = uint32(-res)
+	return res
+}
+
+//////////////////////////////////////////////////
+// Part 11b: staged reduction entry points
+// (mm_reduce_vector_shortcut, *_incomplete,
+// *_shorten) and the gt_word shortener wrapper.
+//////////////////////////////////////////////////
+
+// gtWordShorten reduces the monster word g and stores
+// the reduced word in out (capacity n1max), returning
+// its length. mode selects the reduce mode as in
+// newGtWord. It returns a negative value on failure,
+// e.g. if the reduced word would exceed n1max. C
+// function gt_word_shorten.
+func gtWordShorten(g []uint32, out []uint32, n1max int, mode int) int {
+	gw := newGtWord(mode)
+	res := gw.appendWord(g)
+	if res < 0 {
+		return gtShortenErr(2, res)
+	}
+	res = gw.reduce()
+	if res < 0 {
+		return gtShortenErr(3, res)
+	}
+	n1 := gtWordLength(gw)
+	if n1 > n1max {
+		return gtShortenErr(4, -1)
+	}
+	res = gw.gtWordStore(out, n1)
+	if res >= 0 {
+		return res
+	}
+	return gtShortenErr(5, res)
+}
+
+// gtShortenErr encodes the (status, res) failure pair
+// of gtWordShorten the same way C gt_word_shorten does:
+// ((-status << 24) + res) | 0x80000000, returned as a
+// signed value.
+func gtShortenErr(status, res int) int {
+	return int(int32(uint32((-status<<24)+res) | 0x80000000))
+}
+
+// gtWordLength returns the length of the word held in
+// gw, counting each subword's reduced G_x0 word plus a
+// tau atom when tExp is nonzero. C function
+// gt_word_length.
+func gtWordLength(gw *gtWord) int {
+	length := 0
+	for cur := gw.node[gw.end].next; !gw.node[cur].eof; cur = gw.node[cur].next {
+		length += len(gw.node[cur].data)
+		if gw.node[cur].tExp != 0 {
+			length++
+		}
+	}
+	return length
+}
+
+// mmReduceVectorShortcut simulates the staged steps of
+// the reduction of a monster element through the marker
+// states. stage is 1 (after v^+) or 2 (after v^-), mode
+// has bit 0 for strict reduction, and axis is the 2A
+// axis (Leech mod 2). It writes a marked, checksummed
+// word into r and returns its length, or a negative
+// value on error. C function mm_reduce_vector_shortcut.
+func mmReduceVectorShortcut(stage, mode, axis uint32, r []uint32) int {
+	res := reduceVectorShortcut(stage, mode, axis, r)
+	if res > 0 && res <= 20 {
+		r[res] = ovChecksum(r[:res])
+		return res
+	}
+	if res >= 0 {
+		res = -10000
+	}
+	r[0] = ovMarkError
+	r[1] = uint32(-res)
+	return res
+}
+
+// reduceVectorShortcut is the workhorse of
+// mmReduceVectorShortcut. C function
+// reduce_vector_shortcut.
+func reduceVectorShortcut(stage, mode, axis uint32, r []uint32) int {
+	lenR := 0
+	r[lenR] = 0
+	lenR++
+	axis &= 0x1ffffff
+	if stage < 1 || stage > 2 {
+		return -10001
+	}
+	if mode&1 != 0 && axis != vPlus {
+		lenR1 := genLeech2ReduceType2(axis, r[lenR:])
+		if lenR1 < 0 {
+			return -10002
+		}
+		lenR += lenR1
+		q := [1]uint32{axis}
+		if genLeech2OpWordMany(q[:], r[1:lenR]) != lenR-1 {
+			return -0x11000
+		}
+		axis = q[0]
+		if axis&0xffffff == vPlus {
+			return -10002
+		}
+		if axis&0x1ffffff != 0 {
+			r[lenR] = 0xB0000200
+			lenR++
+		}
+		axis = vPlus
+	}
+	r[lenR] = 0x84000000 + axis
+	lenR++
+	r[0] = ovMarkVPDone + uint32(lenR)
+	if stage == 2 {
+		r[lenR] = 0x86000000 + axis
+		lenR++
+		r[0] = ovMarkVMDone + uint32(lenR)
+	}
+	return lenR
+}
+
+// mmReduceVectorIncomplete flushes the staged buffer r
+// produced by mmReduceVectorVP and, optionally,
+// mmReduceVectorVm without running the final v_1 step.
+// It inverts the accumulated word so r equals the
+// reducing element and returns its length, or a
+// negative value on error. This is valid only when the
+// remaining v_1 step would contribute nothing. C
+// function mm_reduce_vector_incomplete.
+func mmReduceVectorIncomplete(r []uint32) int {
+	lenStart := int(r[0] &^ ovMarkMask)
+	status := r[0] & ovMarkMask
+	if status == ovMarkVPDone {
+		if lenStart < 2 || lenStart > 40 ||
+			r[lenStart-1]&^0x1ffffff != 0x84000000 ||
+			ovChecksum(r[:lenStart]) != r[lenStart] {
+			return -0x20000
+		}
+		r[0] = 0
+		invertWord(r[:lenStart])
+		return lenStart
+	}
+	if status == ovMarkVMDone {
+		if lenStart < 2 || lenStart > 80 ||
+			r[lenStart-1]&^0x1ffffff != 0x86000000 ||
+			ovChecksum(r[:lenStart]) != r[lenStart] {
+			return -0x20000
+		}
+		r[0] = 0
+		invertWord(r[:lenStart])
+		return lenStart
+	}
+	res := -int(r[1])
+	if r[0] == ovMarkError && res < 0 {
+		return res
+	}
+	return -0x20000
+}
+
+// mmReduceVectorShorten is the gt_word-based fast path
+// for the final reduction step. It applies when every
+// prefix of the word a maps v^+ and v^- to 2A
+// involutions in Q_x0 (e.g. when a lies in N_x . G_x0),
+// in which case it is far faster than mmReduceVectorV1.
+// a is the original monster word; r holds the staged
+// buffer after mmReduceVectorVm. It returns the final
+// word length, or a negative value if the fast path does
+// not apply (the caller must then fall back to
+// mmReduceVectorV1). C function mm_reduce_vector_shorten.
+func mmReduceVectorShorten(a []uint32, r []uint32) int {
+	lenStart := int(r[0] &^ ovMarkMask)
+	if r[0]&ovMarkMask != ovMarkVMDone {
+		res := -int(r[1])
+		if r[0] != ovMarkError || res >= 0 {
+			return -0x30000
+		}
+		return res
+	}
+	if lenStart < 2 || lenStart > 80 ||
+		r[lenStart-1]&^0x1ffffff != 0x86000000 ||
+		ovChecksum(r[:lenStart]) != r[lenStart] {
+		return -0x20000
+	}
+
+	gw := newGtWord(1)
+	if res := gw.appendWord(a); res < 0 {
+		return res
+	}
+	if res := gw.appendWord(r[:lenStart]); res < 0 {
+		return res
+	}
+	res := gw.reduce()
+	if res < 0 {
+		return res
+	}
+	if res&2 == 0 {
+		return -0x7000000 - (res & 0xffffff)
+	}
+	var outBuf [12]uint32
+	res = gw.gtWordStore(outBuf[:], len(outBuf))
+	if res < 0 {
+		return res
+	}
+	invertWord(outBuf[:res])
+	copy(r[lenStart:lenStart+res], outBuf[:res])
+	res += lenStart
+	r[0] = 0
+	invertWord(r[:res])
 	return res
 }
 

@@ -285,14 +285,14 @@ var dictLineMOG = map[int]int{
 func makeP(x PLoop, delta Cocode) XLeech2 {
 	d := uint32(x.Ord())
 	v := ((d << 12) ^ PloopTheta(d)) ^ uint32(delta.Ord())
-	return NewXLeech2(v)
+	return xleech2FromInt(v)
 }
 
 // computeP0 returns the image of the pair P_0 P_x in
 // Q_{x0} (port of compute_P0).
 func computeP0(x int) XLeech2 {
 	if x == 0 {
-		return NewXLeech2(0)
+		return xleech2FromInt(0)
 	}
 	if x == 1 || x == 3 || x == 9 {
 		c := dictPointMOGColumn[x]

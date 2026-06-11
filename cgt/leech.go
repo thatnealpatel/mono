@@ -1,6 +1,10 @@
 package cgt
 
-import "math/bits"
+import (
+	"fmt"
+	"math/bits"
+	"math/rand/v2"
+)
 
 // XLeech2 is an element of the group Q_{x0},
 // equivalently a vector of the Leech lattice
@@ -9,11 +13,224 @@ type XLeech2 struct {
 	ord uint32
 }
 
-// NewXLeech2 creates an XLeech2 from a value in
-// Leech lattice encoding. Only bits 0..24 are
-// retained.
-func NewXLeech2(value uint32) XLeech2 {
-	return XLeech2{ord: value & 0x1ffffff}
+// NewXLeech2 returns the neutral (zero/identity)
+// element of Q_{x0}. It mirrors the Python
+// XLeech2() with no arguments.
+func NewXLeech2() *XLeech2 {
+	return &XLeech2{ord: 0}
+}
+
+// NewXLeech2FromInt creates an XLeech2 from a value
+// in Leech lattice encoding. Only bits 0..24 are
+// retained. It mirrors XLeech2(int).
+func NewXLeech2FromInt(v uint32) *XLeech2 {
+	x := xleech2FromInt(v)
+	return &x
+}
+
+// xleech2FromInt builds an XLeech2 value (not a
+// pointer) from a Leech-lattice-encoded integer,
+// retaining only bits 0..24. It is the internal
+// value-returning workhorse behind the public
+// constructors.
+func xleech2FromInt(v uint32) XLeech2 {
+	return XLeech2{ord: v & 0x1ffffff}
+}
+
+// NewXLeech2Copy returns a copy of x. It mirrors
+// the Python XLeech2(XLeech2) deep-copy path.
+//
+// NewXLeech2Copy panics if x is nil.
+func NewXLeech2Copy(x *XLeech2) *XLeech2 {
+	if x == nil {
+		panic("NewXLeech2Copy: nil XLeech2")
+	}
+	c := *x
+	return &c
+}
+
+// NewXLeech2FromPLoop returns the element
+// x_d * x_delta of Q_{x0}, where d is the Parker
+// loop element and c the Golay cocode element. c
+// may be nil, denoting the trivial cocode element.
+// It mirrors XLeech2(PLoop, Cocode).
+//
+// NewXLeech2FromPLoop panics if d is nil.
+func NewXLeech2FromPLoop(d *PLoop, c *Cocode) *XLeech2 {
+	if d == nil {
+		panic("NewXLeech2FromPLoop: nil PLoop")
+	}
+	pv := uint32(d.Ord()) & 0x1fff
+	val := (pv << 12) ^ PloopTheta(pv)
+	if c != nil {
+		val ^= uint32(c.Ord()) & 0xfff
+	}
+	x := xleech2FromInt(val)
+	return &x
+}
+
+// NewXLeech2Random returns a uniformly random
+// element of Q_{x0}, in Leech lattice encoding. It
+// mirrors XLeech2('r').
+func NewXLeech2Random() *XLeech2 {
+	x := xleech2FromInt(uint32(rand.IntN(0x2000000)))
+	return &x
+}
+
+// NewXLeech2RandomType returns a random element of
+// Q_{x0} whose Leech-lattice-mod-2 image has the
+// given type. It mirrors XLeech2('r', vtype).
+//
+// NewXLeech2RandomType panics if vtype is not 0, 2,
+// 3 or 4, or if no element of type 3 or 4 is found
+// after 1000 rejection samples.
+func NewXLeech2RandomType(vtype int) *XLeech2 {
+	x := xleech2FromInt(RandXleech2Type(vtype))
+	return &x
+}
+
+// RandXleech2Type returns the Leech-lattice encoding
+// of a random element of Q_{x0} whose image in the
+// Leech lattice mod 2 has the given type. It mirrors
+// rand_xleech2_type.
+//
+// RandXleech2Type panics if vtype is not 0, 2, 3 or
+// 4, or if no element of type 3 or 4 is found after
+// 1000 rejection samples.
+func RandXleech2Type(vtype int) uint32 {
+	switch vtype {
+	case 0:
+		return 0
+	case 2:
+		ve := 300 + rand.IntN(98280) // randint(300, 98579)
+		vs := IndexExternToSparse(ve)
+		sign := uint32(rand.IntN(2))
+		return IndexSparseToLeech2(vs) ^ (sign << 24)
+	case 3, 4:
+		for i := 0; i < 1000; i++ {
+			v := uint32(rand.IntN(0x2000000)) // randint(0, 0x1ffffff)
+			if int(Leech2Type(v)) == vtype {
+				return v
+			}
+		}
+		panic("RandXleech2Type: no random type-3/4 element found")
+	default:
+		panic(fmt.Sprintf("RandXleech2Type: illegal type %d", vtype))
+	}
+}
+
+// NewXLeech2FromShort returns the index-th positive
+// short element of Q_{x0}. It mirrors
+// XLeech2('short', index).
+//
+// NewXLeech2FromShort panics if index is not in the
+// range 0 <= index < 98280.
+func NewXLeech2FromShort(index int) *XLeech2 {
+	if index < 0 || index >= 98280 {
+		panic(fmt.Sprintf("NewXLeech2FromShort: index %d out of range [0, 98280)", index))
+	}
+	vs := IndexExternToSparse(index + 300)
+	x := xleech2FromInt(IndexSparseToLeech2(vs))
+	return &x
+}
+
+// NewXLeech2FromMM extracts the Q_{x0} component of
+// the monster element g. It mirrors XLeech2(MM).
+//
+// NewXLeech2FromMM panics if g is nil, or if g does
+// not lie in the subgroup Q_{x0} of the monster.
+func NewXLeech2FromMM(g *MM) *XLeech2 {
+	if g == nil {
+		panic("NewXLeech2FromMM: nil MM")
+	}
+	x := xleech2FromInt(MMToQX0(g))
+	return &x
+}
+
+// MMToQX0 returns the Leech-lattice encoding of the
+// monster element g, which must lie in the subgroup
+// Q_{x0}. It mirrors MM_to_Q_x0: it checks G_x0
+// membership, reduces g, then folds the x (tag 3)
+// and d (tag 1) atoms of the reduced word into a
+// Leech-lattice value.
+//
+// MMToQX0 panics if g is not in the subgroup Q_{x0}
+// of the monster.
+func MMToQX0(g *MM) uint32 {
+	// Operate on a copy so the caller's element is
+	// neither mutated nor reduced as a side effect.
+	h := &MM{data: append([]uint32(nil), g.data...)}
+	if h.checkInGx0() == nil {
+		panic("MMToQX0: monster element is not in subgroup Q_x0")
+	}
+	h.Reduce()
+	var res uint32
+	for _, atom := range h.data {
+		tag := (atom >> 28) & 0x0f
+		switch {
+		case res == 0 && tag == 3:
+			res = ((atom & 0x1fff) << 12) ^ PloopTheta(atom)
+		case tag == 1:
+			res ^= atom & 0xfff
+		case tag != 0:
+			panic("MMToQX0: monster element is not in subgroup Q_x0")
+		}
+	}
+	return res
+}
+
+// NewXLeech2FromBasisVector returns the Q_{x0}
+// element corresponding to a (possibly negated)
+// basis vector of the representation rho, named by
+// a single tag letter (one of B, C, T, X) and the
+// indices i0, i1. It mirrors the BCTXE letter path
+// of the XLeech2 constructor.
+//
+// NewXLeech2FromBasisVector panics if the tag is not
+// a recognized short-vector tag or if the resulting
+// basis vector does not correspond to an element of
+// Q_{x0}.
+func NewXLeech2FromBasisVector(tag byte, i0, i1 int) *XLeech2 {
+	t, ok := parseTagLetter(tag)
+	if !ok {
+		panic(fmt.Sprintf("NewXLeech2FromBasisVector: illegal tag %q", string(tag)))
+	}
+	a := tupleToSparse(0xff, Tuple{Factor: 1, Tag: t, I0: i0, I1: i1})
+	if len(a) != 1 {
+		panic(fmt.Sprintf("NewXLeech2FromBasisVector: tag %q does not yield a Q_x0 element", string(tag)))
+	}
+	a0 := a[0]
+	d := IndexSparseToLeech2(a0)
+	switch a0 & 0xff {
+	case 0xfe: // scalar -1: negate
+		d ^= 0x1000000
+	case 1: // scalar +1: keep
+	default:
+		d = 0
+	}
+	if d == 0 {
+		panic(fmt.Sprintf("NewXLeech2FromBasisVector: tag %q does not yield a Q_x0 element", string(tag)))
+	}
+	x := xleech2FromInt(d)
+	return &x
+}
+
+// NewXLeech2FromName returns a named Q_{x0} element.
+// Recognized names include "v+", "v-", "Omega",
+// "-Omega", "+", "-", "omega" and "-omega", as well
+// as any value string accepted by the q-atom parser.
+// It mirrors the std_q_element("q", name) path of
+// the XLeech2 constructor.
+//
+// NewXLeech2FromName panics if name cannot be parsed
+// as a Q_{x0} element.
+func NewXLeech2FromName(name string) *XLeech2 {
+	v, err := qElement(name)
+	if err != nil {
+		panic(fmt.Sprintf("NewXLeech2FromName: cannot convert %q to XLeech2: %v", name, err))
+	}
+	x := xleech2FromInt(v)
+	return &x
 }
 
 // Ord returns the number of the element, a value
@@ -52,7 +269,7 @@ func (x XLeech2) Bitvector() []byte {
 // are in Leech lattice encoding.
 func Leech2Scalprod(a, b uint32) uint32 {
 	scalar := (((a >> 12) & b) ^ ((b >> 12) & a)) & 0xfff
-	return parity12(scalar)
+	return Parity12(scalar)
 }
 
 // short3Reduce reduces every coordinate of a
@@ -75,12 +292,12 @@ func Leech2To3Short(x uint32) uint64 {
 	w = (((theta >> 12) & 7) ^ w) + (w & 7)
 
 	if v2&0x800 != 0 { // case odd cocode
-		cocodev := uint64(cocodeSyndrome(uint32(v2^theta), 0))
+		cocodev := uint64(CocodeSyndromeRaw(uint32(v2^theta), 0))
 		if cocodev&(cocodev-1) != 0 {
 			return 0
 		}
 		scalar := (v2 >> 12) & v2
-		scalar = uint64(parity12(uint32(scalar)))
+		scalar = uint64(Parity12(uint32(scalar)))
 		if scalar&1 != 0 {
 			return 0
 		}
@@ -94,7 +311,7 @@ func Leech2To3Short(x uint32) uint64 {
 		gcodev ^= 0xffffff
 		fallthrough
 	case 2:
-		cocodev := uint64(cocodeSyndrome(uint32(v2), lsbit24(uint32(gcodev))))
+		cocodev := uint64(CocodeSyndromeRaw(uint32(v2), lsbit24(uint32(gcodev))))
 		cW := uint64(Bw24(uint32(cocodev)))
 		if (cocodev&gcodev) != cocodev || (cW^2^w)&3 != 0 {
 			return 0
@@ -149,8 +366,8 @@ func Leech3To2Short(x uint64) uint32 {
 	default:
 		return 0
 	}
-	gc := vectToGcodeRaw(gcodev)
-	if gc&0xfffff000 != 0 {
+	gc, ok := vectToGcodeRaw(gcodev)
+	if !ok || gc&0xfffff000 != 0 {
 		return 0
 	}
 	theta := uint32(mat24ThetaTable[gc&0x7ff]) & 0xfff
@@ -159,29 +376,29 @@ func Leech3To2Short(x uint64) uint32 {
 }
 
 // vectToGcodeRaw returns the Golay code number of
-// vector v, or 0xffffffff if v is not a code word
-// (the non-panicking analogue of VectToGcode,
-// matching C mat24_vect_to_gcode).
-func vectToGcodeRaw(v uint32) uint32 {
-	cn := vintern(v)
+// vector v and true, or (0, false) if v is not a
+// code word (the non-panicking analogue of
+// VectToGcode, matching C mat24_vect_to_gcode).
+func vectToGcodeRaw(v uint32) (uint32, bool) {
+	cn := Vintern(v)
 	if cn&0xfff != 0 {
-		return 0xffffffff
+		return 0, false
 	}
-	return cn >> 12
+	return cn >> 12, true
 }
 
 // bm64RestoreCapH copies the used rows of ma back
 // into m, placing rows marked in rowsCap last.
-// Returns the number of cap rows, or -1 on
-// failure.
-func bm64RestoreCapH(ma, m []uint64, rowsUsed, rowsCap uint64, maxRows int) int {
+// Returns (number of cap rows, true), or
+// (0, false) on failure.
+func bm64RestoreCapH(ma, m []uint64, rowsUsed, rowsCap uint64, maxRows int) (int, bool) {
 	iMax := bits.Len64(rowsUsed)
 	nUsed := bits.OnesCount64(rowsUsed)
 	rowsCap &= rowsUsed
 	nCap := bits.OnesCount64(rowsCap)
 	rowH := nUsed - nCap
 	if maxRows < nUsed {
-		return -1
+		return 0, false
 	}
 	row := 0
 	for i := 0; i < iMax; i++ {
@@ -195,16 +412,16 @@ func bm64RestoreCapH(ma, m []uint64, rowsUsed, rowsCap uint64, maxRows int) int 
 			}
 		}
 	}
-	return nCap
+	return nCap, true
 }
 
 // bm64CapH computes the intersection of the row
 // spaces of the echelonized matrices m1 (i1 rows)
 // and m2 (i2 rows), over columns j0-1,...,j0-n.
 // It rearranges m1 and m2 so the last nCap rows
-// hold the intersection, and returns nCap (or a
-// negative value on failure).
-func bm64CapH(m1, m2 []uint64, i1, i2, j0, n int) int {
+// hold the intersection, and returns (nCap, true)
+// (or (0, false) on failure).
+func bm64CapH(m1, m2 []uint64, i1, i2, j0, n int) (int, bool) {
 	var m1a, m2a [64]uint64
 	var rowsUsed1, rowsUsed2, rowsEqu uint64
 	var v1, v2 uint64
@@ -216,7 +433,7 @@ func bm64CapH(m1, m2 []uint64, i1, i2, j0, n int) int {
 		n = j0
 	}
 	if n == 0 {
-		return 0
+		return 0, true
 	}
 
 	mask := (((uint64(1) + 1) << uint(n-1)) - 1) << uint(j0-n)
@@ -227,7 +444,7 @@ func bm64CapH(m1, m2 []uint64, i1, i2, j0, n int) int {
 		i2--
 	}
 	if i1 == 0 || i2 == 0 {
-		return 0
+		return 0, true
 	}
 
 	rowPos1, rowPos2, rowPos := 0, 0, 0
@@ -288,9 +505,8 @@ func bm64CapH(m1, m2 []uint64, i1, i2, j0, n int) int {
 		}
 	}
 
-	res := bm64RestoreCapH(m1a[:], m1, rowsUsed1, rowsEqu, i1)
-	if res < 0 {
-		return res
+	if _, ok := bm64RestoreCapH(m1a[:], m1, rowsUsed1, rowsEqu, i1); !ok {
+		return 0, false
 	}
 	return bm64RestoreCapH(m2a[:], m2, rowsUsed2, rowsEqu, i2)
 }
@@ -328,25 +544,26 @@ func getLeech2Basis(v2 []uint32, basis []uint64, d uint32) uint32 {
 func Leech2MatrixBasis(v2 []uint32) []uint64 {
 	basis := make([]uint64, 24)
 	dim := int(getLeech2Basis(v2, basis, 24))
-	bm64XchBits(basis, dim, 12, 0x800)
-	bm64RotBits(basis, dim, 1, 12, 0)
-	bm64EchelonH(basis, dim, 24, 24)
-	bm64RotBits(basis, dim, 11, 12, 0)
-	bm64XchBits(basis, dim, 12, 0x800)
+	Bm64XchBits(basis, dim, 12, 0x800)
+	Bm64RotBits(basis, dim, 1, 12, 0)
+	Bm64EchelonH(basis, dim, 24, 24)
+	Bm64RotBits(basis, dim, 11, 12, 0)
+	Bm64XchBits(basis, dim, 12, 0x800)
 	return basis[:dim]
 }
 
 // leech2MatrixOrthogonal computes a basis b of
 // the Leech lattice mod 2 such that b[m..23] is a
 // basis of the orthogonal complement of the space
-// spanned by a[0..k-1]. It returns m. a has k
-// rows; b must have 24 rows.
-func leech2MatrixOrthogonal(a, b []uint64, k int) int {
+// spanned by a[0..k-1]. It returns (m, true), or
+// (0, false) if k > 24. a has k rows; b must have
+// 24 rows.
+func leech2MatrixOrthogonal(a, b []uint64, k int) (int, bool) {
 	if k > 24 {
-		return -1
+		return 0, false
 	}
 	// Bl = A^T
-	bm64T(a, k, 24, b)
+	Bm64T(a, k, 24, b)
 	// Bh = Q * A^T: exchange row i of A^T with row i+12
 	for i := 0; i < 12; i++ {
 		x := b[i]
@@ -357,11 +574,11 @@ func leech2MatrixOrthogonal(a, b []uint64, k int) int {
 	for i := 0; i < 24; i++ {
 		b[i] |= 1 << uint(i)
 	}
-	m := bm64EchelonL(b, 24, 24, k)
+	m := Bm64EchelonL(b, 24, 24, k)
 	for i := 0; i < 24; i++ {
 		b[i] &= 0xffffff
 	}
-	return m
+	return m, true
 }
 
 // Leech2MatrixRadical returns a basis of the
@@ -373,21 +590,23 @@ func Leech2MatrixRadical(v2 []uint32) []uint64 {
 	var span, ortho [24]uint64
 	basis := make([]uint64, 24)
 	dim := int(getLeech2Basis(v2, span[:], 24))
-	leech2MatrixOrthogonal(span[:], ortho[:], dim)
-	bm64EchelonH(span[:], dim, 24, 24)
-	bm64EchelonH(ortho[dim:], 24-dim, 24, 24)
-	res := bm64CapH(span[:], ortho[dim:], dim, 24-dim, 24, 24)
-	if res < 0 {
+	if _, ok := leech2MatrixOrthogonal(span[:], ortho[:], dim); !ok {
+		return basis[:0]
+	}
+	Bm64EchelonH(span[:], dim, 24, 24)
+	Bm64EchelonH(ortho[dim:], 24-dim, 24, 24)
+	res, ok := bm64CapH(span[:], ortho[dim:], dim, 24-dim, 24, 24)
+	if !ok {
 		return basis[:0]
 	}
 	for i := 0; i < res; i++ {
 		basis[i] = span[i+dim-res]
 	}
-	bm64XchBits(basis, res, 12, 0x800)
-	bm64RotBits(basis, res, 1, 12, 0)
-	bm64EchelonH(basis, res, 24, 24)
-	bm64RotBits(basis, res, 11, 12, 0)
-	bm64XchBits(basis, res, 12, 0x800)
+	Bm64XchBits(basis, res, 12, 0x800)
+	Bm64RotBits(basis, res, 1, 12, 0)
+	Bm64EchelonH(basis, res, 24, 24)
+	Bm64RotBits(basis, res, 11, 12, 0)
+	Bm64XchBits(basis, res, 12, 0x800)
 	return basis[:res]
 }
 
@@ -495,7 +714,7 @@ func Leech2Pow(x uint32, e uint8) uint32 {
 	x &= 0x1ffffff
 	if e&2 != 0 {
 		scalar = (x >> 12) & x
-		scalar = parity12(scalar)
+		scalar = Parity12(scalar)
 		scalar <<= 24
 	}
 	if e&1 != 0 {
@@ -508,7 +727,7 @@ func Leech2Pow(x uint32, e uint8) uint32 {
 func opXDDelta(q0, d, delta uint32) uint32 {
 	delta ^= uint32(mat24ThetaTable[d&0x7ff])
 	s := ((q0 >> 12) & delta) ^ (q0 & d)
-	s = parity12(s)
+	s = Parity12(s)
 	return q0 ^ (s << 24)
 }
 
@@ -530,10 +749,10 @@ func opY(q0, d uint32) uint32 {
 	thetaQ0 := uint32(mat24ThetaTable[(q0>>12)&0x7ff])
 	thetaY := uint32(mat24ThetaTable[d&0x7ff])
 	s := (thetaQ0 & d) ^ (^odd & q0 & d)
-	s = parity12(s)
+	s = Parity12(s)
 	o := (thetaY & (q0 >> 12)) ^ (q0 & d)
 	o ^= (thetaY >> 12) & 1 & odd
-	o = parity12(o)
+	o = Parity12(o)
 	eps := thetaQ0 ^ (thetaY & ^odd) ^ uint32(mat24ThetaTable[((q0>>12)^d)&0x7ff])
 	q0 ^= (eps & 0xfff) ^ ((d << 12) & 0x1fff000 & odd)
 	q0 ^= (s << 24) ^ (o << 23)

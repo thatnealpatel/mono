@@ -1338,18 +1338,38 @@ func XchParity(v []int) []int {
 // within the trial budget. It mirrors
 // mm_conjugate_involution.
 func ConjugateInvolutionType(g *MM) (int, *MM) {
+	it, h, ok := conjugateInvolution(g, true, 20)
+	if !ok {
+		panic("cgt: conjugation of element to central involution failed")
+	}
+	return it, h
+}
+
+// conjugateInvolution conjugates the monster
+// involution g to a standard representative z via up
+// to ntrials random conjugations, returning (I, h,
+// ok) with h^-1 g h = z. I is 0 for the identity, 1
+// for a 2A involution, and 2 for a 2B involution. It
+// returns ok=false if no conjugating element is found
+// within the trial budget. It mirrors
+// mm_conjugate_involution; failure is reported via ok
+// rather than the broad ValueError/AssertionError
+// catch in the Python source.
+//
+// conjugateInvolution panics if check is true and g
+// is not an involution in the monster group.
+func conjugateInvolution(g *MM, check bool, ntrials int) (int, *MM, bool) {
 	g.Reduce()
 	z := MMGen("x", 0x1000)
 	one := MMIdentity()
-	if !g.Mul(g).Equal(one) {
+	if check && !g.Mul(g).Equal(one) {
 		panic("cgt: element is not an involution in the monster")
 	}
 	if h := g.checkInGx0(); h != nil {
 		elem := NewXsp2Co1(atomsFromWord(h)...)
 		it, hx := elem.ConjugateInvolution()
-		return it, &MM{data: hx.Mmdata()}
+		return it, hx, true
 	}
-	const ntrials = 20
 	for i := 0; i < ntrials; i++ {
 		var s *MM
 		if i == 0 {
@@ -1390,24 +1410,33 @@ func ConjugateInvolutionType(g *MM) (int, *MM) {
 		// x1^h2 = g^(s h1 h2) = z.
 		t := s.Mul(h1).Mul(h2)
 		t.Reduce()
-		return itype2, t
+		return itype2, t, true
 	}
-	panic("cgt: conjugation of element to central involution failed")
+	return 0, nil, false
 }
 
 // conjugateInvolutionGx0 conjugates the G_x0
 // involution given by the word w (in G_x0 atoms) to
 // its standard representative, returning the type, a
-// conjugating monster element, and ok=false if the
-// element is not an involution conjugable inside
-// G_x0 (mirroring the caught exception in mmgroup).
+// conjugating monster element, and ok=false if w is
+// not an involution (mirroring the caught exception
+// in mmgroup). w comes from MM.checkInGx0, so it is
+// always a word in G_x0 generators; the only panic
+// the conjugation path can raise here is the
+// "not an involution" panic, which the trial loop
+// must treat as a skip. Any other panic is a genuine
+// bug and is re-raised.
 func conjugateInvolutionGx0(w []uint32) (itype int, h *MM, ok bool) {
 	defer func() {
-		if recover() != nil {
-			itype, h, ok = 0, nil, false
+		if r := recover(); r != nil {
+			if s, isStr := r.(string); isStr && s == errNotInvolution {
+				itype, h, ok = 0, nil, false
+				return
+			}
+			panic(r)
 		}
 	}()
 	elem := NewXsp2Co1(atomsFromWord(w)...)
 	it, hx := elem.ConjugateInvolution()
-	return it, &MM{data: hx.Mmdata()}, true
+	return it, hx, true
 }

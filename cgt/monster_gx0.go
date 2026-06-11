@@ -60,7 +60,6 @@ func uint64Parity(x uint64) uint32 {
 // plus or minus the coded value, or if length exceeds
 // 31. C mm_aux_mmv_extract_sparse_signs.
 func mmvExtractSparseSigns(p int, v []uint64, sp []uint32, length int) int32 {
-	// TODO(nealpatel): Verify with 'callgraph' and delete if dead.
 	if mmAuxBadP(p) || length > 31 {
 		return -1
 	}

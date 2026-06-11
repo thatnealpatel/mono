@@ -117,7 +117,7 @@ func XiLeechToShort(x uint32) uint32 {
 	gcodev := GcodeToVect(x >> 12)
 	// transform linear to internal Leech rep
 	x ^= uint32(mat24ThetaTable[(x>>12)&0x7ff]) & 0xfff
-	cocodev := cocodeSyndrome(x, lsbit24(gcodev))
+	cocodev := CocodeSyndromeRaw(x, lsbit24(gcodev))
 	// put w = weight(code word gcodev) / 4
 	w := 0 - ((x >> 23) & 1)
 	w = (((uint32(mat24ThetaTable[(x>>12)&0x7ff]) >> 12) & 7) ^ w) + (w & 7)
@@ -126,7 +126,7 @@ func XiLeechToShort(x uint32) uint32 {
 			return 0
 		}
 		scalar := (x >> 12) & x & 0xfff
-		scalar = parity12(scalar)
+		scalar = Parity12(scalar)
 		if (scalar^w)&1 != 0 {
 			return 0
 		}
@@ -215,7 +215,7 @@ func XiShortToLeech(x uint32) uint32 {
 		}
 		gcode = (code >> 5) & 0x7ff
 		w := ((uint32(mat24ThetaTable[gcode]) >> 12) & 1) ^ (gcode & cocode)
-		w = parity12(w)
+		w = Parity12(w)
 		gcode ^= w << 11
 	default:
 		return 0
@@ -256,7 +256,7 @@ func XiOpXiShort(x uint32, exp int) uint32 {
 // Q_{x0}, both in Leech lattice encoding.
 func Leech2Mul(a, b uint32) uint32 {
 	result := (b >> 12) & a
-	result = parity12(result)
+	result = Parity12(result)
 	return (result << 24) ^ a ^ b
 }
 
@@ -269,7 +269,7 @@ func leech2Subtype(v2 uint32) uint32 {
 	theta := uint32(mat24ThetaTable[(v2>>12)&0x7ff])
 	coc := (v2 ^ theta) & 0xfff
 	scalar := (v2 >> 12) & v2
-	scalar = parity12(scalar)
+	scalar = Parity12(scalar)
 
 	syn := uint32(mat24SyndromeTable[coc&0x7ff])
 
@@ -319,7 +319,7 @@ func suboctadType(octad, w, coc uint32) uint32 {
 	lsb := lsbit24(octad)
 	coc ^= mat24RecipBasis[lsb]
 	syn := uint32(mat24SyndromeTable[coc&0x7ff])
-	cocodev := synFromTable(syn) ^ (1 << lsb)
+	cocodev := SynFromTable(syn) ^ (1 << lsb)
 	var sub uint32
 	if octad&cocodev != cocodev {
 		sub = 1
@@ -338,7 +338,7 @@ func Leech2Subtype(x uint32) uint32 {
 // of Leech2Subtype as a value 0..8.
 func Leech2CoarseSubtype(x uint32) uint32 {
 	scalar := (x >> 12) & x
-	scalar = parity12(scalar) // norm of v2 mod 2
+	scalar = Parity12(scalar) // norm of v2 mod 2
 
 	if x&0x800 != 0 {
 		if scalar != 0 {
@@ -374,7 +374,7 @@ func Leech2CoarseSubtype(x uint32) uint32 {
 func Leech2Type(x uint32) uint32 {
 	// Return 3 if scalar product <code,cocode> odd
 	scalar := (x >> 12) & x
-	scalar = parity12(scalar)
+	scalar = Parity12(scalar)
 	if scalar != 0 {
 		return 3
 	}
@@ -410,7 +410,7 @@ func Leech2Type(x uint32) uint32 {
 	lsb := lsbit24(octad)
 	coc ^= mat24RecipBasis[lsb]
 	syn := uint32(mat24SyndromeTable[coc&0x7ff])
-	ccv := synFromTable(syn) ^ (1 << lsb)
+	ccv := SynFromTable(syn) ^ (1 << lsb)
 	if (octad&ccv)^ccv != 0 {
 		return 4
 	}

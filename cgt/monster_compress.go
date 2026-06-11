@@ -91,11 +91,12 @@ func compress24To23(i uint32) uint32 {
 }
 
 // expand23To24 reverses compress24To23. It returns
-// 0xffffffff on error. Mirrors C expand_23_24.
-func expand23To24(i uint32) uint32 {
+// (value, true), or (0, false) on error. Mirrors C
+// expand_23_24.
+func expand23To24(i uint32) (uint32, bool) {
 	i &= 0x7fffff
 	if i&0x7ff800 == 0 {
-		return 0xffffffff
+		return 0, false
 	}
 	// Insert a zero bit at the position of the lowest
 	// set bit of i>>11, shifting higher bits up by one.
@@ -112,7 +113,7 @@ func expand23To24(i uint32) uint32 {
 	// Exchange bits 11 and 23.
 	j = (i ^ (i >> 12)) & 0x800
 	i ^= j ^ (j << 12)
-	return i
+	return i, true
 }
 
 // mmCompressType4 compresses a type-4 vector i in
@@ -132,7 +133,7 @@ func mmCompressType4(i uint32) int {
 		}
 		// Make the type of Leech vector j even.
 		b := j & (j >> 12)
-		b = parity12(b)
+		b = Parity12(b)
 		j ^= b << 23
 		i = j
 	}
@@ -143,8 +144,8 @@ func mmCompressType4(i uint32) int {
 // returns a negative value on error. Mirrors C
 // mm_compress_expand_type4.
 func mmCompressExpandType4(i uint32) int {
-	i = expand23To24(i)
-	if i&0xff000000 != 0 {
+	i, ok := expand23To24(i)
+	if !ok || i&0xff000000 != 0 {
 		return -11
 	}
 	switch Leech2Type(i) {

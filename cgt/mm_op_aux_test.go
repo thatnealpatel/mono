@@ -48,8 +48,8 @@ func TestHashValue(t *testing.T) {
 	}
 	for _, c := range cases {
 		v := RandVectorSeed(c.p, uint64(c.seed))
-		if got := Hash(c.p, v.Data(), c.skip); got != c.want {
-			t.Errorf("Hash(p=%d, seed=%d, skip=%#x)=%d want %d", c.p, c.seed, c.skip, got, c.want)
+		if got := hash(c.p, v.Data(), c.skip); got != c.want {
+			t.Errorf("hash(p=%d, seed=%d, skip=%#x)=%d want %d", c.p, c.seed, c.skip, got, c.want)
 		}
 		if c.skip == 0 {
 			// MMVector.Hash() is the skip=0 convenience method.

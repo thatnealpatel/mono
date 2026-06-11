@@ -1484,12 +1484,104 @@ func (g *MM) ChiPowers(maxE, ntrials int) (int, ChiMap, *MM) {
 }
 
 // Simplify tries to shorten the word with the given
-// number of trials. It returns g. The current
-// implementation reduces the element; longer-word
-// shortening is performed by the representation
-// layer.
+// number of trials, mutating g in place and returning
+// it. It first reduces g; if the reduced word is
+// already short (at most nine triality atoms) it
+// stops there. Otherwise it runs the power-conjugation
+// shortener of reduce_via_power. If the shortener
+// fails to find a shorter equal word, g keeps its
+// reduced value. It mirrors MM.simplify.
+//
+// A non-positive ntrials selects the default of 40
+// trials.
 func (g *MM) Simplify(ntrials int) *MM {
-	return g.Reduce()
+	g.Reduce()
+	// Count triality (tag t) atoms; the word is already
+	// short when there are at most nine of them.
+	weight := 0
+	for _, a := range g.data {
+		if (a>>28)&7 == 5 {
+			weight++
+		}
+	}
+	if weight <= 9 {
+		return g
+	}
+	if ntrials <= 0 {
+		ntrials = 40
+	}
+	if h, ok := reduceViaPower(g, ntrials); ok && h.Equal(g) {
+		g.data = h.Reduce().data
+	}
+	return g
+}
+
+// reduceViaPower shortens the monster element g using
+// Wilson's power-conjugation method: it searches for a
+// random element x0 such that g*x0 has even order with
+// a square root that is a 2B involution, conjugates
+// that involution to the central involution, reduces
+// the conjugated element inside G_x0, and unconjugates.
+// It returns the shortened element (equal to g) and
+// ok=true on success, or (nil, false) if no shortening
+// is found within ntrials trials. It mirrors
+// reduce_via_power.
+func reduceViaPower(g *MM, ntrials int) (*MM, bool) {
+	for i := 0; i < ntrials; i++ {
+		rounds := 1
+		if r := i >> 2; r > rounds {
+			rounds = r
+		}
+		x0 := MMRand(rounds)
+		g1 := g.Mul(x0)
+		o, g2 := g1.HalfOrder()
+		if o&1 != 0 || g2 == nil {
+			continue
+		}
+		it, h, ok := tryConjugateInvolution(g2)
+		if !ok || it != 2 {
+			continue
+		}
+		// g2^h = z, so g1^h = h^-1 g1 h lies in G_x0.
+		hInv := h.Inv()
+		g1h := hInv.Mul(g1).Mul(h)
+		short := g1h.checkInGx0()
+		if short == nil {
+			continue
+		}
+		// Replace g1^h by its short G_x0 word, then
+		// unconjugate and strip x0. This shortening of the
+		// G_x0 part is the source of the word-length
+		// reduction.
+		g1New := h.Mul(&MM{data: short}).Mul(hInv)
+		gNew := g1New.Mul(x0.Inv())
+		gNew.Reduce()
+		return gNew, true
+	}
+	return nil, false
+}
+
+// tryConjugateInvolution conjugates the 2B involution
+// g2 to the central involution with a single trial,
+// reporting failure via ok=false instead of panicking.
+// It mirrors the try/except (ValueError, AssertionError)
+// guarding the mm_conjugate_involution call inside
+// reduce_via_power: when g2 is not actually an involution
+// (an expected per-trial miss), the G_x0 fast path raises
+// the "not an involution" panic, which this recovers as
+// ok=false. Any other panic is a genuine bug and is
+// re-raised.
+func tryConjugateInvolution(g2 *MM) (it int, h *MM, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			if s, isStr := r.(string); isStr && s == errNotInvolution {
+				it, h, ok = 0, nil, false
+				return
+			}
+			panic(r)
+		}
+	}()
+	return conjugateInvolution(g2, false, 1)
 }
 
 //////////////////////////////////////////////////

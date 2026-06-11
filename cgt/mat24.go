@@ -30,44 +30,44 @@ func lsbit24pwr2(v uint32) uint32 {
 	return uint32(mat24LsbitTable[(v*0x077cb531>>26)&0x1f])
 }
 
-// parity12 returns the bit parity of the low
+// Parity12 returns the bit parity of the low
 // 12 bits of v.
-func parity12(v uint32) uint32 {
+func Parity12(v uint32) uint32 {
 	return uint32((uint64(0x6996966996696996) >> ((v ^ (v >> 6)) & 0x3f)) & 1)
 }
 
-// synFromTable expands a MAT24_SYNDROME_TABLE
+// SynFromTable expands a MAT24_SYNDROME_TABLE
 // entry to a syndrome bit vector.
-func synFromTable(t uint32) uint32 {
+func SynFromTable(t uint32) uint32 {
 	return (1 << (t & 31)) ^ (1 << ((t >> 5) & 31)) ^ (1 << ((t >> 10) & 31))
 }
 
-// vintern computes the cocode/vintern image of
+// Vintern computes the cocode/Vintern image of
 // a vector (combined ENC tables).
-func vintern(v uint32) uint32 {
+func Vintern(v uint32) uint32 {
 	return mat24EncTable0[v&0xff] ^
 		mat24EncTable1[(v>>8)&0xff] ^
 		mat24EncTable2[(v>>16)&0xff]
 }
 
-// gcodeToVectInternal expands a Golay code
+// GcodeToVectInternal expands a Golay code
 // number to a vector (combined DEC tables).
-func gcodeToVectInternal(v uint32) uint32 {
+func GcodeToVectInternal(v uint32) uint32 {
 	return mat24DecTable1[(v<<4)&0xf0] ^ mat24DecTable2[(v>>4)&0xff]
 }
 
 // oddSyn returns syndrome(x, 24) for an odd
 // parity vector x.
 func oddSyn(x uint32) uint32 {
-	x = vintern(x)
+	x = Vintern(x)
 	x = uint32(mat24SyndromeTable[x&0x7ff])
-	return synFromTable(x)
+	return SynFromTable(x)
 }
 
 // GcodeToVect converts a Golay code number to a
 // bit vector in GF(2)^24.
 func GcodeToVect(v uint32) uint32 {
-	return gcodeToVectInternal(v)
+	return GcodeToVectInternal(v)
 }
 
 // VectToGcode returns the Golay code number of
@@ -76,7 +76,7 @@ func GcodeToVect(v uint32) uint32 {
 // VectToGcode panics if v is not a Golay code
 // word.
 func VectToGcode(v uint32) uint32 {
-	cn := vintern(v)
+	cn := Vintern(v)
 	if cn&0xfff != 0 {
 		panic("VectToGcode: vector is not a Golay code word")
 	}
@@ -119,7 +119,7 @@ func VectToBitList(v uint32) (int, []byte) {
 // GcodeToBitList returns the ascending set-bit
 // positions of Golay code word v.
 func GcodeToBitList(v uint32) []byte {
-	vect := gcodeToVectInternal(v)
+	vect := GcodeToVectInternal(v)
 	w, out := VectToBitList(vect)
 	return out[:w]
 }
@@ -155,12 +155,12 @@ func SpreadB24(v, mask uint32) uint32 {
 }
 
 // VectToVintern converts v from vector to
-// vintern representation.
+// Vintern representation.
 func VectToVintern(v uint32) uint32 {
-	return vintern(v)
+	return Vintern(v)
 }
 
-// VinternToVect converts v from vintern to
+// VinternToVect converts v from Vintern to
 // vector representation.
 func VinternToVect(v uint32) uint32 {
 	return mat24DecTable0[v&0xff] ^
@@ -171,7 +171,7 @@ func VinternToVect(v uint32) uint32 {
 // VectToCocode returns the cocode element of
 // vector v.
 func VectToCocode(v uint32) uint32 {
-	return vintern(v) & 0xfff
+	return Vintern(v) & 0xfff
 }
 
 // CocodeToVect returns one preimage in
@@ -187,7 +187,7 @@ func CocodeToVect(c uint32) uint32 {
 // Syndrome panics if tetrad is out of range for
 // the syndrome weight.
 func Syndrome(v, tetrad uint32) uint32 {
-	return CocodeSyndrome(vintern(v), tetrad)
+	return CocodeSyndrome(Vintern(v), tetrad)
 }
 
 // CocodeSyndrome returns a minimum-weight Golay
@@ -197,16 +197,16 @@ func Syndrome(v, tetrad uint32) uint32 {
 // CocodeSyndrome panics if tetrad is out of
 // range for the syndrome weight.
 func CocodeSyndrome(c, tetrad uint32) uint32 {
-	r := cocodeSyndrome(c, tetrad)
+	r := CocodeSyndromeRaw(c, tetrad)
 	if r == 0xffffffff {
 		panic("CocodeSyndrome: tetrad out of range")
 	}
 	return r
 }
 
-// cocodeSyndrome returns the syndrome or
+// CocodeSyndromeRaw returns the syndrome or
 // 0xffffffff on failure.
-func cocodeSyndrome(c1, tetrad uint32) uint32 {
+func CocodeSyndromeRaw(c1, tetrad uint32) uint32 {
 	if tetrad > 24 {
 		return 0xffffffff
 	}
@@ -325,7 +325,7 @@ func CocodeToSextet(c uint32) []byte {
 // code syndromes of vector v as bit vectors.
 // The result has length 1 or 6.
 func AllSyndromes(v uint32) []uint32 {
-	return CocodeAllSyndromes(vintern(v))
+	return CocodeAllSyndromes(Vintern(v))
 }
 
 // CocodeAllSyndromes returns all minimum-weight
@@ -451,7 +451,7 @@ func GcodeToOctad(v uint32, strict uint8) uint32 {
 // complemented) octad, or is complemented when
 // strict is odd.
 func VectToOctad(v uint32, strict uint8) uint32 {
-	gc := vintern(v)
+	gc := Vintern(v)
 	if gc&0xfff != 0 {
 		panic("VectToOctad: not a Golay code word")
 	}
@@ -516,7 +516,7 @@ func cocodeToSuboctad(c1, v1, strict uint32) uint32 {
 	mask := uint32(1) << j
 	syn := mask
 	t := uint32(mat24SyndromeTable[(c1^mat24RecipBasis[j])&0x7ff])
-	syn ^= synFromTable(t)
+	syn ^= SynFromTable(t)
 	j = uint32(pOctad[7])
 	mask |= 1 << j
 	csyn := syn ^ (0 - ((syn >> j) & 1))
@@ -586,7 +586,7 @@ func SuboctadScalarProd(sub1, sub2 uint32) uint32 {
 // code vector v (gcode) and cocode vector c.
 func ScalarProd(v, c uint32) uint32 {
 	v &= c
-	return parity12(v)
+	return Parity12(v)
 }
 
 // IntersectOctadTetrad returns an octad
@@ -598,7 +598,7 @@ func ScalarProd(v, c uint32) uint32 {
 func IntersectOctadTetrad(v1, v2 uint32) uint32 {
 	var o uint32
 	{
-		gc := vintern(v1)
+		gc := Vintern(v1)
 		if gc&0xfff != 0 {
 			panic("IntersectOctadTetrad: v1 is not an octad")
 		}
@@ -639,7 +639,7 @@ func IntersectOctadTetrad(v1, v2 uint32) uint32 {
 		wUp++
 	}
 	up |= sub
-	syndromes := CocodeAllSyndromes(vintern(up))
+	syndromes := CocodeAllSyndromes(Vintern(up))
 	for _, s := range syndromes {
 		res := up ^ s
 		sub = res & o
@@ -673,7 +673,7 @@ func cocodeAsSubdodecad(c1, v1, uSingle uint32) uint32 {
 	if mat24ThetaTable[v1&0x7ff]&0x1000 == 0 {
 		return 0xffffffff
 	}
-	vect1 := gcodeToVectInternal(v1)
+	vect1 := GcodeToVectInternal(v1)
 
 	if ScalarProd(v1^0x800, c1) != 0 {
 		single = 1 << uSingle
@@ -684,7 +684,7 @@ func cocodeAsSubdodecad(c1, v1, uSingle uint32) uint32 {
 	}
 
 	lsb := lsbit24(vect1)
-	syn := cocodeSyndrome(c1, lsb)
+	syn := CocodeSyndromeRaw(c1, lsb)
 	if syn&0xff000000 != 0 {
 		return 0xffffffff
 	}
@@ -709,7 +709,7 @@ func cocodeAsSubdodecad(c1, v1, uSingle uint32) uint32 {
 			p1 := pos[i+1]
 			u1 := u0 ^ coc[p0] ^ coc[p1]
 			tab := uint32(mat24SyndromeTable[u1])
-			syn1 := synFromTable(tab)
+			syn1 := SynFromTable(tab)
 			if syn1&vect1 == syn1 {
 				c6 := c ^ syn1 ^ (1 << b[p0]) ^ (1 << b[p1])
 				res ^= c6
@@ -736,7 +736,7 @@ func PloopTheta(v uint32) uint32 {
 // of v1 and v2.
 func PloopCocycle(v1, v2 uint32) uint32 {
 	s := uint32(mat24ThetaTable[v1&0x7ff]) & v2 & 0xfff
-	return parity12(s)
+	return Parity12(s)
 }
 
 // MulPloop returns the Parker loop product of
@@ -756,7 +756,7 @@ func PowPloop(v, exp uint32) uint32 {
 func PloopComm(v1, v2 uint32) uint32 {
 	r := (uint32(mat24ThetaTable[v1&0x7ff]) & v2) ^
 		(uint32(mat24ThetaTable[v2&0x7ff]) & v1)
-	return parity12(r)
+	return Parity12(r)
 }
 
 // PloopCap returns the intersection of Golay
@@ -774,7 +774,7 @@ func PloopAssoc(v1, v2, v3 uint32) uint32 {
 	r := (uint32(mat24ThetaTable[v1&0x7ff]) & v3) ^
 		(uint32(mat24ThetaTable[v2&0x7ff]) & v3) ^
 		(uint32(mat24ThetaTable[(v1^v2)&0x7ff]) & v3)
-	return parity12(r)
+	return Parity12(r)
 }
 
 // PloopSolve returns a cocode element (low 12
@@ -961,9 +961,9 @@ func permFromHeptads(h1, h2, p []byte) uint32 {
 	for i := 0; i < 7; i++ {
 		v |= 1 << (h1[i] & 31)
 	}
-	y = vintern(v)
+	y = Vintern(v)
 	y = uint32(mat24SyndromeTable[y&0x7ff])
-	y = synFromTable(y)
+	y = SynFromTable(y)
 	v &= y
 	v = lsbit24(v)
 	y = 0
@@ -1036,7 +1036,7 @@ func extendUmbralHexad(h1, h2 []byte, bm1, bm2 uint32) {
 // mat24Syndrome is the internal syndrome helper
 // returning 0xffffffff on failure (no panic).
 func mat24Syndrome(v, tetrad uint32) uint32 {
-	return cocodeSyndrome(vintern(v), tetrad)
+	return CocodeSyndromeRaw(Vintern(v), tetrad)
 }
 
 // PermFromMap returns the completion type (1, 2,
@@ -1219,14 +1219,14 @@ func m24numToPerm(m24 uint32, pOut []byte) uint32 {
 	pOut[4] = byte(j)
 	bitmap |= 1 << pOut[4]
 
-	cocode := vintern(bitmap)
+	cocode := Vintern(bitmap)
 	syn := uint32(mat24SyndromeTable[cocode&0x7ff])
 
 	k = uint32((3 * n1) >> m24Sh)
 	j = (syn >> (5 * k)) & 31
 	pOut[5] = byte(j)
 
-	bitmap |= synFromTable(syn)
+	bitmap |= SynFromTable(syn)
 	bitmap ^= 0xffffff
 
 	j = 0
@@ -1297,7 +1297,7 @@ func PermToM24num(p []byte) uint32 {
 	bitmap |= 1 << k
 	n = 20*n + k - uint32((d>>(2*k))&3) - boolToU32(k >= last)
 
-	cocode := vintern(bitmap)
+	cocode := Vintern(bitmap)
 	syn = uint32(mat24SyndromeTable[cocode&0x7ff])
 
 	syn1 = (syn >> 5) & 31
@@ -1485,7 +1485,7 @@ func dodecadToHeptad(d1, hOut []byte) uint32 {
 		return 0xffffffff
 	}
 	t = (uint32(1) << a[0]) ^ (uint32(1) << a[1]) ^ (uint32(1) << a[2]) ^ (uint32(1) << a[6])
-	t = vintern(t)
+	t = Vintern(t)
 	if cocodeToSextet(t, sextet[:]) == 0xffffffff {
 		return 0xffffffff
 	}
@@ -1570,12 +1570,12 @@ func OpGcodeMatrix(v uint32, m []uint32) uint32 {
 // code word v (gcode) and returns the result in
 // gcode representation.
 func OpGcodePerm(v uint32, p []byte) uint32 {
-	v = gcodeToVectInternal(v)
+	v = GcodeToVectInternal(v)
 	var w uint32
 	for i := uint32(0); i < 24; i++ {
 		w |= ((v >> i) & 1) << p[i]
 	}
-	v = vintern(w)
+	v = Vintern(w)
 	return v >> 12
 }
 
