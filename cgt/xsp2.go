@@ -1,5 +1,14 @@
 package cgt
 
+import (
+	"errors"
+	"sync"
+
+	"patel.codes/cgt/generator"
+	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/swar"
+)
+
 // Operations on the subgroup G_{x0} (of
 // structure 2^{1+24}.Co_1) of the monster,
 // ported from the mmgroup C files xsp2co1.c,
@@ -38,13 +47,7 @@ type Xsp2Co1 struct {
 
 // errNotInGx0 reports that a word of generators
 // leaves the subgroup G_{x0}.
-var errNotInGx0 = newXspError("cgt: element not in subgroup G_x0")
-
-func newXspError(s string) error { return &xspError{s} }
-
-type xspError struct{ s string }
-
-func (e *xspError) Error() string { return e.s }
+var errNotInGx0 = errors.New("cgt: element not in subgroup G_x0")
 
 const (
 	// xspStdV3 is the standard short Leech vector
@@ -150,7 +153,7 @@ func convPauliVectorXspecial(x uint32) uint32 {
 	t := (x ^ (x >> 12)) & 0x800
 	x ^= (t << 12) ^ t
 	t = x & (x >> 12) & 0x7ff
-	t = Parity12(t)
+	t = mat24.Parity12(t)
 	x ^= t << 24
 	return x
 }
@@ -342,31 +345,12 @@ func qsMatItrace(s *qs12) int64 {
 // if s is not an invertible (k,k) matrix or n is
 // out of range.
 func qsToSymplecticRow(s *qs12, n int) uint32 {
-	qsReduce(s)
-	k := s.shape1
-	if 2*k != s.ncols || s.nrows <= k {
-		panic("cgt: matrix is not invertible")
-	}
-	dRows := s.nrows - 1
-	if k > qsMaxCols/3 || dRows > 2*qsMaxCols/3 {
-		panic("cgt: quadratic state too large")
-	}
+	m, dRows, k := qsSymplecticPrep(s)
 	if k == 0 {
 		return 0
 	}
-	m := make([]uint64, 2*qsMaxCols/3+1)
-	var v uint64
-	mask := uint64(1) << uint(2*k-1)
-	for j := 0; j < dRows; j++ {
-		m[j] = s.data[j+1]
-		v |= m[j] ^ (mask >> uint(j))
-	}
-	mask = (uint64(1) << uint(k)) - 1
-	if (v>>uint(k))&mask != 0 {
-		panic("cgt: matrix is not invertible")
-	}
-	Bm64XchBits(m, dRows, 2*k+1, (1<<uint(k))-1)
-	res := Bm64EchelonL(m, dRows, 2*k+1, dRows)
+	swar.Bm64XchBits(m, dRows, 2*k+1, (1<<uint(k))-1)
+	res := swar.Bm64EchelonL(m, dRows, 2*k+1, dRows)
 	if res != dRows {
 		panic("cgt: matrix is not invertible")
 	}
@@ -377,7 +361,7 @@ func qsToSymplecticRow(s *qs12, n int) uint32 {
 			a ^= ((pd[j] >> uint(n)) & 1) << uint(j)
 		}
 		for j := k; j < dRows; j++ {
-			mask = 0 - ((pd[j] >> uint(n)) & 1)
+			mask := 0 - ((pd[j] >> uint(n)) & 1)
 			a ^= m[j] & mask
 		}
 	} else if n < k+k {
@@ -387,7 +371,7 @@ func qsToSymplecticRow(s *qs12, n int) uint32 {
 	}
 	a &= (uint64(1) << uint(2*k)) - 1
 	one := []uint64{a}
-	Bm64ReverseBits(one, 1, k, 0)
+	swar.Bm64ReverseBits(one, 1, k, 0)
 	return uint32(one[0])
 }
 
@@ -497,16 +481,19 @@ func xsp2co1IsUnitElem(elem []uint64) bool {
 
 // xsp2co1ElemToBitmatrix maps an element of
 // G_{x0} to the 24x24 bit matrix acting on the
-// Leech lattice mod 2 by right multiplication.
-func xsp2co1ElemToBitmatrix(elem, pA []uint64) {
+// Leech lattice mod 2 by right multiplication,
+// returned as 24 uint64 rows.
+func xsp2co1ElemToBitmatrix(elem []uint64) [24]uint64 {
 	s := xsp2co1ElemToQsI(elem)
 	bm := qsToSymplectic(s)
+	var pA [24]uint64
 	copy(pA[:len(bm)], bm)
 	for i := 0; i < 24; i++ {
 		w := (pA[i] ^ (pA[i] >> 12)) & 0x800
 		pA[i] ^= (w << 12) ^ w
 	}
 	pA[11], pA[23] = pA[23], pA[11]
+	return pA
 }
 
 /*************************************************************************
@@ -522,8 +509,8 @@ func xsp2co1FindChainShort3(v31, v32 uint64) uint64 {
 	support1 := uint32((v31 | (v31 >> 24)) & 0xffffff)
 	support2 := uint32((v32 | (v32 >> 24)) & 0xffffff)
 	if support1 & ^support2 != 0 {
-		c1 := lsbit24(support1 & ^support2)
-		c2 := lsbit24(support2)
+		c1 := mat24.Lsbit24(support1 & ^support2)
+		c2 := mat24.Lsbit24(support2)
 		if c2 >= 24 {
 			return 0
 		}
@@ -535,8 +522,8 @@ func xsp2co1FindChainShort3(v31, v32 uint64) uint64 {
 		return mask
 	}
 	if support2 & ^support1 != 0 {
-		c2 := lsbit24(support2 & ^support1)
-		c1 := lsbit24(support1)
+		c2 := mat24.Lsbit24(support2 & ^support1)
+		c1 := mat24.Lsbit24(support1)
 		if c1 >= 24 {
 			return 0
 		}
@@ -548,8 +535,8 @@ func xsp2co1FindChainShort3(v31, v32 uint64) uint64 {
 		return mask
 	}
 	if support2 != 0 {
-		c1 := lsbit24(support1 & support2)
-		c2 := lsbit24(^support1 & ^support2 & 0xffffff)
+		c1 := mat24.Lsbit24(support1 & support2)
+		c2 := mat24.Lsbit24(^support1 & ^support2 & 0xffffff)
 		if c2 < 24 {
 			return (uint64(1) << c1) ^ (uint64(1) << c2)
 		}
@@ -557,9 +544,9 @@ func xsp2co1FindChainShort3(v31, v32 uint64) uint64 {
 		if mask&(mask-1) == 0 {
 			mask ^= 0xfffffff
 		}
-		c1 = lsbit24(uint32(mask))
+		c1 = mat24.Lsbit24(uint32(mask))
 		mask ^= uint64(1) << c1
-		c2 = lsbit24(uint32(mask))
+		c2 = mat24.Lsbit24(uint32(mask))
 		mask = (uint64(1) << c1) ^ (uint64(1) << c2)
 		return v31 & (mask | (mask << 24))
 	}
@@ -692,10 +679,9 @@ func xsp2co1PowerElem(elem1 []uint64, e int64, elem2 []uint64) {
 // false the result signs are not computed.
 func xsp2co1XspecialConjugate(elem []uint64, ax []uint64, sign bool) {
 	if !sign {
-		var data [24]uint64
-		xsp2co1ElemToBitmatrix(elem, data[:])
+		data := xsp2co1ElemToBitmatrix(elem)
 		out := make([]uint64, len(ax))
-		Bm64Mul(ax, data[:], len(ax), 24, out)
+		swar.Bm64Mul(ax, data[:], len(ax), 24, out)
 		copy(ax, out)
 		return
 	}
@@ -801,15 +787,15 @@ func setQsDeltaPiAut(s *qs12, aut []uint32) {
 // setQsY sets s to the element y_d of G(4096_x)
 // for the Parker loop element y.
 func setQsY(s *qs12, y uint32) {
-	thetaY := uint64(mat24ThetaTable[y&0x7ff]) & 0x7ff
+	thetaY := uint64(mat24.ThetaTable(y&0x7ff)) & 0x7ff
 	data := make([]uint64, 13)
 	data[0] = uint64(y & 0x17ff)
 	for i := 0; i < 11; i++ {
 		d := uint32(1) << uint(i)
-		thetaD := uint64(mat24ThetaTable[d&0x7ff])
+		thetaD := uint64(mat24.ThetaTable(d & 0x7ff))
 		sv := thetaD & uint64(y)
-		sv = uint64(Parity12(uint32(sv)))
-		assoc := uint64(mat24ThetaTable[(d^y)&0x7ff]) ^ thetaD ^ thetaY
+		sv = uint64(mat24.Parity12(uint32(sv)))
+		assoc := uint64(mat24.ThetaTable((d^y)&0x7ff)) ^ thetaD ^ thetaY
 		data[i+1] = uint64(d) + (sv << 12) + ((assoc & 0x7ff) << 13)
 	}
 	data[12] = data[0] + 0x800 + (thetaY << 13)
@@ -839,7 +825,7 @@ func mulQsXi2(s *qs12) {
 // row of s (qstate12_xch_bits), shifting bits in
 // mask by sh.
 func qsXchBitsRaw(s *qs12, sh int, mask uint64) {
-	Bm64XchBits(s.data, s.nrows, sh, mask)
+	swar.Bm64XchBits(s.data, s.nrows, sh, mask)
 	s.reduced = false
 }
 
@@ -874,10 +860,10 @@ func xsp2co1MulQsV3Word(s *qs12, pv3 *uint64, a []uint32, setOne bool) int {
 	if maxrows > xspMaxRowsElem {
 		maxrows = xspMaxRowsElem
 	}
-	qs := &qs12{}
-	qs.grow(xspMaxRowsElem)
-	qsAtom := &qs12{}
-	qsAtom.grow(xspMaxRowsElem)
+	scratch := mulQsScratchPool.Get().(*mulQsScratch)
+	defer mulQsScratchPool.Put(scratch)
+	qs := &scratch.qs
+	qsAtom := &scratch.qsAtom
 	var v3 uint64
 	var pAtom *qs12
 	if setOne {
@@ -902,30 +888,30 @@ func xsp2co1MulQsV3Word(s *qs12, pv3 *uint64, a []uint32, setOne bool) int {
 		case atomTagID, atomTagD:
 			mulQsXspecial(qs, v&0xfff)
 		case atomTagIP:
-			perm := m24numToPermSafe(v)
-			aut := PermToAutpl(0, perm)
-			permI := InvPerm(perm)
-			autI := InvAutpl(aut)
+			perm := mat24.M24numToPermSafe(v)
+			aut := mat24.PermToAutpl(0, perm)
+			permI := mat24.InvPerm(perm)
+			autI := mat24.InvAutpl(aut)
 			setQsDeltaPiAut(pAtom, autI)
 			v3 = leech3OpPi(v3, permI)
 			multiply = pAtom != qs
 		case atomTagP:
-			perm := m24numToPermSafe(v)
-			aut := PermToAutpl(0, perm)
+			perm := mat24.M24numToPermSafe(v)
+			aut := mat24.PermToAutpl(0, perm)
 			setQsDeltaPiAut(pAtom, aut)
 			v3 = leech3OpPi(v3, perm)
 			multiply = pAtom != qs
 		case atomTagIX:
-			x ^= (uint32(mat24ThetaTable[v&0x7ff]) & 0x1000) << 12
+			x ^= (uint32(mat24.ThetaTable(v&0x7ff)) & 0x1000) << 12
 			x ^= (v & 0x1fff) << 12
-			x ^= uint32(mat24ThetaTable[v&0x7ff]) & 0xfff
+			x ^= uint32(mat24.ThetaTable(v&0x7ff)) & 0xfff
 			mulQsXspecial(qs, x)
 		case atomTagX:
 			x ^= (v & 0x1fff) << 12
-			x ^= uint32(mat24ThetaTable[v&0x7ff]) & 0xfff
+			x ^= uint32(mat24.ThetaTable(v&0x7ff)) & 0xfff
 			mulQsXspecial(qs, x)
 		case atomTagIY:
-			x ^= uint32(mat24ThetaTable[v&0x7ff]) & 0x1000
+			x ^= uint32(mat24.ThetaTable(v&0x7ff)) & 0x1000
 			x ^= v & 0x1fff
 			setQsY(pAtom, x)
 			v3 = leech3OpY(v3, x)
@@ -965,6 +951,29 @@ final:
 	qsCopyInto(qs, s)
 	*pv3 = v3
 	return i
+}
+
+// mulQsScratch holds the two reusable qstate buffers
+// for one xsp2co1MulQsV3Word call. Both qstates are
+// fully reinitialized (via qsUnitMatrix/qsCopyInto or
+// a setQs* helper) before they are read, so stale
+// data carried over by the pool is never observed.
+type mulQsScratch struct {
+	qs     qs12
+	qsAtom qs12
+}
+
+// mulQsScratchPool pools mulQsScratch values so the
+// inner loop of Mul/Inv/Pow/Order for Xsp2Co1 avoids
+// allocating two qstate backing arrays per word
+// multiply.
+var mulQsScratchPool = sync.Pool{
+	New: func() any {
+		sc := &mulQsScratch{}
+		sc.qs.grow(xspMaxRowsElem)
+		sc.qsAtom.grow(xspMaxRowsElem)
+		return sc
+	},
 }
 
 // qsCopyInto copies the contents of src into dst
@@ -1107,15 +1116,15 @@ func xsp2co1OddOrderBitmatrix(bm []uint64) int {
 		bm1[i] = bm[i] & 0xffffff
 	}
 	for i := 0; i < 2; i++ {
-		Bm64Mul(bm1[:], bm1[:], 24, 24, bm2[:])
-		Bm64Mul(bm2[:], bm2[:], 24, 24, bm1[:])
+		swar.Bm64Mul(bm1[:], bm1[:], 24, 24, bm2[:])
+		swar.Bm64Mul(bm2[:], bm2[:], 24, 24, bm1[:])
 	}
 	if isNeutralCo1(bm1[:]) {
 		return 1
 	}
-	Bm64Mul(bm1[:], bm1[:], 24, 24, bm2[:])
+	swar.Bm64Mul(bm1[:], bm1[:], 24, 24, bm2[:])
 	for i := 3; i <= 39; i += 2 {
-		Bm64Mul(bm1[:], bm2[:], 24, 24, bm1[:])
+		swar.Bm64Mul(bm1[:], bm2[:], 24, 24, bm1[:])
 		if isNeutralCo1(bm1[:]) {
 			return i
 		}
@@ -1128,8 +1137,7 @@ func xsp2co1OddOrderBitmatrix(bm []uint64) int {
 // elem1^(o/2) in elem2; otherwise it stores the
 // unit element. elem2 may be nil.
 func xsp2co1HalfOrderElem(elem1, elem2 []uint64) int {
-	var bm [24]uint64
-	xsp2co1ElemToBitmatrix(elem1, bm[:])
+	bm := xsp2co1ElemToBitmatrix(elem1)
 	o := xsp2co1OddOrderBitmatrix(bm[:])
 	var elemH [26]uint64
 	xsp2co1PowerElem(elem1, int64(o), elemH[:])
@@ -1189,8 +1197,8 @@ func genLeech2OpWordMany(q []uint32, g []uint32) int {
 	for j := range q {
 		q[j] &= 0x1ffffff
 	}
+	next := make([]uint32, len(q))
 	for i, atom := range g {
-		next := make([]uint32, len(q))
 		for j, qv := range q {
 			r := Leech2OpAtom(qv, atom)
 			if r == 0xffffffff {
@@ -1208,22 +1216,22 @@ func genLeech2OpWordMany(q []uint32, g []uint32) int {
 // op_perm_nosign.
 func opPermNoSign(v uint32, pi []byte) uint32 {
 	xd := (v >> 12) & 0xfff
-	xdelta := (v ^ uint32(mat24ThetaTable[xd&0x7ff])) & 0xfff
-	xd = OpGcodePerm(xd, pi)
-	xdelta = OpCocodePerm(xdelta, pi)
-	return (xd << 12) ^ xdelta ^ (uint32(mat24ThetaTable[xd&0x7ff]) & 0xfff)
+	xdelta := (v ^ uint32(mat24.ThetaTable(xd&0x7ff))) & 0xfff
+	xd = mat24.OpGcodePerm(xd, pi)
+	xdelta = mat24.OpCocodePerm(xdelta, pi)
+	return (xd << 12) ^ xdelta ^ (uint32(mat24.ThetaTable(xd&0x7ff)) & 0xfff)
 }
 
 // opYNoSign applies x_d to the Leech lattice mod 2
 // vector q0, ignoring the sign. C function op_y_nosign.
 func opYNoSign(q0, d uint32) uint32 {
 	odd := 0 - ((q0 >> 11) & 1)
-	thetaQ0 := uint32(mat24ThetaTable[(q0>>12)&0x7ff])
-	thetaY := uint32(mat24ThetaTable[d&0x7ff])
+	thetaQ0 := uint32(mat24.ThetaTable((q0 >> 12) & 0x7ff))
+	thetaY := uint32(mat24.ThetaTable(d & 0x7ff))
 	o := (thetaY & (q0 >> 12)) ^ (q0 & d)
 	o ^= (thetaY >> 12) & 1 & odd
-	o = Parity12(o)
-	eps := thetaQ0 ^ (thetaY & ^odd) ^ uint32(mat24ThetaTable[((q0>>12)^d)&0x7ff])
+	o = mat24.Parity12(o)
+	eps := thetaQ0 ^ (thetaY & ^odd) ^ uint32(mat24.ThetaTable(((q0>>12)^d)&0x7ff))
 	q0 ^= (eps & 0xfff) ^ ((d << 12) & 0xfff000 & odd)
 	q0 ^= o << 23
 	return q0
@@ -1257,18 +1265,18 @@ func genLeech2OpWordLeech2Many(a []uint32, g []uint32, back bool) int {
 		v &= 0xfffffff
 		switch tag {
 		case 0xa0000000: // Ip
-			perm := m24numToPermSafe(v)
-			perm = InvPerm(perm)
+			perm := mat24.M24numToPermSafe(v)
+			perm = mat24.InvPerm(perm)
 			for j := range a {
 				a[j] = opPermNoSign(a[j], perm)
 			}
 		case 0x20000000: // p
-			perm := m24numToPermSafe(v)
+			perm := mat24.M24numToPermSafe(v)
 			for j := range a {
 				a[j] = opPermNoSign(a[j], perm)
 			}
 		case 0xc0000000: // Iy
-			y := uint32(mat24ThetaTable[v&0x7ff]) & 0x1000
+			y := uint32(mat24.ThetaTable(v&0x7ff)) & 0x1000
 			y ^= v & 0x1fff
 			for j := range a {
 				a[j] = opYNoSign(a[j], y&0x1fff)
@@ -1283,7 +1291,7 @@ func genLeech2OpWordLeech2Many(a []uint32, g []uint32, back bool) int {
 				v ^= 3
 			}
 			for j := range a {
-				a[j] = XiOpXiNoSign(a[j], int(v))
+				a[j] = generator.XiOpXiNoSign(a[j], int(v))
 			}
 		case 0xd0000000, 0x50000000: // It, t
 			if (v-1)&2 == 0 {
@@ -1332,7 +1340,7 @@ func (g *Xsp2Co1) Subtype() uint32 {
 // a vector in the Leech lattice mod 2. TypeQx0
 // panics if g is not in Q_{x0}.
 func (g *Xsp2Co1) TypeQx0() uint32 {
-	return Leech2Type(g.AsXsp())
+	return generator.Leech2Type(g.AsXsp())
 }
 
 /*************************************************************************
@@ -1380,8 +1388,8 @@ func shiftMasked(a, mask uint64, sh uint) uint64 {
 func xsp2co1AddShort3Leech(x uint64, factor int8, src, dest []int8) {
 	var f [4]int8
 	x = short3Reduce(x)
-	w1 := Bw24(uint32(x))
-	w2 := Bw24(uint32(x >> 24))
+	w1 := mat24.Bw24(uint32(x))
+	w2 := mat24.Bw24(uint32(x >> 24))
 	var gcodev uint32
 	switch w1 + w2 {
 	case 23:
@@ -1409,7 +1417,7 @@ func xsp2co1AddShort3Leech(x uint64, factor int8, src, dest []int8) {
 		panic("cgt: Leech mod 3 operation failed")
 	}
 	f[2] = -f[1]
-	gcodev = VectToGcode(gcodev)
+	gcodev = mat24.VectToGcode(gcodev)
 	if gcodev&0xfffff000 != 0 {
 		panic("cgt: Leech mod 3 operation failed")
 	}
@@ -1479,10 +1487,10 @@ func xsp2co1ElemToLeechOp(elem []uint64, pdest []int8) {
 // g acting on the Leech lattice mod 2 by right
 // multiplication, as 24 uint64 rows.
 func (g *Xsp2Co1) AsCo1Bitmatrix() []uint64 {
+	bm := xsp2co1ElemToBitmatrix(g.data[:])
 	m := make([]uint64, 24)
-	xsp2co1ElemToBitmatrix(g.data[:], m)
 	for i := range m {
-		m[i] &= 0xffffff
+		m[i] = bm[i] & 0xffffff
 	}
 	return m
 }
@@ -1502,12 +1510,12 @@ func xsp2co1Leech2CountType2(a []uint64, n int) uint32 {
 	}
 	// Track the data via an offset into a so the
 	// final restore (C: --a) is faithful.
-	Bm64XchBits(a, n, 12, 0x800)
+	swar.Bm64XchBits(a, n, 12, 0x800)
 	v := uint32(a[0])
 	off := 1
 	babysteps := 1
 	m := a[off:]
-	nEch := Bm64EchelonH(m, n-1, 24, 24)
+	nEch := swar.Bm64EchelonH(m, n-1, 24, 24)
 	var b [1 << lsteps]uint16
 	b[0] = 0
 	nh := 0
@@ -1530,9 +1538,9 @@ func xsp2co1Leech2CountType2(a []uint64, n int) uint32 {
 	for i := 1; ; i++ {
 		if v&0x800000 != 0 {
 			gcode := (v >> 12) & 0xfff
-			theta := uint32(mat24ThetaTable[gcode&0x7ff]) ^ v
+			theta := uint32(mat24.ThetaTable(gcode&0x7ff)) ^ v
 			for j := 0; j < babysteps; j++ {
-				tab := uint32(mat24SyndromeTable[(theta^uint32(b[j]))&0x7ff])
+				tab := uint32(mat24.SyndromeTable((theta ^ uint32(b[j])) & 0x7ff))
 				if (tab & 0x3ff) < (24 << 5) {
 					continue
 				}
@@ -1543,9 +1551,9 @@ func xsp2co1Leech2CountType2(a []uint64, n int) uint32 {
 				count += scalar
 			}
 		} else if (v & 0x7ff000) == 0 {
-			basis0 := uint32(mat24RecipBasis[0]) ^ v
+			basis0 := uint32(mat24.RecipBasis(0)) ^ v
 			for j := 0; j < babysteps; j++ {
-				tab := uint32(mat24SyndromeTable[(uint32(b[j])^basis0)&0x7ff])
+				tab := uint32(mat24.SyndromeTable((uint32(b[j]) ^ basis0) & 0x7ff))
 				var b1, b0 uint32
 				if (tab & 0x3ff) < (24 << 5) {
 					b1 = 1
@@ -1556,15 +1564,15 @@ func xsp2co1Leech2CountType2(a []uint64, n int) uint32 {
 				count += b0 ^ b1
 			}
 		} else if notNonstrictOctad(v>>12) == 0 {
-			vect := GcodeToVect((v >> 12) & 0x7ff)
-			theta := uint32(mat24ThetaTable[(v>>12)&0x7ff])
+			vect := mat24.GcodeToVect((v >> 12) & 0x7ff)
+			theta := uint32(mat24.ThetaTable((v >> 12) & 0x7ff))
 			w0 := (theta >> 13) & 1
 			vect ^= w0 - 1
 			w0 ^= (v >> 11) & 1
-			lsb := lsbit24(vect)
-			theta ^= v ^ uint32(mat24RecipBasis[lsb])
+			lsb := mat24.Lsbit24(vect)
+			theta ^= v ^ uint32(mat24.RecipBasis(lsb))
 			for j := 0; j < babysteps; j++ {
-				tab := uint32(mat24SyndromeTable[(uint32(b[j])^theta)&0x7ff])
+				tab := uint32(mat24.SyndromeTable((uint32(b[j]) ^ theta) & 0x7ff))
 				syn := (uint32(1) << (tab & 31)) ^ (uint32(1) << ((tab >> 5) & 31)) ^ (uint32(1) << ((tab >> 10) & 31))
 				if vect&syn != syn {
 					continue
@@ -1583,18 +1591,18 @@ func xsp2co1Leech2CountType2(a []uint64, n int) uint32 {
 		if i == bigsteps {
 			break
 		}
-		v ^= uint32(a[off+int(lsbit24(uint32(i)))])
+		v ^= uint32(a[off+int(mat24.Lsbit24(uint32(i)))])
 	}
 
 	// C: --a; n += nh + 1; xch_bits(a, n, ...)
-	Bm64XchBits(a, n, 12, 0x800)
+	swar.Bm64XchBits(a, n, 12, 0x800)
 	return count
 }
 
 // notNonstrictOctad returns 0 if v (or its
 // complement) is an octad and 1 otherwise.
 func notNonstrictOctad(v uint32) uint32 {
-	return uint32(mat24OctEncTable[v&0x7ff]) >> 15
+	return uint32(mat24.OctEncTable(v&0x7ff)) >> 15
 }
 
 /*************************************************************************
@@ -1616,7 +1624,7 @@ func xsp2co1Trace98280(elem []uint64, fFast func([]uint64) (int32, bool)) int32 
 		pa[i] = ((pa[i] & 0xffffff) << 24) ^ mask
 		mask <<= 1
 	}
-	nn := Bm64EchelonH(pa, 24, 48, 24)
+	nn := swar.Bm64EchelonH(pa, 24, 48, 24)
 	pa = pa[nn:]
 	n := 24 - nn
 	if n == 0 {
@@ -1628,7 +1636,7 @@ func xsp2co1Trace98280(elem []uint64, fFast func([]uint64) (int32, bool)) int32 
 		}
 	}
 	xsp2co1XspecialConjugate(elem, pa[:n], true)
-	idx := Bm64EchelonH(pa, n, 25, 1)
+	idx := swar.Bm64EchelonH(pa, n, 25, 1)
 	var res int32
 	if idx != 0 {
 		res = 0 - int32(xsp2co1Leech2CountType2(pa, n))
@@ -1719,10 +1727,10 @@ func xsp2co1ElemMonomialToXsp(elem []uint64, a []uint32) int {
 		return -1
 	}
 	y := monomial[12] & 0x7ff
-	MatrixFromModOmega(monomial[1:])
-	perm := AutplToPerm(monomial[1:])
-	perm = InvPerm(perm)
-	pi := PermToM24num(perm)
+	mat24.MatrixFromModOmega(monomial[1:])
+	perm := mat24.AutplToPerm(monomial[1:])
+	perm = mat24.InvPerm(perm)
+	pi := mat24.PermToM24num(perm)
 	lenA := 0
 	if pi != 0 {
 		a[lenA] = 0xA0000000 + pi
@@ -1767,7 +1775,7 @@ func elemToWord(elem []uint64, a []uint32, imgOmega uint32) int {
 	if x < 0 {
 		panic("cgt: element is not in Q_x0")
 	}
-	xv := uint32(x) ^ PloopTheta(uint32(x)>>12)
+	xv := uint32(x) ^ mat24.PloopTheta(uint32(x)>>12)
 	if xv&0xfff != 0 {
 		a[lenA] = 0x90000000 + (xv & 0xfff)
 		lenA++

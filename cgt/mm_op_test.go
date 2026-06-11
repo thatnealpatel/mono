@@ -312,8 +312,8 @@ func TestMulStdAxisLinear(t *testing.T) {
 		if !oracleBool(t, expr) {
 			t.Fatalf("oracle: std axis not linear for p=%d", c.p)
 		}
-		v1 := mustParseVector(t,c.p, strings.Trim(c.v1, "'"))
-		v2 := mustParseVector(t,c.p, strings.Trim(c.v2, "'"))
+		v1 := mustParseVector(t, c.p, strings.Trim(c.v1, "'"))
+		v2 := mustParseVector(t, c.p, strings.Trim(c.v2, "'"))
 		w1 := v1.Copy()
 		MulStdAxis(c.p, w1.Data())
 		w2 := v2.Copy()

@@ -51,8 +51,8 @@ func TestMonsterMul(t *testing.T) {
 		{"M<l_1*t_2*l_2*t_1>", "M<x_1abh*y_3h*d_4h>"},
 	}
 	for _, c := range cases {
-		g := mustMM(t,c[0])
-		h := mustMM(t,c[1])
+		g := mustMM(t, c[0])
+		h := mustMM(t, c[1])
 		got := g.Mul(h).String()
 		want := stripMM(oracle(t, fmt.Sprintf("str((%s*%s).reduce())", mmExpr(c[0]), mmExpr(c[1]))))
 		if got != want {
@@ -71,7 +71,7 @@ func TestMonsterInv(t *testing.T) {
 		"M<l_1*t_2*l_2*t_1*x_3abh>",
 	}
 	for _, c := range cases {
-		g := mustMM(t,c)
+		g := mustMM(t, c)
 		if !g.Mul(g.Inv()).Equal(MMIdentity()) {
 			t.Errorf("g*g^-1 != 1 for %q", c)
 		}
@@ -93,7 +93,7 @@ func TestMonsterOrder(t *testing.T) {
 		"M<l_1*t_2*l_2*t_1*x_3abh*d_4h>",
 	}
 	for _, c := range cases {
-		got := int64(mustMM(t,c).Order())
+		got := int64(mustMM(t, c).Order())
 		want := oracleInt(t, fmt.Sprintf("%s.order()", mmExpr(c)))
 		if got != want {
 			t.Errorf("Order(%q)=%d want %d", c, got, want)
@@ -110,7 +110,7 @@ func TestMonsterHalfOrder(t *testing.T) {
 		"M<x_1h*y_2h*t_1*l_2*p_100>",
 	}
 	for _, c := range cases {
-		o, h := mustMM(t,c).HalfOrder()
+		o, h := mustMM(t, c).HalfOrder()
 		wantO, wantH := oraclePair(t, fmt.Sprintf(
 			"(lambda r: [r[0], None if r[1] is None else str(r[1].reduce())])(%s.half_order())",
 			mmExpr(c)))
@@ -138,7 +138,7 @@ func TestMonsterEqual(t *testing.T) {
 		{"M<x_1h*y_2h>", "M<y_2h*x_1h>"},
 	}
 	for _, c := range cases {
-		got := mustMM(t,c[0]).Equal(mustMM(t,c[1]))
+		got := mustMM(t, c[0]).Equal(mustMM(t, c[1]))
 		want := oracleBool(t, fmt.Sprintf("(%s == %s)", mmExpr(c[0]), mmExpr(c[1])))
 		if got != want {
 			t.Errorf("Equal(%q,%q)=%v want %v", c[0], c[1], got, want)
@@ -155,7 +155,7 @@ func TestMonsterReduce(t *testing.T) {
 		"M<l_1*t_2*l_2*t_1*x_3abh*d_4h*y_5h*p_200>",
 	}
 	for _, c := range cases {
-		got := mustMM(t,c).Reduce().String()
+		got := mustMM(t, c).Reduce().String()
 		want := stripMM(oracle(t, fmt.Sprintf("str(%s.reduce())", mmExpr(c))))
 		if got != want {
 			t.Errorf("Reduce(%q)=%q want %q", c, got, want)
@@ -202,7 +202,7 @@ func TestMonsterInGx0(t *testing.T) {
 		"M<x_1h*y_2h*t_1>": false,
 	}
 	for spec, want := range cases {
-		got := mustMM(t,spec).InGx0()
+		got := mustMM(t, spec).InGx0()
 		oWant := oracleBool(t, fmt.Sprintf("%s.in_G_x0()", mmExpr(spec)))
 		if oWant != want {
 			t.Fatalf("oracle disagrees with case table for %q: %v vs %v", spec, oWant, want)
@@ -254,7 +254,7 @@ func TestMonsterAxisType(t *testing.T) {
 		"M<y_2b8h*x_429h*d_553h*p_237253688*l_2*p_1900800*l_2*p_85835153*l_2*p_21796800*t_2*l_1*p_13326720*l_1*p_11552640*l_1*t_1>",
 	}
 	for _, spec := range specs {
-		got := AxisFor(mustMM(t,spec)).Type()
+		got := AxisFor(mustMM(t, spec)).Type()
 		want := strings.Trim(oracle(t, fmt.Sprintf(
 			"__import__('mmgroup.tests.axes.axis',fromlist=['Axis']).Axis(%s).axis_type()", mmExpr(spec))), "\"")
 		if got != want {
@@ -276,17 +276,17 @@ func TestMonsterPow(t *testing.T) {
 		{"M<l_1*t_2*l_2*t_1*x_3abh>", -2},
 	}
 	for _, c := range cases {
-		got := mustMM(t,c.spec).Pow(c.e).String()
+		got := mustMM(t, c.spec).Pow(c.e).String()
 		want := stripMM(oracle(t, fmt.Sprintf("str((%s**%d).reduce())", mmExpr(c.spec), c.e)))
 		if got != want {
 			t.Errorf("Pow(%q,%d)=%q want %q", c.spec, c.e, got, want)
 		}
 		if c.e >= 2 {
-			manual := mustMM(t,c.spec)
+			manual := mustMM(t, c.spec)
 			for i := 1; i < c.e; i++ {
-				manual = manual.Mul(mustMM(t,c.spec))
+				manual = manual.Mul(mustMM(t, c.spec))
 			}
-			if !mustMM(t,c.spec).Pow(c.e).Equal(manual) {
+			if !mustMM(t, c.spec).Pow(c.e).Equal(manual) {
 				t.Errorf("Pow(%q,%d) != manual multiplication", c.spec, c.e)
 			}
 		}
@@ -377,7 +377,7 @@ func TestMonsterInNx0(t *testing.T) {
 		"M<x_1h*y_2h*t_1>": false,
 	}
 	for spec, want := range cases {
-		got := mustMM(t,spec).InNx0()
+		got := mustMM(t, spec).InNx0()
 		oWant := oracleBool(t, fmt.Sprintf("%s.in_N_x0()", mmExpr(spec)))
 		if oWant != want {
 			t.Fatalf("oracle disagrees with case table for %q: %v vs %v", spec, oWant, want)
@@ -400,7 +400,7 @@ func TestMonsterInQx0(t *testing.T) {
 		"M<l_1>":       false,
 	}
 	for spec, want := range cases {
-		got := mustMM(t,spec).InQx0()
+		got := mustMM(t, spec).InQx0()
 		oWant := oracleBool(t, fmt.Sprintf("%s.in_Q_x0()", mmExpr(spec)))
 		if oWant != want {
 			t.Fatalf("oracle disagrees with case table for %q: %v vs %v", spec, oWant, want)
@@ -421,7 +421,7 @@ func TestMonsterChiGx0(t *testing.T) {
 		"M<x_1abh*y_3h*d_4h>",
 	}
 	for _, spec := range specs {
-		got := mustMM(t,spec).ChiGx0()
+		got := mustMM(t, spec).ChiGx0()
 		want := oracleInts(t, fmt.Sprintf("list(int(x) for x in %s.chi_G_x0())", mmExpr(spec)))
 		if len(want) != 4 {
 			t.Fatalf("oracle chi_G_x0(%q) len=%d want 4", spec, len(want))
@@ -469,7 +469,7 @@ func TestMonsterAxisMul(t *testing.T) {
 		{"M<d_5h*p_100>", "M<l_1*t_2>"},
 	}
 	for _, c := range cases {
-		ax := AxisFor(mustMM(t,c.spec)).Mul(mustMM(t,c.gspec))
+		ax := AxisFor(mustMM(t, c.spec)).Mul(mustMM(t, c.gspec))
 		got := ax.Type()
 		want := strings.Trim(oracle(t, fmt.Sprintf(
 			"(__import__('mmgroup.tests.axes.axis',fromlist=['Axis']).Axis(%s)*%s).axis_type()",
@@ -490,8 +490,8 @@ func TestMonsterAxisEqual(t *testing.T) {
 		{"M<d_5h*p_100>", "M<d_5h*p_100>"},
 	}
 	for _, c := range cases {
-		axA := AxisFor(mustMM(t,c.a))
-		axB := AxisFor(mustMM(t,c.b))
+		axA := AxisFor(mustMM(t, c.a))
+		axB := AxisFor(mustMM(t, c.b))
 		if !axA.Equal(axA) {
 			t.Errorf("Axis(%q) not equal to itself", c.a)
 		}

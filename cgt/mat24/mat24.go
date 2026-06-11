@@ -1,13 +1,19 @@
-package cgt
+// Package mat24 implements the Mathieu group M24, the
+// binary Golay code and its cocode, the syndrome and
+// octad machinery, the Parker loop, and the automorphism
+// group AutPL, with precomputed tables derived from the
+// Golay code basis.
+package mat24
 
 import (
 	"errors"
 	"fmt"
+	"math/bits"
 )
 
 // errNoM24Perm indicates no M24 permutation
 // completes the given partial map.
-var errNoM24Perm = errors.New("cgt: no M24 permutation exists for this map")
+var errNoM24Perm = errors.New("mat24: no M24 permutation exists for this map")
 
 // Mat24Order is the order of the Mathieu
 // group M24.
@@ -30,16 +36,35 @@ func lsbit24pwr2(v uint32) uint32 {
 	return uint32(mat24LsbitTable[(v*0x077cb531>>26)&0x1f])
 }
 
+// Lsbit24Pwr2 returns the position of the single set
+// bit of v, which must be a power of two in the low
+// 24 bits.
+func Lsbit24Pwr2(v uint32) uint32 {
+	return lsbit24pwr2(v)
+}
+
 // Parity12 returns the bit parity of the low
 // 12 bits of v.
 func Parity12(v uint32) uint32 {
-	return uint32((uint64(0x6996966996696996) >> ((v ^ (v >> 6)) & 0x3f)) & 1)
+	return uint32(bits.OnesCount32(v&0xfff) & 1)
 }
 
 // SynFromTable expands a MAT24_SYNDROME_TABLE
 // entry to a syndrome bit vector.
 func SynFromTable(t uint32) uint32 {
 	return (1 << (t & 31)) ^ (1 << ((t >> 5) & 31)) ^ (1 << ((t >> 10) & 31))
+}
+
+// SyndromeTable returns the raw entry i of the
+// precomputed syndrome table.
+func SyndromeTable(i uint32) uint32 {
+	return uint32(mat24SyndromeTable[i])
+}
+
+// RecipBasis returns the raw entry i of the
+// reciprocal Golay basis table.
+func RecipBasis(i uint32) uint32 {
+	return mat24RecipBasis[i]
 }
 
 // Vintern computes the cocode/Vintern image of
@@ -86,10 +111,7 @@ func VectToGcode(v uint32) uint32 {
 // Bw24 returns the bit weight of the low 24
 // bits of v.
 func Bw24(v uint32) uint32 {
-	v = (v & 0x555555) + ((v & 0xaaaaaa) >> 1)
-	v = (v & 0x333333) + ((v & 0xcccccc) >> 2)
-	v = (v + (v >> 4)) & 0xf0f0f
-	return (v + (v >> 8) + (v >> 16)) & 0x1f
+	return uint32(bits.OnesCount32(v & 0xffffff))
 }
 
 // GcodeWeight returns the bit weight of Golay
@@ -501,6 +523,15 @@ func CocodeToSuboctad(c, v, strict uint32) uint32 {
 	return r
 }
 
+// CocodeToSuboctadRaw is CocodeToSuboctad without the
+// panic on an invalid (cocode, octad) pair: it returns
+// 0xffffffff instead. Callers that have already
+// established validity (or that branch on the sentinel)
+// use this variant.
+func CocodeToSuboctadRaw(c, v, strict uint32) uint32 {
+	return cocodeToSuboctad(c, v, strict)
+}
+
 func cocodeToSuboctad(c1, v1, strict uint32) uint32 {
 	var res uint32
 	status := c1 >> 11
@@ -554,13 +585,25 @@ func SuboctadToCocode(sub, octad uint32) uint32 {
 	if octad >= 759 {
 		panic("SuboctadToCocode: octad out of range")
 	}
+	c, _ := SuboctadToCocodeRaw(sub, octad)
+	return c
+}
+
+// SuboctadToCocodeRaw is SuboctadToCocode without the
+// panic: it returns (cocode, true), or (0, false) if
+// octad >= 759. It mirrors the C inline
+// mat24_inline_suboctad_to_cocode.
+func SuboctadToCocodeRaw(sub, octad uint32) (uint32, bool) {
+	if octad >= 759 {
+		return 0, false
+	}
 	pOctad := mat24OctadElementTable[octad<<3:]
 	pSub := mat24OctadIndexTable[(sub&0x3f)<<2:]
 	c := mat24RecipBasis[pOctad[pSub[0]]] ^
 		mat24RecipBasis[pOctad[pSub[1]]] ^
 		mat24RecipBasis[pOctad[pSub[2]]] ^
 		mat24RecipBasis[pOctad[pSub[3]]]
-	return c & 0xfff
+	return c & 0xfff, true
 }
 
 func suboctadWeight(sub uint32) uint32 {
@@ -730,6 +773,34 @@ done:
 // function of v as a cocode element.
 func PloopTheta(v uint32) uint32 {
 	return uint32(mat24ThetaTable[v&0x7ff]) & 0xfff
+}
+
+// ThetaTable returns the raw entry i of the
+// precomputed Parker loop theta table. The caller
+// is responsible for masking i into range and for
+// extracting the relevant bit fields of the result.
+func ThetaTable(i uint32) uint32 {
+	return uint32(mat24ThetaTable[i])
+}
+
+// OctDecTable returns the raw entry i of the
+// precomputed octad-decode table.
+func OctDecTable(i uint32) uint32 {
+	return uint32(mat24OctDecTable[i])
+}
+
+// OctEncTable returns the raw entry i of the
+// precomputed octad-encode table.
+func OctEncTable(i uint32) uint32 {
+	return uint32(mat24OctEncTable[i])
+}
+
+// OctadElementsAtByte returns the 8 consecutive
+// entries of the octad-element table starting at byte
+// offset off. The octad numbered n begins at byte
+// offset n<<3.
+func OctadElementsAtByte(off uint32) []uint8 {
+	return mat24OctadElementTable[off : off+8]
 }
 
 // PloopCocycle returns the Parker loop cocycle
@@ -1267,6 +1338,15 @@ func m24numToPermSafe(num uint32) []byte {
 	out := make([]byte, 24)
 	m24numToPerm(num, out)
 	return out
+}
+
+// M24numToPermSafe is like M24numToPerm but substitutes
+// the identity permutation (number 0) when num is out of
+// range instead of panicking. It mirrors the C macro
+// mat24_m24num_to_perm, which masks an illegal
+// permutation number to 0.
+func M24numToPermSafe(num uint32) []byte {
+	return m24numToPermSafe(num)
 }
 
 // PermToM24num returns the number of permutation

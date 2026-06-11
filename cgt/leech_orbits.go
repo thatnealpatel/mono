@@ -1,5 +1,7 @@
 package cgt
 
+import "patel.codes/cgt/generator"
+
 // This file ports leech2_orbits_raw from
 // mmgroup/src/mmgroup/structures/xleech2.py, the driver
 // that computes the orbits of the Leech lattice mod 2
@@ -73,19 +75,19 @@ type leech2OrbitGen interface {
 func Leech2OrbitsRaw(gList []leech2OrbitGen, map_ bool) Leech2OrbitsResult {
 	const n = uint32(24)
 	nG := uint32(len(gList))
-	lenA := uint32(UFindLin2Size(n, nG))
+	lenA := uint32(generator.UFindLin2Size(n, nG))
 	a := make([]uint32, lenA)
-	UFindLin2Init(a, lenA, n, nG)
+	generator.UFindLin2Init(a, lenA, n, nG)
 	for _, g := range gList {
 		md := g.Mmdata()
 		ag := Leech2OpWordMatrix24(md, false)
-		UFindLin2Add(a, ag, uint32(len(ag)))
+		generator.UFindLin2Add(a, ag, uint32(len(ag)))
 	}
-	lData := uint32(1) << uint(UFindLin2Dim(a))
-	nSets := uint32(UFindLin2NOrbits(a))
+	lData := uint32(1) << uint(generator.UFindLin2Dim(a))
+	nSets := uint32(generator.UFindLin2NOrbits(a))
 	data := make([]uint32, lData)
 	indices := make([]uint32, nSets+1)
-	UFindLin2Orbits(a, data, lData, indices, nSets+1)
+	generator.UFindLin2Orbits(a, data, lData, indices, nSets+1)
 	res := Leech2OrbitsResult{
 		NSets:   int(nSets),
 		Indices: indices,
@@ -93,7 +95,7 @@ func Leech2OrbitsRaw(gList []leech2OrbitGen, map_ bool) Leech2OrbitsResult {
 	}
 	if map_ {
 		m := make([]uint32, lData)
-		UFindLin2GetMap(a, m, lData)
+		generator.UFindLin2GetMap(a, m, lData)
 		res.Map = m
 	}
 	return res

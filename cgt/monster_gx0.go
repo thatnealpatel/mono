@@ -13,7 +13,11 @@ package cgt
 // such an element from its image v_1 . g^e, following
 // [Sey22].
 
-import "math/bits"
+import (
+	"math/bits"
+
+	"patel.codes/cgt/mat24"
+)
 
 //////////////////////////////////////////////////
 // Part 1: layout of the precomputed tag data
@@ -156,10 +160,10 @@ func opWatermarkAPermNum(w []uint32, v []uint64) int32 {
 		err |= w[i] ^ w1[i]
 		perm[w[i]&0x1f] = byte(w1[i] & 0x1f)
 	}
-	if err&0xffffffe0 != 0 || permCheck(perm[:]) != 0 {
+	if err&0xffffffe0 != 0 || mat24.PermCheck(perm[:]) != nil {
 		return -1
 	}
-	return int32(PermToM24num(perm[:]))
+	return int32(mat24.PermToM24num(perm[:]))
 }
 
 // insertsortU32 sorts a ascending in place. C
@@ -311,7 +315,7 @@ func findInQx0(v []uint64, g []uint32, work []uint64) int {
 
 	signBit := uint32(sign) ^ uint64Parity(uint64(x&(x>>12)&0x7ff))
 	x ^= (signBit & 1) << 24
-	x ^= PloopTheta(x >> 12)
+	x ^= mat24.PloopTheta(x >> 12)
 
 	length1 := length
 	if x&0xfff != 0 {

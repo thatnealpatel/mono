@@ -21,7 +21,7 @@ import (
 // round-trips exactly.
 //
 // The all-zero sign bitmap (the zero vector) is excluded;
-// see the package note on the FromSigns/Bm64FindLowBit
+// see the package note on the FromSigns/swar.Bm64FindLowBit
 // out-of-bounds for that case.
 
 // normRealVec returns the real parts of a complex matrix
@@ -70,7 +70,7 @@ func checkFromSigns(t *testing.T, name string, q *QState) {
 	}
 	if allZero {
 		// Zero vector: excluded (latent over-read in
-		// Bm64FindLowBit; the oracle returns the zero vector).
+		// swar.Bm64FindLowBit; the oracle returns the zero vector).
 		return
 	}
 	// FromSigns (faithful to C bitmatrix64_find_low_bit)

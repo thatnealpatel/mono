@@ -1,4 +1,4 @@
-package cgt
+package generator
 
 import (
 	"fmt"

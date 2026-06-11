@@ -2,7 +2,12 @@
 
 package cgt
 
-import "errors"
+import (
+	"errors"
+
+	"patel.codes/cgt/generator"
+	"patel.codes/cgt/mat24"
+)
 
 // This file implements the per-modulus SWAR group
 // operations x_delta * x_pi (genOpPi),
@@ -205,17 +210,14 @@ func (s *genSwar) genWriteRow64(v []uint64, off int, vals [64]int) {
 
 // genTagTOfs returns the tag-T word offset (off >>
 // logIntFields) for modulus p.
-func (s *genSwar) genTagTOfs() int { return mmAuxOfsT >> genLogIntFields(s.p) }
+func (s *genSwar) genTagTOfs() int { return mmAuxOfsT >> logIntFields(s.p) }
 
-func (s *genSwar) genTagAOfs() int { return mmAuxOfsA >> genLogIntFields(s.p) }
-func (s *genSwar) genTagBOfs() int { return mmAuxOfsB >> genLogIntFields(s.p) }
-func (s *genSwar) genTagCOfs() int { return mmAuxOfsC >> genLogIntFields(s.p) }
-func (s *genSwar) genTagXOfs() int { return mmAuxOfsX >> genLogIntFields(s.p) }
-func (s *genSwar) genTagZOfs() int { return mmAuxOfsZ >> genLogIntFields(s.p) }
-func (s *genSwar) genTagYOfs() int { return mmAuxOfsY >> genLogIntFields(s.p) }
-
-// genLogIntFields returns LOG_INT_FIELDS for p.
-func genLogIntFields(p int) uint { return logIntFields(p) }
+func (s *genSwar) genTagAOfs() int { return mmAuxOfsA >> logIntFields(s.p) }
+func (s *genSwar) genTagBOfs() int { return mmAuxOfsB >> logIntFields(s.p) }
+func (s *genSwar) genTagCOfs() int { return mmAuxOfsC >> logIntFields(s.p) }
+func (s *genSwar) genTagXOfs() int { return mmAuxOfsX >> logIntFields(s.p) }
+func (s *genSwar) genTagZOfs() int { return mmAuxOfsZ >> logIntFields(s.p) }
+func (s *genSwar) genTagYOfs() int { return mmAuxOfsY >> logIntFields(s.p) }
 
 // genNegScalprodDI negates the tag-X entries X_d,i
 // whose Leech scalar product <d,i> equals 1. C
@@ -256,7 +258,7 @@ func (s *genSwar) genFlipEntryInRow(v []uint64, off, i int) {
 func genScalprodDISign(d uint32, i int) int {
 	c := vectToCocode(1 << uint(i))
 	x := (d ^ (d >> 11)) & c
-	return int(Parity12(x) & 1)
+	return int(mat24.Parity12(x) & 1)
 }
 
 // genOpDelta applies x_delta (the pure cocode
@@ -314,8 +316,8 @@ func genOpDelta(p int, src []uint64, delta int, dst []uint64) {
 	ts := s.genTagTOfs()
 	for i := 0; i < 759; i++ {
 		off := ts + i*s.wordsPer64
-		sign := uint32(mat24OctDecTable[i]) & uint32(delta)
-		neg := Parity12(sign)&1 != 0
+		sign := mat24.OctDecTable(uint32(i)) & uint32(delta)
+		neg := mat24.Parity12(sign)&1 != 0
 		for w := 0; w < s.wordsPer64; w++ {
 			x := src[off+w]
 			if neg {
@@ -361,9 +363,9 @@ func genOpPi(p int, src []uint64, delta, pi int, dst []uint64) {
 	// inv_perm and the big 2048-entry sign+row table
 	// for the X/Z/Y/A permutation. C mm_sub_prep_pi
 	// fills tbl_perm24_big = OpAllAutpl(rep_autpl).
-	perm := M24numToPerm(uint32(pi) % uint32(mat24Order))
-	invPerm, repAutpl := PermToIautpl(uint32(delta)&0xfff, perm)
-	big := OpAllAutpl(repAutpl) // 2048 row+sign entries
+	perm := mat24.M24numToPerm(uint32(pi) % uint32(mat24.Mat24Order))
+	invPerm, repAutpl := mat24.PermToIautpl(uint32(delta)&0xfff, perm)
+	big := mat24.OpAllAutpl(repAutpl) // 2048 row+sign entries
 
 	// Column permutation for the 24-rows derived from
 	// invPerm: entry i of a row moves to position
@@ -580,7 +582,7 @@ func genCocodeSign(delta, r uint32) uint32 {
 	// of delta & (Golay code word r). Tag A uses the
 	// same parity on its diagonal. All three tag bits
 	// share this parity in the delta-only operation.
-	s := Parity12(delta & r & 0x7ff)
+	s := mat24.Parity12(delta & r & 0x7ff)
 	return s | (s << 1) | (s << 2)
 }
 
@@ -854,13 +856,13 @@ func genMatMul64(a, b *[64][64]int) [64][64]int {
 func genBuildTauMat64() {
 	var diag, sym [64][64]int
 	for i := 0; i < 64; i++ {
-		if SuboctadWeight(uint32(i))&1 != 0 {
+		if mat24.SuboctadWeight(uint32(i))&1 != 0 {
 			diag[i][i] = -1
 		} else {
 			diag[i][i] = 1
 		}
 		for j := 0; j < 64; j++ {
-			if SuboctadScalarProd(uint32(i), uint32(j))&1 != 0 {
+			if mat24.SuboctadScalarProd(uint32(i), uint32(j))&1 != 0 {
 				sym[i][j] = -1
 			} else {
 				sym[i][j] = 1
@@ -978,12 +980,12 @@ func genBuildXiMat64() {
 	for i := 0; i < 16; i++ {
 		// MDIAG16 = -diag((-1)^w2_gray(i)).
 		s := 1
-		if XiW2Gray(uint32(i))&1 != 0 {
+		if generator.XiW2Gray(uint32(i))&1 != 0 {
 			s = -1
 		}
 		mdiag[i][i] = -s
 		for j := 0; j < 16; j++ {
-			if XiW2Gray(uint32(i^j))&1 != 0 {
+			if generator.XiW2Gray(uint32(i^j))&1 != 0 {
 				msym[i][j] = -1
 			} else {
 				msym[i][j] = 1
@@ -1146,7 +1148,7 @@ func genOpT(p int, src []uint64, t int, dst []uint64) {
 // invert{p}_xyz.
 func genInvertXYZ(s *genSwar, src []uint64, soff int, dst []uint64, doff int) {
 	for d := 0; d < 2048; d++ {
-		neg := (mat24ThetaTable[d]>>12)&1 != 0
+		neg := (mat24.ThetaTable(uint32(d))>>12)&1 != 0
 		s.genCopyRow24(src, soff+d*s.wordsPer24, dst, doff+d*s.wordsPer24, neg)
 	}
 }
@@ -1267,8 +1269,8 @@ func genXiMonomial(s *genSwar, src []uint64, exp1 int, dst []uint64) {
 		sh := genXiShapes[stage]
 		perm := xiPermTables[stage][exp1]
 		sign := xiSignTables[stage][exp1]
-		srcOfs := int(xiOffsetTable[stage][exp1][0]) >> genLogIntFields(s.p)
-		dstOfs := int(xiOffsetTable[stage][exp1][1]) >> genLogIntFields(s.p)
+		srcOfs := int(xiOffsetTable[stage][exp1][0]) >> logIntFields(s.p)
+		dstOfs := int(xiOffsetTable[stage][exp1][1]) >> logIntFields(s.p)
 
 		// Stride between consecutive box groups, for both
 		// source and destination. C mm{p}_op_xi_mon advances
@@ -1527,14 +1529,14 @@ func genIterNext(it *genWordIter) uint32 {
 			nMulDeltaPi(g, 0, atom&0xfffffff)
 			xiUsed = true
 		case 8 + 3:
-			atom ^= uint32(mat24ThetaTable[atom&0x7ff]) & 0x1000
+			atom ^= mat24.ThetaTable(atom&0x7ff) & 0x1000
 			nMulX(g, atom&0x1fff)
 			xiUsed = true
 		case 3:
 			nMulX(g, atom&0x1fff)
 			xiUsed = true
 		case 8 + 4:
-			atom ^= uint32(mat24ThetaTable[atom&0x7ff]) & 0x1000
+			atom ^= mat24.ThetaTable(atom&0x7ff) & 0x1000
 			nMulY(g, atom&0x1fff)
 			xiUsed = true
 		case 4:
@@ -1737,8 +1739,8 @@ func genOpXYTagABC(p int, v []uint64, f, e, eps, mode int) {
 // row_perm[perm[i]] = i, i.e. it gathers via the inverse permutation.
 func genOpPiTagABC(p int, v []uint64, delta, pi, mode int) {
 	s := genSwarFor(p)
-	perm := M24numToPerm(uint32(pi) % uint32(mat24Order))
-	invPerm := InvPerm(perm)
+	perm := mat24.M24numToPerm(uint32(pi) % uint32(mat24.Mat24Order))
+	invPerm := mat24.InvPerm(perm)
 	var inv [24]int
 	for i := 0; i < 24; i++ {
 		inv[i] = int(invPerm[i])

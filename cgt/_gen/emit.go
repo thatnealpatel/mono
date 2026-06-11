@@ -34,12 +34,13 @@ const valsPerLine = 8
 
 // writeHeader writes the generated-file header,
 // including the package clause, in the house style
-// shared with the xi table generator.
+// shared with the xi table generator. The mat24 tables
+// live in the cgt/mat24 package.
 func writeHeader(buf *bytes.Buffer) {
 	buf.WriteString("// Code generated from the Golay code basis. DO NOT EDIT.\n")
 	buf.WriteString("//\n")
 	buf.WriteString("// Precomputed mat24 tables (derived from the Golay code).\n\n")
-	buf.WriteString("package cgt\n")
+	buf.WriteString("package mat24\n")
 }
 
 // writeHexTable renders one table as a Go var

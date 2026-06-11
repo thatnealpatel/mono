@@ -5,6 +5,8 @@
 // per-modulus mm*_op_*.c files).
 package cgt
 
+import "patel.codes/cgt/mat24"
+
 // Tag values for basis vectors. The numeric codes
 // match the sparse encoding tag field (bits 27..25
 // of a sparse index, here as the bare 1..7 value).
@@ -468,18 +470,18 @@ func IndexSparseToLeech2(sp uint32) uint32 {
 		if !ok {
 			return 0
 		}
-		gcode := uint32(mat24OctDecTable[i]) & 0xfff
-		gcode ^= suboctadWeight(j) << 11
-		cocode ^= uint32(mat24ThetaTable[gcode&0x7ff]) & 0xfff
+		gcode := uint32(mat24.OctDecTable(i)) & 0xfff
+		gcode ^= mat24.SuboctadWeight(j) << 11
+		cocode ^= uint32(mat24.ThetaTable(gcode&0x7ff)) & 0xfff
 		return (gcode << 12) + cocode
 	case 5: // X
 		if j >= 24 {
 			return 0
 		}
 		cocode := vectToCocode(1 << j)
-		theta := uint32(mat24ThetaTable[i&0x7ff])
+		theta := uint32(mat24.ThetaTable(i & 0x7ff))
 		w := ((theta >> 12) & 1) ^ (i & cocode)
-		w = Parity12(w)
+		w = mat24.Parity12(w)
 		gcode := i ^ (w << 11)
 		cocode ^= theta & 0xfff
 		return (gcode << 12) + cocode
@@ -496,24 +498,24 @@ func IndexLeech2ToSparse(v2 uint32) uint32 {
 	var theta, syn, scalar, gc, res uint32
 
 	if v2&0x800 != 0 { // odd cocode words
-		theta = uint32(mat24ThetaTable[(v2>>12)&0x7ff])
-		syn = uint32(mat24SyndromeTable[(theta^v2)&0x7ff])
+		theta = uint32(mat24.ThetaTable((v2 >> 12) & 0x7ff))
+		syn = uint32(mat24.SyndromeTable((theta ^ v2) & 0x7ff))
 		if (syn & 0x3ff) < (24 << 5) {
 			return 0
 		}
 		scalar = (v2 >> 12) & v2
-		scalar = Parity12(scalar)
+		scalar = mat24.Parity12(scalar)
 		if scalar != 0 {
 			return 0
 		}
 		return 0xA000000 + ((v2 & 0x7ff000) << 2) + ((syn & 0x1f) << 8)
 	}
 	if v2&0x7ff000 == 0 { // Golay code word 0
-		syn = uint32(mat24SyndromeTable[v2&0x7ff])
+		syn = uint32(mat24.SyndromeTable(v2 & 0x7ff))
 		if syn&0x8000 == 0 {
 			return 0
 		}
-		syn = uint32(mat24SyndromeTable[(v2^mat24RecipBasis[23])&0x7ff])
+		syn = uint32(mat24.SyndromeTable((v2 ^ mat24.RecipBasis(23)) & 0x7ff))
 		syn &= 0x3ff
 		syn -= ((syn + 0x100) & 0x400) >> 5
 		return ((syn >> 5) << 14) + ((syn & 0x1f) << 8) + 0x4000000 +
@@ -521,7 +523,7 @@ func IndexLeech2ToSparse(v2 uint32) uint32 {
 	}
 	// octads (and suboctads)
 	gc = (v2 >> 12) & 0xfff
-	theta = uint32(mat24ThetaTable[gc&0x7ff]) & 0x7ff
+	theta = uint32(mat24.ThetaTable(gc&0x7ff)) & 0x7ff
 	res = cocodeToSuboctadInline((v2^theta)&0xfff, gc, 1)
 	if res == 0xffffffff {
 		return 0
@@ -533,30 +535,21 @@ func IndexLeech2ToSparse(v2 uint32) uint32 {
 // mat24_inline_cocode_to_suboctad; it equals the
 // internal cocodeToSuboctad in mat24.go.
 func cocodeToSuboctadInline(c, v, strict uint32) uint32 {
-	return cocodeToSuboctad(c, v, strict)
+	return mat24.CocodeToSuboctadRaw(c, v, strict)
 }
 
 // suboctadToCocodeInline mirrors the C inline
 // mat24_inline_suboctad_to_cocode. It returns
 // (cocode, true), or (0, false) if octad >= 759
 // (no panic), matching the C inline rather than
-// SuboctadToCocode.
+// mat24.SuboctadToCocode.
 func suboctadToCocodeInline(sub, octad uint32) (uint32, bool) {
-	if octad >= 759 {
-		return 0, false
-	}
-	pOctad := mat24OctadElementTable[octad<<3:]
-	pSub := mat24OctadIndexTable[(sub&0x3f)<<2:]
-	c := mat24RecipBasis[pOctad[pSub[0]]] ^
-		mat24RecipBasis[pOctad[pSub[1]]] ^
-		mat24RecipBasis[pOctad[pSub[2]]] ^
-		mat24RecipBasis[pOctad[pSub[3]]]
-	return c & 0xfff, true
+	return mat24.SuboctadToCocodeRaw(sub, octad)
 }
 
 // vectToCocode returns the cocode element of vector
 // v. C mat24_vect_to_cocode.
-func vectToCocode(v uint32) uint32 { return Vintern(v) & 0xfff }
+func vectToCocode(v uint32) uint32 { return mat24.Vintern(v) & 0xfff }
 
 // mmAuxIndexLeech2ToInternFast converts a short
 // Leech-lattice-mod-2 vector v2 to an internal
@@ -565,12 +558,12 @@ func vectToCocode(v uint32) uint32 { return Vintern(v) & 0xfff }
 func mmAuxIndexLeech2ToInternFast(v2 uint32) uint32 {
 	gc := (v2 >> 12) & 0x7ff
 	if v2&0x800 != 0 {
-		theta := uint32(mat24ThetaTable[gc])
-		syn := uint32(mat24SyndromeTable[(theta^v2)&0x7ff])
+		theta := uint32(mat24.ThetaTable(gc))
+		syn := uint32(mat24.SyndromeTable((theta ^ v2) & 0x7ff))
 		return mmAuxOfsX + (gc << 5) + (syn & 0x1f)
 	}
 	if gc == 0 {
-		syn := uint32(mat24SyndromeTable[(v2^mat24RecipBasis[23])&0x7ff])
+		syn := uint32(mat24.SyndromeTable((v2 ^ mat24.RecipBasis(23)) & 0x7ff))
 		syn &= 0x3ff
 		syn -= ((syn + 0x100) & 0x400) >> 5
 		var res uint32 = mmAuxOfsB
@@ -579,15 +572,15 @@ func mmAuxIndexLeech2ToInternFast(v2 uint32) uint32 {
 		}
 		return res + (syn & 0x3ff)
 	}
-	oct := uint32(mat24OctEncTable[gc]) >> 1
+	oct := uint32(mat24.OctEncTable(gc)) >> 1
 	if oct >= 759 {
 		return 0
 	}
-	pOct := mat24OctadElementTable[oct<<3:]
-	theta := uint32(mat24ThetaTable[gc])
+	pOct := mat24.OctadElementsAtByte((oct) << 3)
+	theta := uint32(mat24.ThetaTable(gc))
 	j := uint32(pOct[7])
-	c := uint32(mat24SyndromeTable[(theta^v2^mat24RecipBasis[j])&0x7ff])
-	syn := SynFromTable(c)
+	c := uint32(mat24.SyndromeTable((theta ^ v2 ^ mat24.RecipBasis(j)) & 0x7ff))
+	syn := mat24.SynFromTable(c)
 	var sub uint32
 	if (syn>>j)&1 != 0 {
 		sub = 0
@@ -616,7 +609,7 @@ func mmAuxIndexInternToLeech2(i uint32) (uint32, bool) {
 		if t == 0 || i0 == i1 || i1 > 24 {
 			return 0, false
 		}
-		v := mat24RecipBasis[i0] ^ mat24RecipBasis[i1]
+		v := mat24.RecipBasis(i0) ^ mat24.RecipBasis(i1)
 		return (v & 0xfff) + ((t - 1) << 23), true
 	} else if i < mmAuxOfsX { // tag T
 		i -= mmAuxOfsT
@@ -626,9 +619,9 @@ func mmAuxIndexInternToLeech2(i uint32) (uint32, bool) {
 		if !ok {
 			return 0, false
 		}
-		gcode := uint32(mat24OctDecTable[i0]) & 0xfff
-		gcode ^= suboctadWeight(i1) << 11
-		cocode ^= uint32(mat24ThetaTable[gcode&0x7ff]) & 0xfff
+		gcode := uint32(mat24.OctDecTable(i0)) & 0xfff
+		gcode ^= mat24.SuboctadWeight(i1) << 11
+		cocode ^= uint32(mat24.ThetaTable(gcode&0x7ff)) & 0xfff
 		return (gcode << 12) + cocode, true
 	} else if i < mmAuxOfsZ {
 		i -= mmAuxOfsX
@@ -638,9 +631,9 @@ func mmAuxIndexInternToLeech2(i uint32) (uint32, bool) {
 			return 0, false
 		}
 		cocode := vectToCocode(1 << i1)
-		theta := uint32(mat24ThetaTable[i0&0x7ff])
+		theta := uint32(mat24.ThetaTable(i0 & 0x7ff))
 		w := ((theta >> 12) & 1) ^ (i0 & cocode)
-		w = Parity12(w)
+		w = mat24.Parity12(w)
 		gcode := i0 ^ (w << 11)
 		cocode ^= theta & 0xfff
 		return (gcode << 12) + cocode, true

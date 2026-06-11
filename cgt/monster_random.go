@@ -3,6 +3,9 @@ package cgt
 import (
 	"fmt"
 	"math/rand/v2"
+
+	"patel.codes/cgt/generator"
+	"patel.codes/cgt/mat24"
 )
 
 //////////////////////////////////////////////////
@@ -16,7 +19,7 @@ import (
 // instead, matching the rest of the package, and
 // reproduces only the word-construction logic. The
 // subgroup-aware M24 machinery
-// (M24numRandLocal, M24numRandAdjustXY) already
+// (mat24.M24numRandLocal, mat24.M24numRandAdjustXY) already
 // lives in mat24.go.
 //////////////////////////////////////////////////
 
@@ -24,6 +27,12 @@ import (
 // SUBGOUP_MAP and the comment block in random_mm.py.
 // The low 7 bits (0x7f) are the M24 RAND_* flags.
 const randFlagNo = 0x20000000 // experimental subgroup marker
+
+// randMaskAll is the mask of the low 7 M24 RAND_* flags.
+// A nonzero intersection selects the shorter 5-round
+// word-construction strategy (random_mm._iter_rand_mm_:
+// n_rounds = 5 if flags & 0x7f else 8).
+const randMaskAll = 0x7f
 
 // subgroupFlags maps a subgroup name to its flag
 // mask (random_mm.SUBGOUP_MAP).
@@ -181,14 +190,14 @@ var g3Cosets = [7][2]uint32{
 func appendTagsYXDP(w []uint32, flags uint32) []uint32 {
 	// tag y
 	if flags&0x6000 == 0 {
-		y := M24numRandAdjustXY(flags, uint32(rand.IntN(0x2000)))
+		y := mat24.M24numRandAdjustXY(flags, uint32(rand.IntN(0x2000)))
 		if y != 0 {
 			w = append(w, tagY+y)
 		}
 	}
 	// tag x
 	if flags&0x2000 == 0 {
-		x := M24numRandAdjustXY(flags, uint32(rand.IntN(0x2000)))
+		x := mat24.M24numRandAdjustXY(flags, uint32(rand.IntN(0x2000)))
 		if x != 0 {
 			w = append(w, tagX+x)
 		}
@@ -216,7 +225,7 @@ func appendRandTagPi(w []uint32, flags uint32) []uint32 {
 	if flags&0x4000 != 0 {
 		return w
 	}
-	pi := M24numRandLocal(flags, uint32(rand.IntN(Mat24Order)))
+	pi := mat24.M24numRandLocal(flags, uint32(rand.IntN(mat24.Mat24Order)))
 	if pi < 0 {
 		panic("MMRand: M24numRandLocal failed")
 	}
@@ -307,7 +316,7 @@ func appendReduceType4Inv(w []uint32, c uint32) []uint32 {
 func randType4Vector() uint32 {
 	for {
 		c := uint32(rand.IntN(0x1000000))
-		if Leech2Type(c) == 4 {
+		if generator.Leech2Type(c) == 4 {
 			return c
 		}
 	}
@@ -328,13 +337,13 @@ func randCo2CosetNo() uint32 {
 		// extern index for tags B/C/T/X, so the
 		// extern→sparse→leech2 chain never fails.
 		// Even if it did, v2=0 gives v4=betaLeech2
-		// (type 2), which the Leech2Type==4 guard
+		// (type 2), which the generator.Leech2Type==4 guard
 		// rejects and the loop retries. C origin
 		// _rand_Co_2_coset_No (random_mm.py:194)
 		// also ignores the sentinel.
 		v2 := IndexSparseToLeech2(vs)
 		v4 := v2 ^ betaLeech2
-		if Leech2Type(v4) == 4 {
+		if generator.Leech2Type(v4) == 4 {
 			return v4
 		}
 	}

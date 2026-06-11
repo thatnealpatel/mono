@@ -1,5 +1,11 @@
 package cgt
 
+import (
+	"patel.codes/cgt/generator"
+	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/swar"
+)
+
 // Involution analysis for elements of G_{x0}
 // (involutions.c, xsp2co1_traces.c) and the
 // subset of the N_0 group machinery (mm_group_n.c)
@@ -126,7 +132,7 @@ func squareMat24Nonzero(m []uint64) uint64 {
 func leechTypeMod2(v uint64) uint64 {
 	x := v
 	x &= x >> 12
-	return uint64(Parity12(uint32(x)))
+	return uint64(mat24.Parity12(uint32(x)))
 }
 
 // xsp2co1InvolutionInvariants computes invariant
@@ -152,7 +158,7 @@ func xsp2co1InvolutionInvariants(elem, invar []uint64) int32 {
 	if squareMat24Nonzero(pa) != 0 {
 		return -1
 	}
-	n := Bm64EchelonH(pa, 24, 24, 24)
+	n := swar.Bm64EchelonH(pa, 24, 24, 24)
 
 	if n == 0 {
 		invar[0] = uint64(xsp2co1XspecialVector(elem)) & 0xffffff
@@ -164,9 +170,9 @@ func xsp2co1InvolutionInvariants(elem, invar []uint64) int32 {
 	}
 
 	if n == 8 {
-		Bm64RotBits(pa[8:], 16, 32, 64, 0)
+		swar.Bm64RotBits(pa[8:], 16, 32, 64, 0)
 		xsp2co1XspecialConjugate(elem, pa[8:8+16], true)
-		Bm64EchelonH(pa[8:], 16, 25, 1)
+		swar.Bm64EchelonH(pa[8:], 16, 25, 1)
 		t1 := (pa[8] >> 24) & 1
 		for i := 0; i < 8; i++ {
 			invar[int(t1)+i] = pa[i]
@@ -197,11 +203,11 @@ func xsp2co1InvolutionInvariants(elem, invar []uint64) int32 {
 	}
 
 finalEchelonize:
-	Bm64XchBits(invar, n, 12, 0x800)
-	Bm64RotBits(invar, n, 1, 12, 0)
-	Bm64EchelonH(invar, n, 27, 27)
-	Bm64RotBits(invar, n, 11, 12, 0)
-	Bm64XchBits(invar, n, 12, 0x800)
+	swar.Bm64XchBits(invar, n, 12, 0x800)
+	swar.Bm64RotBits(invar, n, 1, 12, 0)
+	swar.Bm64EchelonH(invar, n, 27, 27)
+	swar.Bm64RotBits(invar, n, 11, 12, 0)
+	swar.Bm64XchBits(invar, n, 12, 0x800)
 	invar[0] &= ((invar[0] & 0x4000000) << 2) - 1
 	return int32(n)
 }
@@ -243,20 +249,20 @@ func xsp2co1InvolutionOrthogonal(invar []uint64, col uint32) int32 {
 	for i := 0; i < n; i++ {
 		M[i] = pA[i]
 	}
-	Bm64RotBits(M[:], n, 32, 64, 0)
-	Bm64T(M[:], n, 24, T[:])
-	Bm64RotBits(M[:], n, 32, 64, 0)
-	Bm64RotBits(M[:], n, 12, 24, 0)
-	Bm64Mul(M[:], T[:], n, 24, M[:])
-	if !Bm64Inv(M[:], n) {
+	swar.Bm64RotBits(M[:], n, 32, 64, 0)
+	swar.Bm64T(M[:], n, 24, T[:])
+	swar.Bm64RotBits(M[:], n, 32, 64, 0)
+	swar.Bm64RotBits(M[:], n, 12, 24, 0)
+	swar.Bm64Mul(M[:], T[:], n, 24, M[:])
+	if !swar.Bm64Inv(M[:], n) {
 		return -1
 	}
 	vv := []uint64{v}
-	Bm64Mul(vv, M[:], 1, n, vv)
+	swar.Bm64Mul(vv, M[:], 1, n, vv)
 	// Multiply by pA reading exactly n rows. The
 	// column count is capped at n (not 24) because
-	// the preceding Bm64Mul sets v = c·J where each
-	// row of J = Bm64Inv(M, n) is an inverted n×n
+	// the preceding swar.Bm64Mul sets v = c·J where each
+	// row of J = swar.Bm64Inv(M, n) is an inverted n×n
 	// matrix row with only bits 0..n-1 set; hence
 	// bits >= n of v are zero and rows pA[n..23] are
 	// always masked out of the product. pA is invar
@@ -266,7 +272,7 @@ func xsp2co1InvolutionOrthogonal(invar []uint64, col uint32) int32 {
 	// reads 24 rows from a uint64_t invar[12] stack
 	// buffer — genuine UB, harmless for this same
 	// masking reason. See UPSTREAM.md.
-	Bm64Mul(vv, pA, 1, n, vv)
+	swar.Bm64Mul(vv, pA, 1, n, vv)
 	return int32(vv[0] & 0xffffff)
 }
 
@@ -301,7 +307,7 @@ func subFindType(a []uint32, n0, n1 int, guide uint32) uint32 {
 		for i0 := 0; i0 < n0; i0++ {
 			for i1 := n0; i1 < n2; i1++ {
 				v := a[i0] ^ a[i1]
-				if Leech2Type(v) == 4 {
+				if generator.Leech2Type(v) == 4 {
 					return v
 				}
 			}
@@ -309,7 +315,7 @@ func subFindType(a []uint32, n0, n1 int, guide uint32) uint32 {
 		return 0
 	}
 	guide &= 0xffffff
-	guideType := Leech2Type(guide)
+	guideType := generator.Leech2Type(guide)
 	if guideType == 4 {
 		for i0 := 0; i0 < n0; i0++ {
 			v := a[i0] ^ guide
@@ -325,8 +331,8 @@ func subFindType(a []uint32, n0, n1 int, guide uint32) uint32 {
 		for i0 := 0; i0 < n0; i0++ {
 			for i1 := n0; i1 < n2; i1++ {
 				v := a[i0] ^ a[i1]
-				if Leech2Type2(v^guide) != 0 {
-					w[Leech2Subtype(v)&0x7f] = v
+				if generator.Leech2Type2(v^guide) != 0 {
+					w[generator.Leech2Subtype(v)&0x7f] = v
 				}
 			}
 		}
@@ -342,7 +348,7 @@ func subFindType(a []uint32, n0, n1 int, guide uint32) uint32 {
 	for i0 := 0; i0 < n0; i0++ {
 		for i1 := n0; i1 < n2; i1++ {
 			v := a[i0] ^ a[i1]
-			w[Leech2Subtype(v)&0x7f] = v
+			w[generator.Leech2Subtype(v)&0x7f] = v
 		}
 	}
 	for i0 := 0; i0 < 6; i0++ {
@@ -409,7 +415,7 @@ func xsp2co1InvolutionFindCoset8(invar []uint64, guide uint32) int32 {
 	for i0 := 0; i0 < 16; i0++ {
 		for i1 := 0; i1 < 16; i1++ {
 			v := a0[i0] ^ a1[i1]
-			if Leech2Type2(v) != 0 && i2 < 16 {
+			if generator.Leech2Type2(v) != 0 && i2 < 16 {
 				a2[i2] = v
 				i2++
 			}
@@ -444,7 +450,7 @@ func xsp2co1ElemFindType4(elem []uint64, guide uint32) int32 {
 		return -1
 	case 9:
 		vv := xsp2co1InvolutionOrthogonal(invar[:], 0)
-		t := Leech2Type(uint32(vv))
+		t := generator.Leech2Type(uint32(vv))
 		if t == 4 {
 			return vv
 		}
@@ -461,7 +467,7 @@ func xsp2co1ElemFindType4(elem []uint64, guide uint32) int32 {
 		return -1
 	case 12:
 		vv := xsp2co1InvolutionOrthogonal(invar[:], 1)
-		t := Leech2Type(uint32(vv))
+		t := generator.Leech2Type(uint32(vv))
 		if t == 4 {
 			return vv
 		}
@@ -533,7 +539,7 @@ func xsp2co1ElemConjugateInvolution(elem []uint64, a []uint32) int32 {
 	if v == 0x1000000 {
 		return int32(0x200 + length)
 	}
-	switch Leech2Type(uint32(v)) {
+	switch generator.Leech2Type(uint32(v)) {
 	case 2:
 		l1 := genLeech2ReduceType2(uint32(v), a[length:])
 		if l1 < 0 {
@@ -643,7 +649,7 @@ func xsp2co1ElemInvolutionClass(elem []uint64) int32 {
 		if v < 0 {
 			return 0
 		}
-		return int32(vTypes[Leech2Type(uint32(v))&3])
+		return int32(vTypes[generator.Leech2Type(uint32(v))&3])
 	case 8:
 		var traces [4]int32
 		if !tracesSmallOK(elem, traces[:]) {

@@ -1,6 +1,10 @@
 package cgt
 
-import "testing"
+import (
+	"testing"
+
+	"patel.codes/cgt/generator"
+)
 
 // Tests for the type-2 Leech-lattice-mod-2 reducer
 // (xsp2_reduce.go), grounded in the canonical mmgroup
@@ -72,7 +76,7 @@ func TestGenLeech2ReduceType2(t *testing.T) {
 		{0x800481, 0x20, []uint32{0xa000ff00, 0xc0000200}, 0x1000200},
 	}
 	for _, c := range cases {
-		if got := Leech2Subtype(c.v); got != c.subtype {
+		if got := generator.Leech2Subtype(c.v); got != c.subtype {
 			t.Errorf("Leech2Subtype(%#x)=%#x want %#x", c.v, got, c.subtype)
 		}
 		var a [6]uint32
@@ -130,10 +134,10 @@ func TestGenLeech2ReduceType2Ortho(t *testing.T) {
 		{0x255, 0x20, []uint32{0xa5f35980, 0xe0000001}, 0x800200, 0x200},
 	}
 	for _, c := range cases {
-		if Leech2Type(c.v^leechBeta) != 4 {
-			t.Errorf("vector %#x is not orthogonal to beta (v^beta has type %d)", c.v, Leech2Type(c.v^leechBeta))
+		if generator.Leech2Type(c.v^leechBeta) != 4 {
+			t.Errorf("vector %#x is not orthogonal to beta (v^beta has type %d)", c.v, generator.Leech2Type(c.v^leechBeta))
 		}
-		if got := Leech2Subtype(c.v); got != c.subtype {
+		if got := generator.Leech2Subtype(c.v); got != c.subtype {
 			t.Errorf("Leech2Subtype(%#x)=%#x want %#x", c.v, got, c.subtype)
 		}
 		var a [6]uint32

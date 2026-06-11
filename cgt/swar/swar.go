@@ -1,4 +1,8 @@
-package cgt
+// Package swar provides bit-matrix primitives (the bm64
+// family from bitmatrix64.c) operating on []uint64 row
+// vectors: rotation, transposition, multiplication,
+// echelonization, and inversion.
+package swar
 
 import "math/bits"
 
@@ -12,7 +16,7 @@ import "math/bits"
 // Bm64RotBits panics if nrot+n0 exceeds 64.
 func Bm64RotBits(m []uint64, i, rot, nrot, n0 int) {
 	if nrot+n0 > 64 {
-		panic("cgt: qubit index out of range")
+		panic("swar: qubit index out of range")
 	}
 	if nrot < 2 {
 		return
@@ -50,7 +54,7 @@ func Bm64XchBits(m []uint64, i, sh int, mask uint64) {
 		return
 	}
 	if sh >= 64 || mask&(mask>>uint(sh)) != 0 {
-		panic("cgt: qubit index out of range")
+		panic("swar: qubit index out of range")
 	}
 	for k := 0; k < i; k++ {
 		v := (m[k] ^ (m[k] >> uint(sh))) & mask
@@ -64,7 +68,7 @@ func Bm64XchBits(m []uint64, i, sh int, mask uint64) {
 // Bm64ReverseBits panics if n+n0 exceeds 64.
 func Bm64ReverseBits(m []uint64, i, n, n0 int) {
 	if n+n0 > 64 {
-		panic("cgt: qubit index out of range")
+		panic("swar: qubit index out of range")
 	}
 	if n < 2 {
 		return
@@ -198,7 +202,7 @@ func Bm64EchelonL(m []uint64, i, j0, n int) int {
 // Bm64Inv panics if i exceeds 32.
 func Bm64Inv(m []uint64, i int) bool {
 	if i > 32 {
-		panic("cgt: bit matrix too large to invert")
+		panic("swar: bit matrix too large to invert")
 	}
 	if i == 0 {
 		return true

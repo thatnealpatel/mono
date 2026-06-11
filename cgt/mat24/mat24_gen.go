@@ -2,7 +2,7 @@
 //
 // Precomputed mat24 tables (derived from the Golay code).
 
-package cgt
+package mat24
 
 // mat24LsbitTable has 32 entries.
 

@@ -1,5 +1,7 @@
 package cgt
 
+import "patel.codes/cgt/generator"
+
 // This file ports the high-level surface of the Python
 // class mmgroup.general.Orbit_Lin2 (in
 // mmgroup/src/mmgroup/general/orbit_lin2.py) on top of
@@ -108,7 +110,7 @@ func (o *OrbitLin2) addGenerator(g GroupElem) {
 		panic("cgt: OrbitLin2: incompatible generator representations")
 	}
 	nGen := o.extendABuf(1)
-	UFindLin2Add(o.a, m, uint32(len(m)))
+	generator.UFindLin2Add(o.a, m, uint32(len(m)))
 	o.mapGen[nGen] = uint32(len(o.gen))
 	o.gen = append(o.gen, g)
 	o.finalized = false
@@ -122,9 +124,9 @@ func (o *OrbitLin2) initABuf(dim uint32) {
 	if maxNGen > orbitLin2MaxNGen {
 		maxNGen = orbitLin2MaxNGen
 	}
-	aSize := UFindLin2Size(dim, maxNGen)
+	aSize := generator.UFindLin2Size(dim, maxNGen)
 	o.a = make([]uint32, aSize)
-	UFindLin2Init(o.a, uint32(len(o.a)), dim, maxNGen)
+	generator.UFindLin2Init(o.a, uint32(len(o.a)), dim, maxNGen)
 	o.mapGen = make([]uint32, maxNGen)
 }
 
@@ -132,8 +134,8 @@ func (o *OrbitLin2) initABuf(dim uint32) {
 // additional generators, returning the current generator
 // count. Mirrors Orbit_Lin2._extend_a_buf.
 func (o *OrbitLin2) extendABuf(nMore uint32) uint32 {
-	nGen := uint32(UFindLin2NGen(o.a))
-	nMaxGen := uint32(UFindLin2NMaxGen(o.a))
+	nGen := uint32(generator.UFindLin2NGen(o.a))
+	nMaxGen := uint32(generator.UFindLin2NMaxGen(o.a))
 	newNGen := nGen + nMore
 	if newNGen > nMaxGen {
 		newNMaxGen := 2 * nMaxGen
@@ -144,15 +146,15 @@ func (o *OrbitLin2) extendABuf(nMore uint32) uint32 {
 			newNMaxGen = orbitLin2MaxNGen
 		}
 		if newNMaxGen < newNGen {
-			panic(lin2Panic("OrbitLin2.extendABuf", errGenUfindLin2Gen))
+			panic(generator.Lin2Panic("OrbitLin2.extendABuf", generator.ErrUFindLin2Gen))
 		}
-		newASize := UFindLin2Size(uint32(o.Dim()), newNMaxGen)
+		newASize := generator.UFindLin2Size(uint32(o.Dim()), newNMaxGen)
 		if uint32(len(o.a)) < uint32(newASize) {
 			grown := make([]uint32, newASize)
 			copy(grown, o.a)
 			o.a = grown
 		}
-		UFindLin2Pad(o.a, uint32(newASize), newNMaxGen)
+		generator.UFindLin2Pad(o.a, uint32(newASize), newNMaxGen)
 		grownMap := make([]uint32, newNMaxGen)
 		copy(grownMap, o.mapGen)
 		o.mapGen = grownMap
@@ -167,7 +169,7 @@ func (o *OrbitLin2) Dim() int {
 	if o.a == nil {
 		panic("cgt: OrbitLin2: no generators present")
 	}
-	return int(UFindLin2Dim(o.a))
+	return int(generator.UFindLin2Dim(o.a))
 }
 
 // Generators returns the list of generators of the group.
@@ -181,7 +183,7 @@ func (o *OrbitLin2) Generators() []GroupElem {
 // generators are present. Mirrors Orbit_Lin2.n_orbits.
 func (o *OrbitLin2) NOrbits() int {
 	o.requireA()
-	return int(UFindLin2NOrbits(o.a))
+	return int(generator.UFindLin2NOrbits(o.a))
 }
 
 // OrbitLin2RepresentativesResult holds the result of
@@ -198,11 +200,11 @@ type OrbitLin2RepresentativesResult struct {
 // sizes. Mirrors Orbit_Lin2.representatives.
 func (o *OrbitLin2) Representatives() OrbitLin2RepresentativesResult {
 	o.requireA()
-	n := uint32(UFindLin2NOrbits(o.a))
+	n := uint32(generator.UFindLin2NOrbits(o.a))
 	reps := make([]uint32, n)
-	UFindLin2Representatives(o.a, reps, n)
+	generator.UFindLin2Representatives(o.a, reps, n)
 	sizes := make([]uint32, n)
-	UFindLin2OrbitLengths(o.a, sizes, n)
+	generator.UFindLin2OrbitLengths(o.a, sizes, n)
 	return OrbitLin2RepresentativesResult{Reps: reps, Sizes: sizes}
 }
 
@@ -211,23 +213,23 @@ func (o *OrbitLin2) Representatives() OrbitLin2RepresentativesResult {
 // Orbit_Lin2.orbit_rep.
 func (o *OrbitLin2) OrbitRep(v int) int {
 	o.requireA()
-	return int(UFindLin2RepV(o.a, uint32(v)))
+	return int(generator.UFindLin2RepV(o.a, uint32(v)))
 }
 
 // OrbitSize returns the size of the orbit of the vector v.
 // Mirrors Orbit_Lin2.orbit_size.
 func (o *OrbitLin2) OrbitSize(v int) int {
 	o.requireA()
-	return int(UFindLin2LenOrbitV(o.a, uint32(v)))
+	return int(generator.UFindLin2LenOrbitV(o.a, uint32(v)))
 }
 
 // Orbit returns the orbit of the vector v as a slice of
 // vectors (encoded as integers). Mirrors Orbit_Lin2.orbit.
 func (o *OrbitLin2) Orbit(v int) []uint32 {
 	o.requireA()
-	size := uint32(UFindLin2LenOrbitV(o.a, uint32(v)))
+	size := uint32(generator.UFindLin2LenOrbitV(o.a, uint32(v)))
 	r := make([]uint32, size)
-	UFindLin2OrbitV(o.a, uint32(v), r, size)
+	generator.UFindLin2OrbitV(o.a, uint32(v), r, size)
 	return r
 }
 
@@ -236,7 +238,7 @@ func (o *OrbitLin2) Orbit(v int) []uint32 {
 // transformation rho(g). Mirrors Orbit_Lin2.mul_v_g.
 func (o *OrbitLin2) MulVG(v int, g GroupElem) int {
 	m := o.mapFn(g)
-	return int(UFindLin2MulAffine(uint32(v), m, uint32(o.Dim())))
+	return int(generator.UFindLin2MulAffine(uint32(v), m, uint32(o.Dim())))
 }
 
 // OrbitLin2WordEntry is one entry of the word returned by
@@ -316,13 +318,13 @@ func (o *OrbitLin2) mapVWordA(v int, img int) []uint32 {
 	var g []uint8
 	for {
 		buf := make([]uint8, mSize)
-		res := lin2MapV(o.a, uint32(v), buf, mSize)
+		res := generator.UFindLin2MapVRaw(o.a, uint32(v), buf, mSize)
 		if res >= 0 {
 			g = buf[:res]
 			break
 		}
-		if res != errGenUfindOutShort || mSize >= 1<<uint(o.Dim()) {
-			panic(lin2Panic("OrbitLin2.mapVWordA", res))
+		if res != generator.ErrUFindOutShort || mSize >= 1<<uint(o.Dim()) {
+			panic(generator.Lin2Panic("OrbitLin2.mapVWordA", res))
 		}
 		mSize <<= 1
 	}
@@ -353,7 +355,7 @@ func (o *OrbitLin2) finalize() {
 	if o.a == nil {
 		panic("cgt: OrbitLin2: no generators present")
 	}
-	UFindLin2Finalize(o.a)
+	generator.UFindLin2Finalize(o.a)
 	if o.finalized {
 		return
 	}
@@ -379,14 +381,14 @@ func (o *OrbitLin2) requireA() {
 // Orbit_Lin2.compress.
 func (o *OrbitLin2) Compress(orbits []int) *OrbitLin2 {
 	o.requireA()
-	nGen := uint32(UFindLin2NGen(o.a))
+	nGen := uint32(generator.UFindLin2NGen(o.a))
 	oo := make([]uint32, len(orbits))
 	for i, v := range orbits {
 		oo[i] = uint32(v)
 	}
-	lc := uint32(UFindLin2CompressedSize(o.a, oo, uint32(len(oo))))
+	lc := uint32(generator.UFindLin2CompressedSize(o.a, oo, uint32(len(oo))))
 	c := make([]uint32, lc)
-	lc = uint32(UFindLin2Compress(o.a, oo, uint32(len(oo)), c, lc))
+	lc = uint32(generator.UFindLin2Compress(o.a, oo, uint32(len(oo)), c, lc))
 	res := &OrbitLin2{
 		a:      c[:lc],
 		gen:    append([]GroupElem(nil), o.gen...),

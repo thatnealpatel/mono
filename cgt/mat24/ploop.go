@@ -1,4 +1,4 @@
-package cgt
+package mat24
 
 import "fmt"
 
@@ -46,20 +46,31 @@ type GCode struct {
 func NewGCode(obj any) GCode {
 	switch v := obj.(type) {
 	case int:
-		return GCode{uint16(v) & 0xfff}
+		return GCodeFromInt(v)
 	case GCode:
 		return GCode{v.value & 0xfff}
 	case PLoop:
 		return GCode{v.value & 0xfff}
 	case []int:
-		var vect uint32
-		for _, x := range v {
-			vect ^= 1 << uint(x)
-		}
-		return GCode{gcodeFromVect24(vect)}
+		return GCodeFromBitList(v)
 	default:
 		panic(fmt.Sprintf("NewGCode: unsupported type %T", obj))
 	}
+}
+
+// GCodeFromInt builds a Golay code word from its
+// code word number n, reduced to 0 <= n < 0x1000.
+func GCodeFromInt(n int) GCode { return GCode{uint16(n) & 0xfff} }
+
+// GCodeFromBitList builds a Golay code word from a
+// list of bit positions, corrected to the nearest
+// code word.
+func GCodeFromBitList(bits []int) GCode {
+	var vect uint32
+	for _, x := range bits {
+		vect ^= 1 << uint(x)
+	}
+	return GCode{gcodeFromVect24(vect)}
 }
 
 // Ord returns the Golay code word number, with
@@ -150,18 +161,28 @@ type Cocode struct {
 func NewCocode(obj any) Cocode {
 	switch v := obj.(type) {
 	case int:
-		return Cocode{uint16(v) & 0xfff}
+		return CocodeFromInt(v)
 	case Cocode:
 		return Cocode{v.value}
 	case []int:
-		var vect uint32
-		for _, x := range v {
-			vect ^= 1 << uint(x)
-		}
-		return Cocode{cocodeFromVect24(vect)}
+		return CocodeFromBitList(v)
 	default:
 		panic(fmt.Sprintf("NewCocode: unsupported type %T", obj))
 	}
+}
+
+// CocodeFromInt builds a cocode element from its
+// number n, reduced to 0 <= n < 0x1000.
+func CocodeFromInt(n int) Cocode { return Cocode{uint16(n) & 0xfff} }
+
+// CocodeFromBitList builds a cocode element from a
+// list of bit positions.
+func CocodeFromBitList(bits []int) Cocode {
+	var vect uint32
+	for _, x := range bits {
+		vect ^= 1 << uint(x)
+	}
+	return Cocode{cocodeFromVect24(vect)}
 }
 
 // Ord returns the cocode element number, with
@@ -233,20 +254,31 @@ type PLoop struct {
 func NewPLoop(obj any) PLoop {
 	switch v := obj.(type) {
 	case int:
-		return PLoop{uint16(v) & 0x1fff}
+		return PLoopFromInt(v)
 	case PLoop:
 		return PLoop{v.value & 0x1fff}
 	case GCode:
 		return PLoop{v.value & 0xfff}
 	case []int:
-		var vect uint32
-		for _, x := range v {
-			vect ^= 1 << uint(x)
-		}
-		return PLoop{gcodeFromVect24(vect)}
+		return PLoopFromBitList(v)
 	default:
 		panic(fmt.Sprintf("NewPLoop: unsupported type %T", obj))
 	}
+}
+
+// PLoopFromInt builds a Parker loop element from
+// its number n, reduced to 0 <= n < 0x2000.
+func PLoopFromInt(n int) PLoop { return PLoop{uint16(n) & 0x1fff} }
+
+// PLoopFromBitList builds a positive Parker loop
+// element from a list of bit positions, corrected
+// to the nearest code word.
+func PLoopFromBitList(bits []int) PLoop {
+	var vect uint32
+	for _, x := range bits {
+		vect ^= 1 << uint(x)
+	}
+	return PLoop{gcodeFromVect24(vect)}
 }
 
 // PLoopZ returns the central element
@@ -473,6 +505,19 @@ func NewAutPL(d, p any) *AutPL {
 	}
 
 	return newAutPLFromNumbers(cocode, permNum)
+}
+
+// AutPLFromCocodePermNum builds a Parker loop
+// automorphism from a cocode element number and an
+// M24 permutation number.
+//
+// AutPLFromCocodePermNum panics if permNum is out
+// of range.
+func AutPLFromCocodePermNum(cocode int, permNum uint32) *AutPL {
+	if permNum >= Mat24Order {
+		panic("AutPLFromCocodePermNum: permutation number out of range")
+	}
+	return newAutPLFromNumbers(uint16(cocode)&0xfff, permNum)
 }
 
 // newAutPLFromNumbers builds an AutPL from its

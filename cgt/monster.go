@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"patel.codes/cgt/mat24"
 )
 
 // MM is an element of the monster group,
@@ -71,26 +73,26 @@ const (
 // matches the C idiom MAT24_THETA_TABLE[v&0x7ff] &
 // 0x1000.
 func theta1000(v uint32) uint32 {
-	return uint32(mat24ThetaTable[v&0x7ff]) & 0x1000
+	return uint32(mat24.ThetaTable(v&0x7ff)) & 0x1000
 }
 
 // nPlInvAutpl returns f with
 // f = (x_delta x_pi)^-1 e (x_delta x_pi) for e in
-// PL, delta in C*, pi in AutPL. Mirrors C
+// PL, delta in C*, pi in mat24.AutPL. Mirrors C
 // mm_group_op_pl_inv_autpl.
 func nPlInvAutpl(e, delta, pi uint32) uint32 {
 	e &= 0x1fff
-	if pi == 0 || pi >= Mat24Order {
-		return e ^ (ScalarProd(e, delta) << 12)
+	if pi == 0 || pi >= mat24.Mat24Order {
+		return e ^ (mat24.ScalarProd(e, delta) << 12)
 	}
-	perm := M24numToPerm(pi)
-	_, invAutpl := PermToIautpl(delta, perm)
-	return OpPloopAutpl(e, invAutpl)
+	perm := mat24.M24numToPerm(pi)
+	_, invAutpl := mat24.PermToIautpl(delta, perm)
+	return mat24.OpPloopAutpl(e, invAutpl)
 }
 
 // nMulDeltaPi puts g = g * x_delta x_pi.
 func nMulDeltaPi(g *N0Elem, delta, pi uint32) {
-	if pi >= Mat24Order {
+	if pi >= mat24.Mat24Order {
 		pi = 0
 	}
 	delta &= 0xfff
@@ -99,74 +101,74 @@ func nMulDeltaPi(g *N0Elem, delta, pi uint32) {
 		g[iPi] = pi
 		g[iD] ^= delta
 	case pi == 0:
-		perm := M24numToPerm(g[iPi])
-		invPerm := InvPerm(perm)
-		delta = OpCocodePerm(delta, invPerm)
+		perm := mat24.M24numToPerm(g[iPi])
+		invPerm := mat24.InvPerm(perm)
+		delta = mat24.OpCocodePerm(delta, invPerm)
 		g[iD] ^= delta
 	default:
-		perm1 := M24numToPerm(g[iPi])
-		aut1 := PermToAutpl(g[iD], perm1)
-		perm2 := M24numToPerm(pi)
-		aut2 := PermToAutpl(delta, perm2)
-		aut3 := MulAutpl(aut1, aut2)
-		g[iD] = AutplToCocode(aut3)
-		perm1 = AutplToPerm(aut3)
-		g[iPi] = PermToM24num(perm1)
+		perm1 := mat24.M24numToPerm(g[iPi])
+		aut1 := mat24.PermToAutpl(g[iD], perm1)
+		perm2 := mat24.M24numToPerm(pi)
+		aut2 := mat24.PermToAutpl(delta, perm2)
+		aut3 := mat24.MulAutpl(aut1, aut2)
+		g[iD] = mat24.AutplToCocode(aut3)
+		perm1 = mat24.AutplToPerm(aut3)
+		g[iPi] = mat24.PermToM24num(perm1)
 	}
 }
 
 // nMulInvDeltaPi puts g = g * (x_delta x_pi)^-1.
 func nMulInvDeltaPi(g *N0Elem, delta, pi uint32) {
-	if pi >= Mat24Order {
+	if pi >= mat24.Mat24Order {
 		pi = 0
 	}
 	delta &= 0xfff
 	if pi == 0 {
 		if g[iPi] != 0 {
-			perm := M24numToPerm(g[iPi])
-			invPerm := InvPerm(perm)
-			delta = OpCocodePerm(delta, invPerm)
+			perm := mat24.M24numToPerm(g[iPi])
+			invPerm := mat24.InvPerm(perm)
+			delta = mat24.OpCocodePerm(delta, invPerm)
 		}
 		g[iD] ^= delta
 		return
 	}
-	perm2 := M24numToPerm(pi)
-	invPerm2, aut2 := PermToIautpl(delta, perm2)
+	perm2 := mat24.M24numToPerm(pi)
+	invPerm2, aut2 := mat24.PermToIautpl(delta, perm2)
 	_ = invPerm2
 	var perm1 []byte
 	if g[iPi] == 0 {
-		g[iD] ^= AutplToCocode(aut2)
-		perm1 = AutplToPerm(aut2)
+		g[iD] ^= mat24.AutplToCocode(aut2)
+		perm1 = mat24.AutplToPerm(aut2)
 	} else {
-		perm1 = M24numToPerm(g[iPi])
-		aut1 := PermToAutpl(g[iD], perm1)
-		aut3 := MulAutpl(aut1, aut2)
-		g[iD] = AutplToCocode(aut3)
-		perm1 = AutplToPerm(aut3)
+		perm1 = mat24.M24numToPerm(g[iPi])
+		aut1 := mat24.PermToAutpl(g[iD], perm1)
+		aut3 := mat24.MulAutpl(aut1, aut2)
+		g[iD] = mat24.AutplToCocode(aut3)
+		perm1 = mat24.AutplToPerm(aut3)
 	}
-	g[iPi] = PermToM24num(perm1)
+	g[iPi] = mat24.PermToM24num(perm1)
 }
 
 // nMulX puts g = g * x_e.
 func nMulX(g *N0Elem, e uint32) {
 	e = nPlInvAutpl(e, g[iD], g[iPi])
-	g[iD] ^= PloopCap(g[iX], e)
-	g[iX] ^= e ^ (PloopCocycle(g[iX], e) << 12)
+	g[iD] ^= mat24.PloopCap(g[iX], e)
+	g[iX] ^= e ^ (mat24.PloopCocycle(g[iX], e) << 12)
 }
 
 // nMulY puts g = g * y_f.
 func nMulY(g *N0Elem, f uint32) {
 	f = nPlInvAutpl(f, g[iD], g[iPi])
-	signC := PloopComm(g[iX], f)
-	signY := PloopCocycle(g[iY], f) ^ signC
-	signX := PloopAssoc(g[iX], g[iY], f) ^ signC
+	signC := mat24.PloopComm(g[iX], f)
+	signY := mat24.PloopCocycle(g[iY], f) ^ signC
+	signX := mat24.PloopAssoc(g[iX], g[iY], f) ^ signC
 	if g[iD]&0x800 != 0 { // g1 is odd
-		signX ^= PloopCocycle(g[iX], f)
+		signX ^= mat24.PloopCocycle(g[iX], f)
 		f ^= theta1000(f)
-		g[iD] ^= PloopCap(g[iY], f)
+		g[iD] ^= mat24.PloopCap(g[iY], f)
 		g[iX] ^= f ^ (signX << 12)
 	} else { // g1 is even
-		g[iD] ^= PloopCap(g[iX]^g[iY], f)
+		g[iD] ^= mat24.PloopCap(g[iX]^g[iY], f)
 		g[iX] ^= signX << 12
 	}
 	g[iY] ^= f ^ (signY << 12)
@@ -184,14 +186,14 @@ func nMulT(g *N0Elem, t uint32) {
 		a1 = g[iY]
 		a1 ^= theta1000(a1)
 		b1 = g[iX] ^ a1
-		a1 ^= PloopComm(g[iX], g[iY]) << 12
-		b1 ^= PloopCocycle(g[iX], g[iY]) << 12
+		a1 ^= mat24.PloopComm(g[iX], g[iY]) << 12
+		b1 ^= mat24.PloopCocycle(g[iX], g[iY]) << 12
 	} else { // (-1)^parity(g1) * t = 2 (mod 3)
 		b1 = g[iX]
 		b1 ^= theta1000(b1)
 		a1 = g[iY] ^ b1
-		b1 ^= PloopComm(g[iX], g[iY]) << 12
-		a1 ^= PloopCocycle(g[iX], g[iY]) << 12
+		b1 ^= mat24.PloopComm(g[iX], g[iY]) << 12
+		a1 ^= mat24.PloopCocycle(g[iX], g[iY]) << 12
 	}
 	t = g[iT] + 3 - t
 	g[iT] = ((t + (t >> 2)) & 3) - 1
@@ -459,7 +461,7 @@ func nConjToQx0(g []uint32) int32 {
 	for {
 		if (g1[iY] | g1[iT]) == 0 {
 			x := g1[iX] & 0x1fff
-			x = (x << 12) ^ (uint32(mat24ThetaTable[x&0x7ff]) & 0xfff)
+			x = (x << 12) ^ (uint32(mat24.ThetaTable(x&0x7ff)) & 0xfff)
 			x ^= g1[iD] & 0xfff
 			return int32(x + (e << 25))
 		}
@@ -717,11 +719,11 @@ func iterAtom(out []uint32, tag byte, value string) ([]uint32, error) {
 		}
 		return append(out, tagD+(v&0xfff)), nil
 	case 'p':
-		v, err := atomIndex(value, Mat24Order-1)
+		v, err := atomIndex(value, mat24.Mat24Order-1)
 		if err != nil {
 			return nil, err
 		}
-		if v >= Mat24Order {
+		if v >= mat24.Mat24Order {
 			return nil, fmt.Errorf("tag p: bad permutation number %d", v)
 		}
 		return append(out, tagP+v), nil
@@ -731,7 +733,7 @@ func iterAtom(out []uint32, tag byte, value string) ([]uint32, error) {
 			return nil, err
 		}
 		if tag == 'z' {
-			pl := PowPloop(v, 3)
+			pl := mat24.PowPloop(v, 3)
 			out = append(out, tagX+pl)
 			out = append(out, tagY+pl)
 			return out, nil
@@ -753,7 +755,7 @@ func iterAtom(out []uint32, tag byte, value string) ([]uint32, error) {
 			return nil, err
 		}
 		d := (v >> 12) & 0x1fff
-		delta := (v ^ PloopTheta(d)) & 0xfff
+		delta := (v ^ mat24.PloopTheta(d)) & 0xfff
 		out = append(out, tagX+d)
 		out = append(out, tagD+delta)
 		return out, nil
@@ -1685,7 +1687,7 @@ func orderVector15() *MMVector {
 //////////////////////////////////////////////////
 
 // axisV15 is the standard 2A axis v^+ of the
-// involution x_beta, beta = Cocode([2,3]), in the
+// involution x_beta, beta = mat24.Cocode([2,3]), in the
 // representation mod 15.
 const axisV15 = "A_2_2 - A_3_2 + A_3_3 - 2*B_3_2"
 

@@ -1,6 +1,10 @@
 package cgt
 
-import "errors"
+import (
+	"errors"
+
+	"patel.codes/cgt/generator"
+)
 
 // gen_leech2.go holds the field-independent helpers
 // that the generated word-ABC operation (genOpWordABC
@@ -67,7 +71,7 @@ func genLeech2MapStdSubframe(g []uint32, length int, a []uint32) int {
 	for i := 0; i < 3*nOpsMapStdSubframe; i += 3 {
 		op1 := a[tableOpMapStdSubframe[i]]
 		op2 := a[tableOpMapStdSubframe[i+1]]
-		a[tableOpMapStdSubframe[i+2]] = Leech2Mul(op1, op2)
+		a[tableOpMapStdSubframe[i+2]] = generator.Leech2Mul(op1, op2)
 	}
 
 	a[0] = q[11]
@@ -150,7 +154,7 @@ func genExtractBC(p int, vIn []uint64, a []uint32, vOut []uint64) error {
 			genWriteEntry24(s, vOut, bs, i, j, val)
 			genWriteEntry24(s, vOut, bs, j, i, val)
 
-			c = Leech2Mul(a[0], a[j])
+			c = generator.Leech2Mul(a[0], a[j])
 			val, ok = genSubframeValue(s, p, vIn, c)
 			if !ok {
 				return errExtractBC
@@ -159,7 +163,7 @@ func genExtractBC(p int, vIn []uint64, a []uint32, vOut []uint64) error {
 			genWriteEntry24(s, vOut, cs, j, i, val)
 
 			if j > i+1 {
-				a[j] = Leech2Mul(a[i+1], a[j])
+				a[j] = generator.Leech2Mul(a[i+1], a[j])
 			}
 		}
 	}

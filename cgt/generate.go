@@ -13,7 +13,7 @@ package cgt
 // directory, then steps into the hidden dirs via `go run -C`.
 
 // Derived tables (verified against checked-in goldens by _gen):
-//go:generate go run -C _gen . -out ../mat24_gen.go
+//go:generate go run -C _gen . -out ../mat24/mat24_gen.go
 //go:generate go run -C _gen . -out ../mm_op_xi_gen.go
 //go:generate go run -C _gen . -out ../mm_op_p_gen.go
 //go:generate go run -C _gen . -out ../monster_order_gen.go

@@ -5,6 +5,8 @@ import (
 	"math"
 	"math/bits"
 	"math/rand"
+
+	"patel.codes/cgt/swar"
 )
 
 // errQNotSymmetric indicates the Q (quadratic
@@ -1159,7 +1161,7 @@ func scanAffine(bmap []uint64, n int, s *qs12) {
 	}
 	s.grow(maxlen + 1)
 	m := s.data
-	m0 := uint64(Bm64FindLowBit(bmap, 0, 2*maxlen) >> 1)
+	m0 := uint64(swar.Bm64FindLowBit(bmap, 0, 2*maxlen) >> 1)
 	if m0 >= uint64(maxlen) {
 		s.nrows = 0
 		return
@@ -1170,7 +1172,7 @@ func scanAffine(bmap []uint64, n int, s *qs12) {
 		if mask&m0 == 0 {
 			imin := int((m0 & -mask) + mask)
 			imax := imin + int(mask)
-			imin = Bm64FindLowBit(bmap, imin<<1, imax<<1) >> 1
+			imin = swar.Bm64FindLowBit(bmap, imin<<1, imax<<1) >> 1
 			if imin < imax {
 				m[rows] = uint64(imin) ^ m0
 				rows++
@@ -1179,14 +1181,14 @@ func scanAffine(bmap []uint64, n int, s *qs12) {
 	}
 	for ; mask < uint64(1)<<uint(n); mask <<= 1 {
 		imax := int(mask << 1)
-		imin := Bm64FindLowBit(bmap, int(mask)<<1, imax<<1) >> 1
+		imin := swar.Bm64FindLowBit(bmap, int(mask)<<1, imax<<1) >> 1
 		if imin < imax {
 			m[rows] = uint64(imin) ^ m0
 			rows++
 		}
 	}
 	m[0] = m0 | uint64(maxlen)
-	Bm64EchelonH(m, rows, n+1, n+1)
+	swar.Bm64EchelonH(m, rows, n+1, n+1)
 	s.nrows = rows
 	m[0] &^= uint64(maxlen)
 }
@@ -1480,7 +1482,7 @@ func qsProduct(s1, s2 *qs12, nqb, nc int) *qs12 {
 func qsMatT(s *qs12) {
 	nqb := s.ncols - s.shape1
 	s.shape1 = nqb
-	Bm64RotBits(s.data, s.nrows, nqb, s.ncols, 0)
+	swar.Bm64RotBits(s.data, s.nrows, nqb, s.ncols, 0)
 	s.reduced = false
 }
 
@@ -1503,7 +1505,7 @@ func qsMatmul(s1, s2 *qs12) *qs12 {
 	}
 	a := s1.copy()
 	b := s2.copy()
-	Bm64RotBits(a.data, a.nrows, -nqb, a.ncols, 0)
+	swar.Bm64RotBits(a.data, a.nrows, -nqb, a.ncols, 0)
 	a.reduced = false
 	qsProductInto(a, b, nqb, nqb)
 	a.shape1 = cols
@@ -1738,26 +1740,33 @@ func qsMatInv(s *qs12) {
 *** Symplectic and Pauli conjugation (qmatrix12.c)
 *************************************************************************/
 
-// qsToSymplectic returns the 2k x 2k symplectic
-// bit matrix of the conjugation action of s on
-// the Pauli group. It panics if s is not an
-// invertible (k,k) matrix.
-func qsToSymplectic(s *qs12) []uint64 {
+// qsSymplecticPrep reduces s, checks that it is an
+// invertible (k,k) state, and builds the working
+// bit matrix m holding rows 1..nrows-1 of s. It
+// returns m (length 2*qsMaxCols/3+1), dRows =
+// s.nrows-1 and k = s.shape1. The high-order
+// invertibility check on the first k columns is
+// applied. Callers handle the k == 0 case (m is
+// unused then) with their own zero value before the
+// shared echelon step; this is the preamble common
+// to qsToSymplectic and qsToSymplecticRow.
+//
+// qsSymplecticPrep panics if s is not an invertible
+// (k,k) matrix or is too large for the qstate buffer.
+func qsSymplecticPrep(s *qs12) (m []uint64, dRows, k int) {
 	qsReduce(s)
-	k := s.shape1
+	k = s.shape1
 	if 2*k != s.ncols || s.nrows <= k {
 		panic("cgt: matrix is not invertible")
 	}
-	dRows := s.nrows - 1
+	dRows = s.nrows - 1
 	if k > qsMaxCols/3 || dRows > 2*qsMaxCols/3 {
 		panic("cgt: quadratic state too large")
 	}
-	pA := make([]uint64, 2*k)
+	m = make([]uint64, 2*qsMaxCols/3+1)
 	if k == 0 {
-		return pA
+		return m, dRows, k
 	}
-	m := make([]uint64, 2*qsMaxCols/3+1)
-	at := make([]uint64, qsMaxCols/3+1)
 	var v uint64
 	mask := uint64(1) << uint(2*k-1)
 	for j := 0; j < dRows; j++ {
@@ -1768,23 +1777,38 @@ func qsToSymplectic(s *qs12) []uint64 {
 	if (v>>uint(k))&mask != 0 {
 		panic("cgt: matrix is not invertible")
 	}
-	Bm64T(m, dRows, k, at)
+	return m, dRows, k
+}
+
+// qsToSymplectic returns the 2k x 2k symplectic
+// bit matrix of the conjugation action of s on
+// the Pauli group. It panics if s is not an
+// invertible (k,k) matrix.
+func qsToSymplectic(s *qs12) []uint64 {
+	m, dRows, k := qsSymplecticPrep(s)
+	pA := make([]uint64, 2*k)
+	if k == 0 {
+		return pA
+	}
+	at := make([]uint64, qsMaxCols/3+1)
+	mask := (uint64(1) << uint(k)) - 1
+	swar.Bm64T(m, dRows, k, at)
 	for j := 0; j < k; j++ {
 		pA[j] = at[j] & mask
 		at[j] >>= uint(k)
 	}
-	Bm64XchBits(m, dRows, 2*k+1, (1<<uint(k))-1)
-	res := Bm64EchelonL(m, dRows, 2*k+1, dRows)
+	swar.Bm64XchBits(m, dRows, 2*k+1, (1<<uint(k))-1)
+	res := swar.Bm64EchelonL(m, dRows, 2*k+1, dRows)
 	if res != dRows {
 		panic("cgt: matrix is not invertible")
 	}
-	Bm64Mul(at, m[k:], k, dRows-k, at)
+	swar.Bm64Mul(at, m[k:], k, dRows-k, at)
 	mask = (uint64(1) << uint(2*k)) - 1
 	for j := 0; j < k; j++ {
 		pA[j] = (pA[j] ^ at[j]) & mask
 		pA[k+j] = m[j] & mask
 	}
-	Bm64ReverseBits(pA, 2*k, k, 0)
+	swar.Bm64ReverseBits(pA, 2*k, k, 0)
 	return pA
 }
 
@@ -1794,7 +1818,7 @@ func qsToSymplectic(s *qs12) []uint64 {
 func qsPauliConjugateNoArg(s *qs12, v []uint64) []uint64 {
 	m := qsToSymplectic(s)
 	out := make([]uint64, len(v))
-	Bm64Mul(v, m, len(v), len(m), out)
+	swar.Bm64Mul(v, m, len(v), len(m), out)
 	return out
 }
 
@@ -1818,7 +1842,7 @@ func qsPauliConjugate(s *qs12, v []uint64) []uint64 {
 	}
 	m := q.data
 	aT := make([]uint64, 2*qsMaxCols/3+1)
-	Bm64T(m, q.nrows, q.ncols, aT)
+	swar.Bm64T(m, q.nrows, q.ncols, aT)
 	for j := 0; j < q.ncols; j++ {
 		aT[j] <<= uint(q.ncols)
 	}
@@ -2043,7 +2067,7 @@ func RowMonomialMatrix(data []uint64) *QState {
 	nqb := len(data) - 1
 	q := ColumnMonomialMatrix(data)
 	s := q.toQS12()
-	Bm64RotBits(s.data, s.nrows, nqb, 2*nqb, 0)
+	swar.Bm64RotBits(s.data, s.nrows, nqb, 2*nqb, 0)
 	s.reduced = false
 	q.store(s)
 	return q
@@ -2237,7 +2261,7 @@ func (q *QState) RotBits(rot, nrot, start int) *QState {
 	}
 	if nrot >= 2 {
 		s.reduced = false
-		Bm64RotBits(s.data, s.nrows, rot, nrot, start)
+		swar.Bm64RotBits(s.data, s.nrows, rot, nrot, start)
 	}
 	q.store(s)
 	return q
@@ -2252,7 +2276,7 @@ func (q *QState) XchBits(sh int, mask uint64) *QState {
 		if sh >= s.ncols || mask&((mask|(^uint64(0)<<uint(s.ncols)))>>uint(sh)) != 0 {
 			panic("cgt: qubit index out of range")
 		}
-		Bm64XchBits(s.data, s.nrows, sh, mask)
+		swar.Bm64XchBits(s.data, s.nrows, sh, mask)
 	}
 	q.store(s)
 	return q

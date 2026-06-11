@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"patel.codes/cgt/generator"
 )
 
 // newData allocates the backing slice for a vector
@@ -79,7 +81,15 @@ func tupleToSparse(p int, t Tuple) []uint32 {
 	case TagT:
 		return []uint32{mmSpaceTagT + i0*0x4000 + i1*0x100 + sc(t.Factor)}
 	case TagX, TagZ, TagY:
-		off := map[Tag]uint32{TagX: mmSpaceTagX, TagZ: mmSpaceTagZ, TagY: mmSpaceTagY}[t.Tag]
+		var off uint32
+		switch t.Tag {
+		case TagX:
+			off = mmSpaceTagX
+		case TagZ:
+			off = mmSpaceTagZ
+		default: // TagY
+			off = mmSpaceTagY
+		}
 		return []uint32{off + i0*0x4000 + i1*0x100 + sc(t.Factor)}
 	default:
 		panic(fmt.Sprintf("cgt: bad tag %d", t.Tag))
@@ -197,7 +207,7 @@ func FromSparse(p int, sparse []uint32) *MMVector {
 func RandVector(p int) *MMVector {
 	checkP(p)
 	v := &MMVector{p: p, data: newData(p)}
-	randomMMV(p, NewRng(), v.data)
+	randomMMV(p, generator.NewRng(), v.data)
 	return v
 }
 
@@ -212,14 +222,14 @@ func RandVector(p int) *MMVector {
 func RandVectorSeed(p int, seedNo uint64) *MMVector {
 	checkP(p)
 	v := &MMVector{p: p, data: newData(p)}
-	randomMMV(p, NewRngSeed(seedNo), v.data)
+	randomMMV(p, generator.NewRngSeed(seedNo), v.data)
 	return v
 }
 
 // randomMMV fills the internal-representation vector
 // mv modulo p with uniform random entries drawn from
 // rng. C mm_aux_random_mmv.
-func randomMMV(p int, rng *Rng, mv []uint64) {
+func randomMMV(p int, rng *generator.Rng, mv []uint64) {
 	// b1 doubles as the per-block byte scratch and as
 	// the expand target for the tag-A/B/C block; C uses
 	// uint8_t b1[3072].

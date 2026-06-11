@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"math/bits"
 	"math/rand/v2"
+
+	"patel.codes/cgt/generator"
+	"patel.codes/cgt/mat24"
+	"patel.codes/cgt/swar"
 )
 
 // XLeech2 is an element of the group Q_{x0},
@@ -53,15 +57,15 @@ func NewXLeech2Copy(x *XLeech2) *XLeech2 {
 // x_d * x_delta of Q_{x0}, where d is the Parker
 // loop element and c the Golay cocode element. c
 // may be nil, denoting the trivial cocode element.
-// It mirrors XLeech2(PLoop, Cocode).
+// It mirrors XLeech2(mat24.PLoop, mat24.Cocode).
 //
 // NewXLeech2FromPLoop panics if d is nil.
-func NewXLeech2FromPLoop(d *PLoop, c *Cocode) *XLeech2 {
+func NewXLeech2FromPLoop(d *mat24.PLoop, c *mat24.Cocode) *XLeech2 {
 	if d == nil {
 		panic("NewXLeech2FromPLoop: nil PLoop")
 	}
 	pv := uint32(d.Ord()) & 0x1fff
-	val := (pv << 12) ^ PloopTheta(pv)
+	val := (pv << 12) ^ mat24.PloopTheta(pv)
 	if c != nil {
 		val ^= uint32(c.Ord()) & 0xfff
 	}
@@ -109,7 +113,7 @@ func RandXleech2Type(vtype int) uint32 {
 	case 3, 4:
 		for i := 0; i < 1000; i++ {
 			v := uint32(rand.IntN(0x2000000)) // randint(0, 0x1ffffff)
-			if int(Leech2Type(v)) == vtype {
+			if int(generator.Leech2Type(v)) == vtype {
 				return v
 			}
 		}
@@ -169,7 +173,7 @@ func MMToQX0(g *MM) uint32 {
 		tag := (atom >> 28) & 0x0f
 		switch {
 		case res == 0 && tag == 3:
-			res = ((atom & 0x1fff) << 12) ^ PloopTheta(atom)
+			res = ((atom & 0x1fff) << 12) ^ mat24.PloopTheta(atom)
 		case tag == 1:
 			res ^= atom & 0xfff
 		case tag != 0:
@@ -242,14 +246,14 @@ func (x XLeech2) Ord() uint32 {
 // Type returns the type of the corresponding
 // Leech lattice mod 2 vector (0, 2, 3, or 4).
 func (x XLeech2) Type() uint32 {
-	return Leech2Type(x.ord)
+	return generator.Leech2Type(x.ord)
 }
 
 // Subtype returns the packed subtype (same as
 // gen_leech2_subtype). Python .subtype unpacks to
 // a tuple.
 func (x XLeech2) Subtype() uint32 {
-	return Leech2Subtype(x.ord)
+	return generator.Leech2Subtype(x.ord)
 }
 
 // Bitvector returns the 24 coordinates of the
@@ -269,7 +273,7 @@ func (x XLeech2) Bitvector() []byte {
 // are in Leech lattice encoding.
 func Leech2Scalprod(a, b uint32) uint32 {
 	scalar := (((a >> 12) & b) ^ ((b >> 12) & a)) & 0xfff
-	return Parity12(scalar)
+	return mat24.Parity12(scalar)
 }
 
 // short3Reduce reduces every coordinate of a
@@ -285,19 +289,19 @@ func short3Reduce(v3 uint64) uint64 {
 // up to sign. Returns 0 if v2 is not short.
 func Leech2To3Short(x uint32) uint64 {
 	v2 := uint64(x)
-	gcodev := uint64(GcodeToVect(x >> 12))
-	theta := uint64(mat24ThetaTable[(x>>12)&0x7ff])
+	gcodev := uint64(mat24.GcodeToVect(x >> 12))
+	theta := uint64(mat24.ThetaTable((x >> 12) & 0x7ff))
 	// w = weight(code word gcodev) / 4
 	w := uint64(0) - ((v2 >> 23) & 1)
 	w = (((theta >> 12) & 7) ^ w) + (w & 7)
 
 	if v2&0x800 != 0 { // case odd cocode
-		cocodev := uint64(CocodeSyndromeRaw(uint32(v2^theta), 0))
+		cocodev := uint64(mat24.CocodeSyndromeRaw(uint32(v2^theta), 0))
 		if cocodev&(cocodev-1) != 0 {
 			return 0
 		}
 		scalar := (v2 >> 12) & v2
-		scalar = uint64(Parity12(uint32(scalar)))
+		scalar = uint64(mat24.Parity12(uint32(scalar)))
 		if scalar&1 != 0 {
 			return 0
 		}
@@ -311,8 +315,8 @@ func Leech2To3Short(x uint32) uint64 {
 		gcodev ^= 0xffffff
 		fallthrough
 	case 2:
-		cocodev := uint64(CocodeSyndromeRaw(uint32(v2), lsbit24(uint32(gcodev))))
-		cW := uint64(Bw24(uint32(cocodev)))
+		cocodev := uint64(mat24.CocodeSyndromeRaw(uint32(v2), mat24.Lsbit24(uint32(gcodev))))
+		cW := uint64(mat24.Bw24(uint32(cocodev)))
 		if (cocodev&gcodev) != cocodev || (cW^2^w)&3 != 0 {
 			return 0
 		}
@@ -320,7 +324,7 @@ func Leech2To3Short(x uint32) uint64 {
 	case 3:
 		return 0
 	default: // case 0 or 6 only
-		cList := CocodeToBitList(uint32(v2), 0)
+		cList := mat24.CocodeToBitList(uint32(v2), 0)
 		if len(cList) != 2 {
 			return 0
 		}
@@ -334,8 +338,8 @@ func Leech2To3Short(x uint32) uint64 {
 // of Leech2To3Short.
 func Leech3To2Short(x uint64) uint32 {
 	v3 := short3Reduce(x)
-	w1 := Bw24(uint32(v3))
-	w2 := Bw24(uint32(v3 >> 24))
+	w1 := mat24.Bw24(uint32(v3))
+	w2 := mat24.Bw24(uint32(v3 >> 24))
 	var gcodev, cocodev uint32
 	switch w1 + w2 {
 	case 23:
@@ -370,17 +374,17 @@ func Leech3To2Short(x uint64) uint32 {
 	if !ok || gc&0xfffff000 != 0 {
 		return 0
 	}
-	theta := uint32(mat24ThetaTable[gc&0x7ff]) & 0xfff
-	coc := VectToCocode(cocodev)
+	theta := uint32(mat24.ThetaTable(gc&0x7ff)) & 0xfff
+	coc := mat24.VectToCocode(cocodev)
 	return (gc << 12) ^ theta ^ coc
 }
 
 // vectToGcodeRaw returns the Golay code number of
 // vector v and true, or (0, false) if v is not a
 // code word (the non-panicking analogue of
-// VectToGcode, matching C mat24_vect_to_gcode).
+// mat24.VectToGcode, matching C mat24_vect_to_gcode).
 func vectToGcodeRaw(v uint32) (uint32, bool) {
-	cn := Vintern(v)
+	cn := mat24.Vintern(v)
 	if cn&0xfff != 0 {
 		return 0, false
 	}
@@ -527,7 +531,7 @@ func getLeech2Basis(v2 []uint32, basis []uint64, d uint32) uint32 {
 			continue
 		}
 		j := w & (0 - w)
-		pos[k] = uint8(lsbit24pwr2(j))
+		pos[k] = uint8(mat24.Lsbit24Pwr2(j))
 		basis[k] = uint64(w)
 		k++
 		if k >= d {
@@ -544,11 +548,11 @@ func getLeech2Basis(v2 []uint32, basis []uint64, d uint32) uint32 {
 func Leech2MatrixBasis(v2 []uint32) []uint64 {
 	basis := make([]uint64, 24)
 	dim := int(getLeech2Basis(v2, basis, 24))
-	Bm64XchBits(basis, dim, 12, 0x800)
-	Bm64RotBits(basis, dim, 1, 12, 0)
-	Bm64EchelonH(basis, dim, 24, 24)
-	Bm64RotBits(basis, dim, 11, 12, 0)
-	Bm64XchBits(basis, dim, 12, 0x800)
+	swar.Bm64XchBits(basis, dim, 12, 0x800)
+	swar.Bm64RotBits(basis, dim, 1, 12, 0)
+	swar.Bm64EchelonH(basis, dim, 24, 24)
+	swar.Bm64RotBits(basis, dim, 11, 12, 0)
+	swar.Bm64XchBits(basis, dim, 12, 0x800)
 	return basis[:dim]
 }
 
@@ -563,7 +567,7 @@ func leech2MatrixOrthogonal(a, b []uint64, k int) (int, bool) {
 		return 0, false
 	}
 	// Bl = A^T
-	Bm64T(a, k, 24, b)
+	swar.Bm64T(a, k, 24, b)
 	// Bh = Q * A^T: exchange row i of A^T with row i+12
 	for i := 0; i < 12; i++ {
 		x := b[i]
@@ -574,7 +578,7 @@ func leech2MatrixOrthogonal(a, b []uint64, k int) (int, bool) {
 	for i := 0; i < 24; i++ {
 		b[i] |= 1 << uint(i)
 	}
-	m := Bm64EchelonL(b, 24, 24, k)
+	m := swar.Bm64EchelonL(b, 24, 24, k)
 	for i := 0; i < 24; i++ {
 		b[i] &= 0xffffff
 	}
@@ -593,8 +597,8 @@ func Leech2MatrixRadical(v2 []uint32) []uint64 {
 	if _, ok := leech2MatrixOrthogonal(span[:], ortho[:], dim); !ok {
 		return basis[:0]
 	}
-	Bm64EchelonH(span[:], dim, 24, 24)
-	Bm64EchelonH(ortho[dim:], 24-dim, 24, 24)
+	swar.Bm64EchelonH(span[:], dim, 24, 24)
+	swar.Bm64EchelonH(ortho[dim:], 24-dim, 24, 24)
 	res, ok := bm64CapH(span[:], ortho[dim:], dim, 24-dim, 24, 24)
 	if !ok {
 		return basis[:0]
@@ -602,11 +606,11 @@ func Leech2MatrixRadical(v2 []uint32) []uint64 {
 	for i := 0; i < res; i++ {
 		basis[i] = span[i+dim-res]
 	}
-	Bm64XchBits(basis, res, 12, 0x800)
-	Bm64RotBits(basis, res, 1, 12, 0)
-	Bm64EchelonH(basis, res, 24, 24)
-	Bm64RotBits(basis, res, 11, 12, 0)
-	Bm64XchBits(basis, res, 12, 0x800)
+	swar.Bm64XchBits(basis, res, 12, 0x800)
+	swar.Bm64RotBits(basis, res, 1, 12, 0)
+	swar.Bm64EchelonH(basis, res, 24, 24)
+	swar.Bm64RotBits(basis, res, 11, 12, 0)
+	swar.Bm64XchBits(basis, res, 12, 0x800)
 	return basis[:res]
 }
 
@@ -623,7 +627,7 @@ func leech3OpPi(v3 uint64, perm []byte) uint64 {
 // leech3OpY performs y_d on a Leech-mod-3 vector
 // v3, with d an element of the Parker loop.
 func leech3OpY(v3 uint64, d uint32) uint64 {
-	v := uint64(GcodeToVect(d))
+	v := uint64(mat24.GcodeToVect(d))
 	return v3 ^ (v | (v << 24))
 }
 
@@ -681,11 +685,11 @@ func Leech3OpVectorWord(v3 uint64, g []uint32) uint64 {
 		case 8, 0, 8 + 1, 1, 8 + 3, 3:
 			// no operation
 		case 8 + 2:
-			copy(perm, m24numToPermSafe(v))
-			copy(permI, InvPerm(perm))
+			copy(perm, mat24.M24numToPermSafe(v))
+			copy(permI, mat24.InvPerm(perm))
 			v3 = leech3OpPi(v3, permI)
 		case 2:
-			copy(perm, m24numToPermSafe(v))
+			copy(perm, mat24.M24numToPermSafe(v))
 			v3 = leech3OpPi(v3, perm)
 		case 8 + 4, 4:
 			v3 = leech3OpY(v3, v&0x1fff)
@@ -714,7 +718,7 @@ func Leech2Pow(x uint32, e uint8) uint32 {
 	x &= 0x1ffffff
 	if e&2 != 0 {
 		scalar = (x >> 12) & x
-		scalar = Parity12(scalar)
+		scalar = mat24.Parity12(scalar)
 		scalar <<= 24
 	}
 	if e&1 != 0 {
@@ -725,9 +729,9 @@ func Leech2Pow(x uint32, e uint8) uint32 {
 
 // opXDDelta performs q0 x_d x_delta on Q_{x0}.
 func opXDDelta(q0, d, delta uint32) uint32 {
-	delta ^= uint32(mat24ThetaTable[d&0x7ff])
+	delta ^= uint32(mat24.ThetaTable(d & 0x7ff))
 	s := ((q0 >> 12) & delta) ^ (q0 & d)
-	s = Parity12(s)
+	s = mat24.Parity12(s)
 	return q0 ^ (s << 24)
 }
 
@@ -736,24 +740,24 @@ func opXDDelta(q0, d, delta uint32) uint32 {
 // permutation perm and automorphism autpl.
 func opDeltaPi(q0 uint32, perm []byte, autpl []uint32) uint32 {
 	xd := (q0 >> 12) & 0x1fff
-	xdelta := (q0 ^ uint32(mat24ThetaTable[(q0>>12)&0x7ff])) & 0xfff
-	xd = OpPloopAutpl(xd, autpl)
-	xdelta = OpCocodePerm(xdelta, perm)
-	return (xd << 12) ^ xdelta ^ (uint32(mat24ThetaTable[xd&0x7ff]) & 0xfff)
+	xdelta := (q0 ^ uint32(mat24.ThetaTable((q0>>12)&0x7ff))) & 0xfff
+	xd = mat24.OpPloopAutpl(xd, autpl)
+	xdelta = mat24.OpCocodePerm(xdelta, perm)
+	return (xd << 12) ^ xdelta ^ (uint32(mat24.ThetaTable(xd&0x7ff)) & 0xfff)
 }
 
 // opY performs q0 -> q0^(y_d) on Q_{x0}, with d
 // an element of the Parker loop.
 func opY(q0, d uint32) uint32 {
 	odd := 0 - ((q0 >> 11) & 1)
-	thetaQ0 := uint32(mat24ThetaTable[(q0>>12)&0x7ff])
-	thetaY := uint32(mat24ThetaTable[d&0x7ff])
+	thetaQ0 := uint32(mat24.ThetaTable((q0 >> 12) & 0x7ff))
+	thetaY := uint32(mat24.ThetaTable(d & 0x7ff))
 	s := (thetaQ0 & d) ^ (^odd & q0 & d)
-	s = Parity12(s)
+	s = mat24.Parity12(s)
 	o := (thetaY & (q0 >> 12)) ^ (q0 & d)
 	o ^= (thetaY >> 12) & 1 & odd
-	o = Parity12(o)
-	eps := thetaQ0 ^ (thetaY & ^odd) ^ uint32(mat24ThetaTable[((q0>>12)^d)&0x7ff])
+	o = mat24.Parity12(o)
+	eps := thetaQ0 ^ (thetaY & ^odd) ^ uint32(mat24.ThetaTable(((q0>>12)^d)&0x7ff))
 	q0 ^= (eps & 0xfff) ^ ((d << 12) & 0x1fff000 & odd)
 	q0 ^= (s << 24) ^ (o << 23)
 	return q0
@@ -791,20 +795,20 @@ func Leech2OpAtom(x, g uint32) uint32 {
 		if v == 0 {
 			break
 		}
-		iPerm := m24numToPermSafe(v)
-		perm, autpl = PermToIautpl(0, iPerm)
+		iPerm := mat24.M24numToPermSafe(v)
+		perm, autpl = mat24.PermToIautpl(0, iPerm)
 		q0 = opDeltaPi(q0, perm, autpl)
 	case 0x20000000: // p
 		if v == 0 {
 			break
 		}
-		copy(perm, m24numToPermSafe(v))
-		autpl = PermToAutpl(0, perm)
+		copy(perm, mat24.M24numToPermSafe(v))
+		autpl = mat24.PermToAutpl(0, perm)
 		q0 = opDeltaPi(q0, perm, autpl)
 	case 0x30000000, 0xb0000000: // x, Ix
 		q0 = opXDDelta(q0, v&0xfff, 0)
 	case 0xc0000000: // Iy
-		y ^= uint32(mat24ThetaTable[v&0x7ff]) & 0x1000
+		y ^= uint32(mat24.ThetaTable(v&0x7ff)) & 0x1000
 		y ^= v & 0x1fff
 		q0 = opY(q0, y&0x1fff)
 	case 0x40000000: // y
@@ -824,7 +828,7 @@ func Leech2OpAtom(x, g uint32) uint32 {
 		v ^= 3
 		fallthrough
 	case 0x60000000: // l
-		q0 = XiOpXi(q0, int(v&3))
+		q0 = generator.XiOpXi(q0, int(v&3))
 	default:
 		return 0xffffffff
 	}

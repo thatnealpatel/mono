@@ -1,5 +1,7 @@
 package cgt
 
+import "patel.codes/cgt/mat24"
+
 // This file ports the group operations and the
 // supporting tables from mm_tables.c, mm_tables_xi.c
 // and the per-modulus mm*_op_*.c files. The
@@ -234,9 +236,9 @@ func subPrepPi64(eps, pi uint32) []subOpPi64 {
 	out := make([]subOpPi64, 759)
 
 	// perm and inv_perm of pi, plus the big autpl table.
-	perm := M24numToPerm(pi % mat24Order)
-	invPerm, repAutpl := PermToIautpl(eps&0xfff, perm)
-	p24big := OpAllAutpl(repAutpl) // first 2048 entries
+	perm := mat24.M24numToPerm(pi % mat24Order)
+	invPerm, repAutpl := mat24.PermToIautpl(eps&0xfff, perm)
+	p24big := mat24.OpAllAutpl(repAutpl) // first 2048 entries
 
 	var pInv [24]uint8
 	for i := 0; i < 24; i++ {
@@ -247,7 +249,7 @@ func subPrepPi64(eps, pi uint32) []subOpPi64 {
 	for i := uint32(0); i < 759; i++ {
 		var src uint32
 		{
-			dest := uint32(mat24OctDecTable[i]) // octad_to_gcode
+			dest := uint32(mat24.OctDecTable(i)) // octad_to_gcode
 			src = ((dest & epsMasked) << 1) ^ uint32(p24big[dest&0x7ff])
 			sign := src & 0x1000
 			src &= 0xfff
@@ -256,7 +258,7 @@ func subPrepPi64(eps, pi uint32) []subOpPi64 {
 		}
 		{
 			var qi [24]uint8
-			p1 := mat24OctadElementTable[src<<3:]
+			p1 := mat24.OctadElementsAtByte((src) << 3)
 			qi[p1[0]] = 0
 			qi[p1[1]] = 1
 			qi[p1[2]] = 2
@@ -265,7 +267,7 @@ func subPrepPi64(eps, pi uint32) []subOpPi64 {
 			qi[p1[5]] = 16
 			qi[p1[6]] = 32
 			qi[p1[7]] = 63
-			p0 := mat24OctadElementTable[p0base:]
+			p0 := mat24.OctadElementsAtByte(uint32(p0base))
 			q0 := qi[pInv[p0[0]]]
 			acc := qi[pInv[p0[1]]] ^ q0
 			out[i].perm[0] = acc
@@ -289,7 +291,7 @@ func subPrepPi64(eps, pi uint32) []subOpPi64 {
 // octad number without validation. C macro
 // mat24_def_gcode_to_octad.
 func gcodeToOctadFast(v uint32) uint32 {
-	return uint32(mat24OctEncTable[v&0x7ff]) >> 1
+	return uint32(mat24.OctEncTable(v&0x7ff)) >> 1
 }
 
 // subTestPrepPi64 writes the 759*(1+6) tag-T
@@ -338,12 +340,12 @@ func toSuboctad(v uint32, po []uint8) uint8 {
 // pwrMap returns bit 12 of the theta table entry for
 // d. C macro PwrMap.
 func pwrMap(d uint32) uint32 {
-	return (uint32(mat24ThetaTable[d&0x7ff]) >> 12) & 1
+	return (uint32(mat24.ThetaTable(d&0x7ff)) >> 12) & 1
 }
 
 // pwrMapH returns the full theta table entry for d. C
 // macro PwrMapH.
-func pwrMapH(d uint32) uint32 { return uint32(mat24ThetaTable[d]) }
+func pwrMapH(d uint32) uint32 { return uint32(mat24.ThetaTable(d)) }
 
 // subPrepXY computes the operation tables for
 // y_f x_e x_eps. C mm_sub_prep_xy.
@@ -356,8 +358,8 @@ func subPrepXY(f, e, eps uint32) *subOpXY {
 	op.e = e
 	op.eps = eps
 
-	op.linI[0] = GcodeToVect(e)
-	v := GcodeToVect(f)
+	op.linI[0] = mat24.GcodeToVect(e)
+	v := mat24.GcodeToVect(f)
 	op.linI[1] = v
 	op.linI[2] = v
 	op.fI = v
@@ -365,13 +367,13 @@ func subPrepXY(f, e, eps uint32) *subOpXY {
 
 	// sign_XYZ
 	{
-		ld0 := eps ^ PloopCap(e, f) ^ PloopTheta(f)
-		ld2 := eps ^ PloopTheta(e)
-		ld1 := ld2 ^ PloopTheta(f)
+		ld0 := eps ^ mat24.PloopCap(e, f) ^ mat24.PloopTheta(f)
+		ld2 := eps ^ mat24.PloopTheta(e)
+		ld1 := ld2 ^ mat24.PloopTheta(f)
 		pXYZ := &op.signXYZ
 		pXYZ[0] = uint8(
 			(pwrMap(f) ^ pwrMap(e^f) ^ (f >> 12)) ^
-				((PloopCocycle(f, e) ^ ((e ^ f) >> 12)) << 1) ^
+				((mat24.PloopCocycle(f, e) ^ ((e ^ f) >> 12)) << 1) ^
 				(((pwrMap(f) ^ (e >> 12) ^ (e >> 11)) & 1) << 2),
 		)
 		for li := uint32(0); li < 11; li++ {
@@ -404,12 +406,12 @@ func subPrepXY(f, e, eps uint32) *subOpXY {
 		signE := pwrMap(e)
 		p0 := 0
 		for oct := uint32(0); oct < 759; oct++ {
-			d := uint32(mat24OctDecTable[oct]) // octad_to_gcode
-			pOct := mat24OctadElementTable[p0:]
+			d := uint32(mat24.OctDecTable(oct)) // octad_to_gcode
+			pOct := mat24.OctadElementsAtByte(uint32(p0))
 			res := uint32(toSuboctad(vf, pOct))
 			res ^= uint32(toSuboctad(vef, pOct)) << 8
 			sign := d & eps
-			sign = Parity12(sign)
+			sign = mat24.Parity12(sign)
 			sign ^= signE ^ pwrMap(d^e)
 			op.sT[oct] = uint16(res + (sign << 14) + ((eps & 0x800) << (15 - 11)))
 			p0 += 8

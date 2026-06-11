@@ -13,18 +13,25 @@ package cgt
 import (
 	"math/bits"
 	"sync"
+
+	"patel.codes/cgt/generator"
+	"patel.codes/cgt/mat24"
 )
 
 //////////////////////////////////////////////////
 // Part 1: precomputed order vector v_1 mod 15
 //////////////////////////////////////////////////
 
-// Region offsets into orderVectorTable (in uint32
-// units). C macros OFS_ABC, OFS_T, OFS_X.
+// Region offsets into the pre-packed orderVectorTable
+// (in uint64 SWAR words). The generator emits the table
+// already in the runtime p=15 layout, so the regions
+// follow one another: 72 tag-(A,B,C) rows of 2 words,
+// then 759 tag-T rows of 4 words, then 6144 tag-X rows
+// of 2 words.
 const (
-	ovOfsABC = 0
-	ovOfsT   = 72 * 3
-	ovOfsX   = ovOfsT + 759*8
+	ovPackedABC = 0
+	ovPackedT   = 72 * 2
+	ovPackedX   = ovPackedT + 759*4
 )
 
 // Destination word offsets into the p=15 vector
@@ -35,38 +42,6 @@ const (
 	ovDestT = mmAuxOfsT >> 4
 	ovDestX = mmAuxOfsX >> 4
 )
-
-// ovPair packs two uint32 table words into one
-// uint64 SWAR word. C macro pair(h, l).
-func ovPair(h, l uint32) uint64 {
-	return (uint64(h) << 32) | uint64(l)
-}
-
-// ovLoad24 unpacks n rows of a 24-coordinate region
-// (tags A, B, C, X). Each row is 3 table words ->
-// 2 destination words. C function load24.
-func ovLoad24(srcOfs int, dst []uint64, n int) {
-	src := orderVectorTable[srcOfs:]
-	for i := 0; i < n; i++ {
-		dst[0] = ovPair(src[1], src[0])
-		dst[1] = ovPair(0, src[2])
-		src = src[3:]
-		dst = dst[2:]
-	}
-}
-
-// ovLoad64 unpacks n rows of a 64-coordinate region
-// (tag T). Each row is 8 table words -> 4 destination
-// words (two pair-steps). C function load64.
-func ovLoad64(srcOfs int, dst []uint64, n int) {
-	src := orderVectorTable[srcOfs:]
-	for i := 0; i < 2*n; i++ {
-		dst[0] = ovPair(src[1], src[0])
-		dst[1] = ovPair(src[3], src[2])
-		src = src[4:]
-		dst = dst[2:]
-	}
-}
 
 // ovCacheOnce guards the one-time construction of the
 // order-vector data in ovCacheData.
@@ -88,9 +63,9 @@ var ovCacheData []uint64
 func loadOrderVector() *MMVector {
 	ovCacheOnce.Do(func() {
 		v := ZeroVector(15)
-		ovLoad24(ovOfsABC, v.data[ovDestA:], 72)
-		ovLoad64(ovOfsT, v.data[ovDestT:], 759)
-		ovLoad24(ovOfsX, v.data[ovDestX:], 3*2048)
+		copy(v.data[ovDestA:], orderVectorTable[ovPackedABC:ovPackedT])
+		copy(v.data[ovDestT:], orderVectorTable[ovPackedT:ovPackedX])
+		copy(v.data[ovDestX:], orderVectorTable[ovPackedX:])
 		ovCacheData = v.data
 	})
 	return &MMVector{p: 15, data: append([]uint64(nil), ovCacheData...)}
@@ -120,10 +95,10 @@ func genLeech3To2(v3 uint64) uint64 {
 	vtype := ^uint64(0)
 	v3 = short3Reduce(v3)
 	h = uint32(((v3 >> 24) | v3) & 0xffffff)
-	w = Bw24(h)
+	w = mat24.Bw24(h)
 	switch w {
 	case 22:
-		syn = CocodeSyndromeRaw(Vintern(uint32(v3)), 0)
+		syn = mat24.CocodeSyndromeRaw(mat24.Vintern(uint32(v3)), 0)
 		gcodev = (uint32(v3) ^ syn) & 0xffffff
 		t = h & syn
 		cocodev = t | (0xffffff &^ h)
@@ -132,13 +107,13 @@ func genLeech3To2(v3 uint64) uint64 {
 		}
 		vtype = 4
 	case 19:
-		w1 = Bw24(uint32(v3))
+		w1 = mat24.Bw24(uint32(v3))
 		if w1&1 != 0 {
 			x1 = uint32(v3) & 0xffffff
 		} else {
 			x1 = uint32(v3>>24) & 0xffffff
 		}
-		syn = CocodeSyndromeRaw(Vintern(x1), 0)
+		syn = mat24.CocodeSyndromeRaw(mat24.Vintern(x1), 0)
 		cocodev = ^h & 0xffffff
 		if syn&h != 0 {
 			syn = cocodev
@@ -146,7 +121,7 @@ func genLeech3To2(v3 uint64) uint64 {
 		gcodev = (x1 ^ syn) & 0xffffff
 		vtype = 4
 	case 16:
-		w1 = Bw24(uint32(v3))
+		w1 = mat24.Bw24(uint32(v3))
 		if w1&1 != 0 {
 			return vtype
 		}
@@ -155,7 +130,7 @@ func genLeech3To2(v3 uint64) uint64 {
 		cocodev = uint32(v3) & 0xfffffff
 		vtype = 4
 	case 13, 10:
-		syn = CocodeSyndromeRaw(Vintern(h&0xffffff), 24)
+		syn = mat24.CocodeSyndromeRaw(mat24.Vintern(h&0xffffff), 24)
 		if syn&0xff000000 != 0 {
 			return vtype
 		}
@@ -164,20 +139,20 @@ func genLeech3To2(v3 uint64) uint64 {
 		}
 		gcodev = h ^ syn
 		cocodev = syn | (uint32(v3) &^ syn & 0xffffff)
-		w1 = Bw24(cocodev)
+		w1 = mat24.Bw24(cocodev)
 		if w1&1 != 0 {
 			return vtype
 		}
 		omega = (w1 >> 1) + parity24(syn&uint32(v3)) + w
 		vtype = 4
 	case 7:
-		syn = CocodeSyndromeRaw(Vintern(h), 0)
+		syn = mat24.CocodeSyndromeRaw(mat24.Vintern(h), 0)
 		if syn&(syn-1) != 0 {
 			return vtype
 		}
 		gcodev = h ^ syn
 		cocodev = uint32(v3) & 0xffffff
-		w1 = Bw24(cocodev)
+		w1 = mat24.Bw24(cocodev)
 		cocodev |= (0 - (w1 & 1)) & syn
 		omega = ((w1 + 1) >> 1) + 1
 		vtype = 4
@@ -191,14 +166,14 @@ func genLeech3To2(v3 uint64) uint64 {
 		omega = 1
 		vtype = 4
 	case 24:
-		cocodev = CocodeSyndromeRaw(Vintern(uint32(v3)), 0)
+		cocodev = mat24.CocodeSyndromeRaw(mat24.Vintern(uint32(v3)), 0)
 		gcodev = (uint32(v3) ^ cocodev) & 0xffffff
 		if cocodev == 0 || cocodev&(cocodev-1) != 0 {
 			return vtype
 		}
 		vtype = 3
 	case 21:
-		syn = CocodeSyndromeRaw(Vintern(uint32(v3)), 0)
+		syn = mat24.CocodeSyndromeRaw(mat24.Vintern(uint32(v3)), 0)
 		gcodev = (uint32(v3) ^ syn) & 0xffffff
 		cocodev = 0xffffff &^ h
 		if syn&cocodev != syn {
@@ -207,23 +182,23 @@ func genLeech3To2(v3 uint64) uint64 {
 		vtype = 3
 	case 12:
 		gcodev = h
-		syn = CocodeSyndromeRaw(Vintern(h), 0)
+		syn = mat24.CocodeSyndromeRaw(mat24.Vintern(h), 0)
 		_ = syn
 		cocodev = uint32(v3) & 0xffffff
-		w1 = Bw24(cocodev)
+		w1 = mat24.Bw24(cocodev)
 		if w1&1 != 0 {
 			return vtype
 		}
 		omega = (w1 >> 1) + 1
 		vtype = 3
 	case 9:
-		syn = CocodeSyndromeRaw(Vintern(h), 0)
+		syn = mat24.CocodeSyndromeRaw(mat24.Vintern(h), 0)
 		if h&syn != syn {
 			return vtype
 		}
 		gcodev = h ^ syn
 		cocodev = syn | (uint32(v3) &^ syn & 0xffffff)
-		w1 = Bw24(cocodev)
+		w1 = mat24.Bw24(cocodev)
 		if w1&1 != 0 {
 			return vtype
 		}
@@ -238,7 +213,7 @@ func genLeech3To2(v3 uint64) uint64 {
 		gcodev = uint32(v3>>w1) & 0xffffff
 		vtype = 2
 	case 8:
-		w1 = Bw24(uint32(v3))
+		w1 = mat24.Bw24(uint32(v3))
 		if w1&1 != 0 {
 			return vtype
 		}
@@ -249,7 +224,7 @@ func genLeech3To2(v3 uint64) uint64 {
 	case 2:
 		cocodev = uint32(v3|(v3>>24)) & 0xffffff
 		gcodev = 0
-		omega = Bw24(uint32(v3)) ^ 1
+		omega = mat24.Bw24(uint32(v3)) ^ 1
 		vtype = 2
 	case 0:
 		return 0
@@ -261,12 +236,12 @@ func genLeech3To2(v3 uint64) uint64 {
 		return ^uint64(0)
 	}
 	gcodev = gc
-	cocodev = VectToCocode(cocodev)
-	cocodev ^= uint32(mat24ThetaTable[gcodev&0x7ff]) & 0xfff
+	cocodev = mat24.VectToCocode(cocodev)
+	cocodev ^= uint32(mat24.ThetaTable(gcodev&0x7ff)) & 0xfff
 	gcodev ^= (omega & 1) << 11
 	res = (gcodev << 12) ^ cocodev
 	if w >= 19 {
-		w1 = (uint32(vtype) ^ Parity12(res&(res>>12))) & 1
+		w1 = (uint32(vtype) ^ mat24.Parity12(res&(res>>12))) & 1
 		res ^= (0 - w1) & 0x800000
 	}
 	return uint64(res) | (vtype << 24)
@@ -585,7 +560,7 @@ func analyzeAxis(v []uint64, p *ovAxesReduce) int {
 		vt1 := uint32(0)
 		for j := range p.vLeech2 {
 			vt2 := vt ^ p.vLeech2[j]
-			if Leech2Type(vt2) == 4 {
+			if generator.Leech2Type(vt2) == 4 {
 				vt1 = vt2
 			}
 			p.vLeech2[j] |= 0x2000000
@@ -657,7 +632,7 @@ func reduceFindType4(v []uint32, v2 uint32) uint32 {
 	part[4] = uint32(i)
 	j = i
 	i = condSort(v, 0, j, func(x uint32) bool {
-		return uint32(mat24ThetaTable[(x>>12)&0x7ff])&0x1000 != 0
+		return uint32(mat24.ThetaTable((x>>12)&0x7ff))&0x1000 != 0
 	})
 	part[3] = uint32(i)
 	j = i
@@ -677,7 +652,7 @@ func reduceFindType4(v []uint32, v2 uint32) uint32 {
 		hi := int(part[k+1])
 		sortU32(v[lo:hi])
 		for m := lo; m < hi; m++ {
-			if Leech2Type(v[m]) == 4 && (noSub2 || Leech2Type2(v[m]^v2) != 0) {
+			if generator.Leech2Type(v[m]) == 4 && (noSub2 || generator.Leech2Type2(v[m]^v2) != 0) {
 				return v[m]
 			}
 		}
@@ -921,7 +896,7 @@ const (
 // while acting on v.
 func mmReduceMapAxis(vt *uint32, v []uint64, a []uint32, n int, work []uint64) int {
 	if *vt != 0 {
-		if Leech2Type(*vt) != 2 {
+		if generator.Leech2Type(*vt) != 2 {
 			return -1
 		}
 		q := [1]uint32{*vt}
@@ -955,7 +930,7 @@ func mmReduceMapAxis(vt *uint32, v []uint64, a []uint32, n int, work []uint64) i
 // negative value on error. C function
 // reduce_v_baby_axis_final.
 func reduceVBabyAxisFinal(vp, vn uint32, r []uint32, lenR int) int {
-	v4 := Leech2Mul(vp, vn)
+	v4 := generator.Leech2Mul(vp, vn)
 	if v4&0xffffff != 0 {
 		lenR1 := genLeech2ReduceType4(v4, r[lenR:])
 		if lenR1 < 0 {

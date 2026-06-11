@@ -1,4 +1,4 @@
-package cgt
+package generator
 
 import (
 	cryptorand "crypto/rand"
@@ -60,7 +60,7 @@ func (r *Rng) seedNo(seedNo uint64) {
 func NewRng() *Rng {
 	var b [32]byte
 	if _, err := cryptorand.Read(b[:]); err != nil {
-		panic("cgt: crypto/rand failed: " + err.Error())
+		panic("generator: crypto/rand failed: " + err.Error())
 	}
 	r := &Rng{}
 	for i := 0; i < 4; i++ {
@@ -130,7 +130,7 @@ func (r *Rng) jump() {
 // oracle-testable.
 func (r *Rng) BytesModP(p int, out []uint8) {
 	if p < 2 || p > 256 {
-		panic("cgt: BytesModP requires 1 < p <= 256")
+		panic("generator: BytesModP requires 1 < p <= 256")
 	}
 	length := len(out)
 	pos := 0

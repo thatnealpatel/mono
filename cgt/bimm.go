@@ -9,7 +9,12 @@ package cgt
 //   - mmgroup/bimm/bimm.py
 //     (class BiMM, P3_BiMM, AutP3_BiMM)
 
-import "sync"
+import (
+	"sync"
+
+	"patel.codes/cgt/generator"
+	"patel.codes/cgt/mat24"
+)
 
 // BiMM is an element of the Bimonster M wr 2, of
 // structure (M x M).2. It is the pair (m1, m2) of
@@ -138,12 +143,12 @@ func xsp2co1Co1MatrixToWord(m, g []uint32) int {
 		aPi[i] = (a[i+12] >> 12) & 0x7ff
 	}
 	aPi[11] = 0
-	MatrixFromModOmega(aPi[:])
-	perm := MatrixToPerm(aPi[:])
-	if PermCheck(perm) != nil {
+	mat24.MatrixFromModOmega(aPi[:])
+	perm := mat24.MatrixToPerm(aPi[:])
+	if mat24.PermCheck(perm) != nil {
 		return -100002
 	}
-	pi := PermToM24num(perm)
+	pi := mat24.PermToM24num(perm)
 	if pi != 0 {
 		g[length] = atomTagIP + pi
 		if genLeech2OpWordMany(a[:], g[length:length+1]) != 1 {
@@ -176,7 +181,7 @@ func xsp2co1Co1MatrixToWord(m, g []uint32) int {
 	// Convert the residual x' to generators.
 	x := q & 0xfff
 	q = (q >> 12) & 0xfff
-	q ^= PloopTheta(x&0x7ff) & 0x7ff
+	q ^= mat24.PloopTheta(x&0x7ff) & 0x7ff
 	if q != 0 {
 		g[length] = atomTagID + q
 		length++
@@ -281,10 +286,10 @@ var dictLineMOG = map[int]int{
 // makeP returns the element x_x x_delta of Q_{x0}
 // (in Leech lattice encoding) as an XLeech2, where x
 // is a Parker loop element and delta a cocode word.
-// It mirrors make_P = XLeech2(PLoop(x), Cocode(delta)).
-func makeP(x PLoop, delta Cocode) XLeech2 {
+// It mirrors make_P = XLeech2(mat24.PLoop(x), mat24.Cocode(delta)).
+func makeP(x mat24.PLoop, delta mat24.Cocode) XLeech2 {
 	d := uint32(x.Ord())
-	v := ((d << 12) ^ PloopTheta(d)) ^ uint32(delta.Ord())
+	v := ((d << 12) ^ mat24.PloopTheta(d)) ^ uint32(delta.Ord())
 	return xleech2FromInt(v)
 }
 
@@ -297,19 +302,19 @@ func computeP0(x int) XLeech2 {
 	if x == 1 || x == 3 || x == 9 {
 		c := dictPointMOGColumn[x]
 		octad := []int{0, 4, 8, 12, 16, 20, c + 1, c + 2, c + 3}
-		return makeP(NewPLoop(octad), NewCocode(0))
+		return makeP(mat24.NewPLoop(octad), mat24.NewCocode(0))
 	}
-	return makeP(NewPLoop(0), NewCocode([]int{dictPointMOG[x]}))
+	return makeP(mat24.NewPLoop(0), mat24.NewCocode([]int{dictPointMOG[x]}))
 }
 
 // computeStarP3 returns the image of the 'star'
 // P_i^* in Q_{x0} (port of compute_StarP3).
 func computeStarP3(i int) XLeech2 {
 	if i == 0 {
-		return makeP(NewPLoop(0).Invert(), NewCocode([]int{0, 1, 2, 3}))
+		return makeP(mat24.NewPLoop(0).Invert(), mat24.NewCocode([]int{0, 1, 2, 3}))
 	}
 	if i == 1 || i == 3 || i == 9 {
-		return makeP(NewPLoop(0), NewCocode([]int{1, 2, 3, 4, 8, dictPointMOGColumn[i]}))
+		return makeP(mat24.NewPLoop(0), mat24.NewCocode([]int{1, 2, 3, 4, 8, dictPointMOGColumn[i]}))
 	}
 	octad := []int{0, 4, 8, dictPointMOG[i]}
 	for _, y := range P3Incidences(i) {
@@ -323,7 +328,7 @@ func computeStarP3(i int) XLeech2 {
 			cocode = append(cocode, j)
 		}
 	}
-	return makeP(NewPLoop(octad), NewCocode(cocode))
+	return makeP(mat24.NewPLoop(octad), mat24.NewCocode(cocode))
 }
 
 // p3Precompute holds the precomputed Point/Star
@@ -353,7 +358,7 @@ func pointP3(x []int) uint32 {
 	}
 	p := uint32(0)
 	for _, xi := range x {
-		p = Leech2Mul(p, p0Dict[((xi%13)+13)%13].Ord())
+		p = generator.Leech2Mul(p, p0Dict[((xi%13)+13)%13].Ord())
 	}
 	return p
 }
@@ -365,7 +370,7 @@ func starP3Product(x []int) uint32 {
 	p3Precompute()
 	p := uint32(0)
 	for _, xi := range x {
-		p = Leech2Mul(p, pstarDict[((xi%13)+13)%13].Ord())
+		p = generator.Leech2Mul(p, pstarDict[((xi%13)+13)%13].Ord())
 	}
 	return p
 }
@@ -377,7 +382,7 @@ func starP3Product(x []int) uint32 {
 // delta = (e ^ ploop_theta(d)) & 0xfff.
 func mmFromLeech2(e uint32) *MM {
 	d := (e >> 12) & 0x1fff
-	delta := (e ^ PloopTheta(d)) & 0xfff
+	delta := (e ^ mat24.PloopTheta(d)) & 0xfff
 	return &MM{data: []uint32{atomTagX + d, atomTagD + delta}}
 }
 

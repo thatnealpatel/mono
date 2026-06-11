@@ -1,4 +1,4 @@
-package cgt
+package mat24
 
 import (
 	"encoding/json"
@@ -68,22 +68,4 @@ func oracleBool(t *testing.T, pyExpr string) bool {
 	t.Helper()
 	s := oracle(t, pyExpr)
 	return s == "true"
-}
-
-func mustMM(t *testing.T, word string) *MM {
-	t.Helper()
-	g, err := NewMM(word)
-	if err != nil {
-		t.Fatalf("NewMM(%q): %v", word, err)
-	}
-	return g
-}
-
-func mustParseVector(t *testing.T, p int, s string) *MMVector {
-	t.Helper()
-	v, err := ParseVector(p, s)
-	if err != nil {
-		t.Fatalf("ParseVector(%d, %q): %v", p, s, err)
-	}
-	return v
 }

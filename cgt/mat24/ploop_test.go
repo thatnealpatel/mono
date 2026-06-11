@@ -1,4 +1,4 @@
-package cgt
+package mat24
 
 import (
 	"fmt"

@@ -1,4 +1,11 @@
-package cgt
+// Package generator implements the low-level generator
+// primitives of the monster's G_{x0} machinery: the xi
+// operation on Leech-lattice-mod-2 vectors (gen_xi),
+// the xoshiro256** RNG (rng), and the linear-algebra
+// union-find over GF(2) orbit structures (ufind_lin2).
+package generator
+
+import "patel.codes/cgt/mat24"
 
 // xiGGrayTable is MAT24_XI_G_GRAY_TABLE.
 var xiGGrayTable = [64]uint8{
@@ -114,29 +121,29 @@ func XiOpXiNoSign(x uint32, exp int) uint32 {
 func XiLeechToShort(x uint32) uint32 {
 	var box, code uint32
 	sign := (x >> 24) & 1
-	gcodev := GcodeToVect(x >> 12)
+	gcodev := mat24.GcodeToVect(x >> 12)
 	// transform linear to internal Leech rep
-	x ^= uint32(mat24ThetaTable[(x>>12)&0x7ff]) & 0xfff
-	cocodev := CocodeSyndromeRaw(x, lsbit24(gcodev))
+	x ^= uint32(mat24.ThetaTable((x>>12)&0x7ff)) & 0xfff
+	cocodev := mat24.CocodeSyndromeRaw(x, mat24.Lsbit24(gcodev))
 	// put w = weight(code word gcodev) / 4
 	w := 0 - ((x >> 23) & 1)
-	w = (((uint32(mat24ThetaTable[(x>>12)&0x7ff]) >> 12) & 7) ^ w) + (w & 7)
+	w = (((uint32(mat24.ThetaTable((x>>12)&0x7ff)) >> 12) & 7) ^ w) + (w & 7)
 	if x&0x800 != 0 { // case odd cocode
 		if cocodev&(cocodev-1) != 0 {
 			return 0
 		}
 		scalar := (x >> 12) & x & 0xfff
-		scalar = Parity12(scalar)
+		scalar = mat24.Parity12(scalar)
 		if (scalar^w)&1 != 0 {
 			return 0
 		}
-		code = ((x & 0x7ff000) >> 7) | lsbit24(cocodev)
+		code = ((x & 0x7ff000) >> 7) | mat24.Lsbit24(cocodev)
 		box = 4 + (code >> 15)
 		code &= 0x7fff
 	} else { // case even cocode
 		switch w {
 		case 4, 2:
-			code = cocodeToSuboctad(x, x>>12, 1)
+			code = mat24.CocodeToSuboctadRaw(x, x>>12, 1)
 			if code >= 24000 {
 				// 24000 = (15 + 360) * 64
 				code -= 24000
@@ -152,9 +159,9 @@ func XiLeechToShort(x uint32) uint32 {
 		case 3:
 			return 0
 		default: // can be case 0 or 6 only
-			y1 := lsbit24(cocodev)
+			y1 := mat24.Lsbit24(cocodev)
 			cocodev ^= 1 << y1
-			y2 := lsbit24(cocodev)
+			y2 := mat24.Lsbit24(cocodev)
 			if cocodev != (1<<y2) || y1 >= 24 {
 				return 0
 			}
@@ -185,7 +192,7 @@ func XiShortToLeech(x uint32) uint32 {
 			gcode <<= 11 // gcode = code >= 768 ? 0x800 : 0
 			i := code >> 5
 			j := code & 31
-			cocode = VectToCocode((1 << i) ^ (1 << j))
+			cocode = mat24.VectToCocode((1 << i) ^ (1 << j))
 			if cocode == 0 || cocode&0x800 != 0 {
 				return 0
 			}
@@ -209,26 +216,26 @@ func XiShortToLeech(x uint32) uint32 {
 		code += 0x8000
 		fallthrough
 	case 4:
-		cocode = VectToCocode(1 << (code & 31))
+		cocode = mat24.VectToCocode(1 << (code & 31))
 		if cocode == 0 {
 			return 0
 		}
 		gcode = (code >> 5) & 0x7ff
-		w := ((uint32(mat24ThetaTable[gcode]) >> 12) & 1) ^ (gcode & cocode)
-		w = Parity12(w)
+		w := ((uint32(mat24.ThetaTable(gcode)) >> 12) & 1) ^ (gcode & cocode)
+		w = mat24.Parity12(w)
 		gcode ^= w << 11
 	default:
 		return 0
 	}
 	if octad < 48576 {
 		// 48576 = 759 * 64
-		gcode = uint32(mat24OctDecTable[octad>>6]) & 0xfff
-		cocode = SuboctadToCocode(octad&0x3f, octad>>6)
-		w := suboctadWeight(octad & 0x3f)
+		gcode = uint32(mat24.OctDecTable(octad>>6)) & 0xfff
+		cocode = mat24.SuboctadToCocode(octad&0x3f, octad>>6)
+		w := mat24.SuboctadWeight(octad & 0x3f)
 		gcode ^= w << 11
 	}
 	// transform internal Leech rep to linear rep
-	cocode ^= uint32(mat24ThetaTable[gcode&0x7ff]) & 0xfff
+	cocode ^= uint32(mat24.ThetaTable(gcode&0x7ff)) & 0xfff
 	return (sign << 24) | (gcode << 12) | cocode
 }
 
@@ -256,7 +263,7 @@ func XiOpXiShort(x uint32, exp int) uint32 {
 // Q_{x0}, both in Leech lattice encoding.
 func Leech2Mul(a, b uint32) uint32 {
 	result := (b >> 12) & a
-	result = Parity12(result)
+	result = mat24.Parity12(result)
 	return (result << 24) ^ a ^ b
 }
 
@@ -266,12 +273,12 @@ func leech2Subtype(v2 uint32) uint32 {
 	tabOdd := [4]uint32{0x21, 0x31, 0x43, 0x33}
 	tabEvenScalar1 := [7]uint32{0xff, 0xff, 0x34, 0x36, 0x34, 0xff, 0xff}
 
-	theta := uint32(mat24ThetaTable[(v2>>12)&0x7ff])
+	theta := uint32(mat24.ThetaTable((v2 >> 12) & 0x7ff))
 	coc := (v2 ^ theta) & 0xfff
 	scalar := (v2 >> 12) & v2
-	scalar = Parity12(scalar)
+	scalar = mat24.Parity12(scalar)
 
-	syn := uint32(mat24SyndromeTable[coc&0x7ff])
+	syn := uint32(mat24.SyndromeTable(coc & 0x7ff))
 
 	// odd cocode
 	if v2&0x800 != 0 {
@@ -304,22 +311,22 @@ func leech2Subtype(v2 uint32) uint32 {
 		v2 ^= 0x800000
 		fallthrough
 	default: // case 2
-		octad := GcodeToVect(v2 >> 12)
-		w = suboctadType(octad, w>>1, coc)
+		octad := mat24.GcodeToVect(v2 >> 12)
+		w = SuboctadType(octad, w>>1, coc)
 		return (0x44444222 >> (8 * w)) & 0xff
 	}
 }
 
-// suboctadType returns the suboctad type. octad
+// SuboctadType returns the suboctad type. octad
 // is a bit vector of length 8, w is 1 for an
 // octad and 0 for a complemented octad, coc an
 // even cocode vector in cocode rep.
-func suboctadType(octad, w, coc uint32) uint32 {
-	cw := uint32(mat24SyndromeTable[coc&0x7ff]) >> 15
-	lsb := lsbit24(octad)
-	coc ^= mat24RecipBasis[lsb]
-	syn := uint32(mat24SyndromeTable[coc&0x7ff])
-	cocodev := SynFromTable(syn) ^ (1 << lsb)
+func SuboctadType(octad, w, coc uint32) uint32 {
+	cw := uint32(mat24.SyndromeTable(coc&0x7ff)) >> 15
+	lsb := mat24.Lsbit24(octad)
+	coc ^= mat24.RecipBasis(lsb)
+	syn := uint32(mat24.SyndromeTable(coc & 0x7ff))
+	cocodev := mat24.SynFromTable(syn) ^ (1 << lsb)
 	var sub uint32
 	if octad&cocodev != cocodev {
 		sub = 1
@@ -338,7 +345,7 @@ func Leech2Subtype(x uint32) uint32 {
 // of Leech2Subtype as a value 0..8.
 func Leech2CoarseSubtype(x uint32) uint32 {
 	scalar := (x >> 12) & x
-	scalar = Parity12(scalar) // norm of v2 mod 2
+	scalar = mat24.Parity12(scalar) // norm of v2 mod 2
 
 	if x&0x800 != 0 {
 		if scalar != 0 {
@@ -346,7 +353,7 @@ func Leech2CoarseSubtype(x uint32) uint32 {
 		}
 		return 5
 	}
-	w := uint32(mat24ThetaTable[(x>>12)&0x7ff]) & 0x1000
+	w := uint32(mat24.ThetaTable((x>>12)&0x7ff)) & 0x1000
 	if w != 0 {
 		if scalar != 0 {
 			return 7
@@ -374,14 +381,14 @@ func Leech2CoarseSubtype(x uint32) uint32 {
 func Leech2Type(x uint32) uint32 {
 	// Return 3 if scalar product <code,cocode> odd
 	scalar := (x >> 12) & x
-	scalar = Parity12(scalar)
+	scalar = mat24.Parity12(scalar)
 	if scalar != 0 {
 		return 3
 	}
 
 	if x&0x800 != 0 { // odd cocode words
-		theta := uint32(mat24ThetaTable[(x>>12)&0x7ff])
-		syn := uint32(mat24SyndromeTable[(theta^x)&0x7ff])
+		theta := uint32(mat24.ThetaTable((x >> 12) & 0x7ff))
+		syn := uint32(mat24.SyndromeTable((theta ^ x) & 0x7ff))
 		w := ((syn & 0x3ff) + 0x100) & 0x400
 		return 4 - (w >> 9)
 	}
@@ -391,26 +398,26 @@ func Leech2Type(x uint32) uint32 {
 		if x&0xffffff == 0 {
 			return 0
 		}
-		syn := uint32(mat24SyndromeTable[x&0x7ff])
+		syn := uint32(mat24.SyndromeTable(x & 0x7ff))
 		return 4 - ((syn >> 14) & 2)
 	}
 
-	theta := uint32(mat24ThetaTable[(x>>12)&0x7ff])
+	theta := uint32(mat24.ThetaTable((x >> 12) & 0x7ff))
 	if theta&0x1000 != 0 {
 		return 4
 	}
 	w := ((theta >> 13) ^ (x >> 23)) & 1
 	coc := (x ^ theta) & 0x7ff
-	cw := uint32(mat24SyndromeTable[coc&0x7ff]) >> 15
+	cw := uint32(mat24.SyndromeTable(coc&0x7ff)) >> 15
 	if cw == w {
 		return 4
 	}
 	x ^= (1 - w) << 23
-	octad := GcodeToVect(x >> 12)
-	lsb := lsbit24(octad)
-	coc ^= mat24RecipBasis[lsb]
-	syn := uint32(mat24SyndromeTable[coc&0x7ff])
-	ccv := SynFromTable(syn) ^ (1 << lsb)
+	octad := mat24.GcodeToVect(x >> 12)
+	lsb := mat24.Lsbit24(octad)
+	coc ^= mat24.RecipBasis(lsb)
+	syn := uint32(mat24.SyndromeTable(coc & 0x7ff))
+	ccv := mat24.SynFromTable(syn) ^ (1 << lsb)
 	if (octad&ccv)^ccv != 0 {
 		return 4
 	}
@@ -422,8 +429,8 @@ func Leech2Type(x uint32) uint32 {
 // lattice encoding.
 func Leech2Type2(x uint32) uint32 {
 	if x&0x800 != 0 { // odd cocode words
-		theta := uint32(mat24ThetaTable[(x>>12)&0x7ff])
-		syn := uint32(mat24SyndromeTable[(theta^x)&0x7ff])
+		theta := uint32(mat24.ThetaTable((x >> 12) & 0x7ff))
+		syn := uint32(mat24.SyndromeTable((theta ^ x) & 0x7ff))
 		if (syn & 0x3ff) < (24 << 5) {
 			return 0
 		}
@@ -435,19 +442,19 @@ func Leech2Type2(x uint32) uint32 {
 	}
 	// Golay code word 0
 	if x&0x7ff000 == 0 {
-		syn := uint32(mat24SyndromeTable[x&0x7ff])
+		syn := uint32(mat24.SyndromeTable(x & 0x7ff))
 		return 0x20 & (0 - ((syn >> 15) & 1))
 	}
 
-	theta := uint32(mat24ThetaTable[(x>>12)&0x7ff])
+	theta := uint32(mat24.ThetaTable((x >> 12) & 0x7ff))
 	if theta&0x1000 != 0 {
 		return 0
 	}
 	w := ((theta >> 13) ^ (x >> 23)) & 1
 	x ^= (1 - w) << 23
 	coc := (x ^ theta) & 0x7ff
-	octad := GcodeToVect(x >> 12)
-	if suboctadType(octad, w, coc) != 0 {
+	octad := mat24.GcodeToVect(x >> 12)
+	if SuboctadType(octad, w, coc) != 0 {
 		return 0
 	}
 	return 0x22

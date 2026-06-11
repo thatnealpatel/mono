@@ -1,5 +1,10 @@
 package cgt
 
+import (
+	"patel.codes/cgt/generator"
+	"patel.codes/cgt/mat24"
+)
+
 // This file ports the triality operation tau^e on
 // the tag-A part (mm_op*_t_A), plus the mod-15
 // eval_A helpers. The full mm_op*_t (operating on
@@ -67,10 +72,10 @@ func putAEntry(p int, v []uint64, row, col, val int) {
 // or -1 if v2 is not of type 2. C mm_op15_eval_A.
 func evalA15(v []uint64, v2 uint32) int {
 	var res uint64
-	switch Leech2Type2(v2) {
+	switch generator.Leech2Type2(v2) {
 	case 0x20:
 		// Compute cocode entries of v2.
-		syn := uint32(mat24SyndromeTable[(v2^mat24RecipBasis[23])&0x7ff])
+		syn := uint32(mat24.SyndromeTable((v2 ^ mat24.RecipBasis(23)) & 0x7ff))
 		syn &= 0x3ff
 		// Bits 9..5 and 4..0 hold the high and low
 		// cocode bit index. Change a high index 24
@@ -84,9 +89,9 @@ func evalA15(v []uint64, v2 uint32) int {
 		res <<= 4
 	case 0x21:
 		v2 &= 0x7fffff
-		theta := uint32(mat24ThetaTable[v2>>12])
-		vect := GcodeToVect(v2 >> 12)
-		i := uint32(mat24SyndromeTable[(v2^theta)&0x7ff]) & 0x1f
+		theta := uint32(mat24.ThetaTable(v2 >> 12))
+		vect := mat24.GcodeToVect(v2 >> 12)
+		i := uint32(mat24.SyndromeTable((v2^theta)&0x7ff)) & 0x1f
 		vect ^= 0 - ((vect >> i) & 1)
 		r := evalA15Aux(v, 0xffffff, vect, i)
 		resRow := r >> 16
@@ -95,14 +100,14 @@ func evalA15(v []uint64, v2 uint32) int {
 		res += uint64(entryV(v, i, i))
 	case 0x22:
 		v2 &= 0x7fffff
-		theta := uint32(mat24ThetaTable[v2>>12])
-		vect := GcodeToVect(v2 >> 12)
+		theta := uint32(mat24.ThetaTable(v2 >> 12))
+		vect := mat24.GcodeToVect(v2 >> 12)
 		vect ^= ((theta >> 13) & 1) - 1
 		coc := (v2 ^ theta) & 0x7ff
-		lsb := lsbit24(vect)
-		coc ^= mat24RecipBasis[lsb]
-		syn := uint32(mat24SyndromeTable[coc&0x7ff])
-		cocodev := SynFromTable(syn) ^ (1 << lsb)
+		lsb := mat24.Lsbit24(vect)
+		coc ^= mat24.RecipBasis(lsb)
+		syn := uint32(mat24.SyndromeTable(coc & 0x7ff))
+		cocodev := mat24.SynFromTable(syn) ^ (1 << lsb)
 		res = 4 * uint64(evalA15Aux(v, vect, cocodev, 24))
 	default:
 		return -1

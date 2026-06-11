@@ -1,6 +1,11 @@
 package cgt
 
-import "fmt"
+import (
+	"fmt"
+
+	"patel.codes/cgt/generator"
+	"patel.codes/cgt/mat24"
+)
 
 // Word compression and expansion for the monster
 // group. This file ports the integer encoding of a
@@ -122,18 +127,18 @@ func expand23To24(i uint32) (uint32, bool) {
 // mm_compress_type4.
 func mmCompressType4(i uint32) int {
 	i &= 0xffffff
-	if Leech2Type(i) != 4 {
+	if generator.Leech2Type(i) != 4 {
 		return -1
 	}
 	if i&0x7ff800 == 0 {
 		i0 := i & 0x7ff
-		j := (i0 << 12) | (uint32(mat24ThetaTable[i0]) & 0x7ff) | cocode0
+		j := (i0 << 12) | (uint32(mat24.ThetaTable(i0)) & 0x7ff) | cocode0
 		if i&0x800000 != 0 {
 			j ^= cocode01
 		}
 		// Make the type of Leech vector j even.
 		b := j & (j >> 12)
-		b = Parity12(b)
+		b = mat24.Parity12(b)
 		j ^= b << 23
 		i = j
 	}
@@ -148,15 +153,15 @@ func mmCompressExpandType4(i uint32) int {
 	if !ok || i&0xff000000 != 0 {
 		return -11
 	}
-	switch Leech2Type(i) {
+	switch generator.Leech2Type(i) {
 	case 2:
 		// Result vector is of subtype 00, 20, 40, or 48.
 		j := (i >> 12) & 0x7ff
 		// Reject if j has weight 2.
-		if uint32(mat24SyndromeTable[j])>>15 != 0 {
+		if uint32(mat24.SyndromeTable(j))>>15 != 0 {
 			return -12
 		}
-		coc := (i ^ uint32(mat24ThetaTable[j]) ^ cocode0) & 0xfff
+		coc := (i ^ uint32(mat24.ThetaTable(j)) ^ cocode0) & 0xfff
 		if coc != 0 {
 			if coc != cocode01 {
 				return -13
@@ -310,7 +315,7 @@ func mmCompressPC(pc *mmCompress, pN *[4]uint64) int {
 	pN[0], pN[1], pN[2], pN[3] = 0, 0, 0, 0
 	var posN uint32
 	if pc.nx == 0 {
-		pN[0] = Mat24Order
+		pN[0] = mat24.Mat24Order
 		posN = 28
 	} else {
 		pN[0] = pc.nx
@@ -392,7 +397,7 @@ func mmCompressPCExpandInt(pN *[4]uint64) ([]uint32, error) {
 		return nil, compressError(-2)
 	}
 	p := uint32(pN[0] & 0xfffffff)
-	if p < Mat24Order {
+	if p < mat24.Mat24Order {
 		var g N0Elem
 		g[0] = 0
 		g[1] = uint32((pN[0] >> 28) & 0x7ff)
@@ -407,13 +412,13 @@ func mmCompressPCExpandInt(pN *[4]uint64) ([]uint32, error) {
 		posN = 64
 	} else {
 		switch p {
-		case Mat24Order:
+		case mat24.Mat24Order:
 			// Do nothing.
-		case Mat24Order + 1:
+		case mat24.Mat24Order + 1:
 			c := extractInt256(pN, 1, posN)
 			posN++
 			m = append(m, 0x50000001+c)
-		case Mat24Order + 2:
+		case mat24.Mat24Order + 2:
 			c := extractInt256(pN, 17, posN)
 			posN += 17
 			sp := IndexExternToSparse(int(c))
@@ -696,7 +701,7 @@ func complexity(imgOmega uint32) uint32 {
 		}
 		return 0
 	}
-	weight := (uint32(mat24ThetaTable[(imgOmega>>12)&0x7ff]) >> 12) & 1
+	weight := (uint32(mat24.ThetaTable((imgOmega>>12)&0x7ff)) >> 12) & 1
 	return 2 + weight
 }
 

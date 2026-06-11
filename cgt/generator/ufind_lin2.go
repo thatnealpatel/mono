@@ -1,4 +1,4 @@
-package cgt
+package generator
 
 import (
 	"math/bits"
@@ -806,6 +806,15 @@ func UFindLin2MulAffine(v uint32, m []uint32, n uint32) uint32 {
 	return vmatmulAff(v, m, n)
 }
 
+// MatInverseAff computes the inverse of the affine
+// transformation on GF(2)^n given by m (length n+1) and
+// stores it in mInv (length n+1). It returns 0 on success
+// and a negative value if m is not invertible. Mirrors
+// mat_inverse_aff.
+func MatInverseAff(m []uint32, n uint32, mInv []uint32) int32 {
+	return matInverseAff(m, n, mInv)
+}
+
 // UFindLin2Size returns the number of uint32s required
 // for an orbit array for a group acting on GF(2)^n with
 // up to k generators. It panics if n is 0 or greater
@@ -1497,6 +1506,30 @@ func UFindLin2MapV(a []uint32, v uint32, b []uint8, lB uint32) int32 {
 	return status
 }
 
+// UFindLin2MapVRaw is UFindLin2MapV without the panic on a
+// negative status: it returns the raw status so a caller
+// can grow the output buffer b and retry on ErrUFindOutShort.
+func UFindLin2MapVRaw(a []uint32, v uint32, b []uint8, lB uint32) int32 {
+	return lin2MapV(a, v, b, lB)
+}
+
+// ErrUFindOutShort is the negative status returned when an
+// output buffer passed to a UFindLin2* operation is too
+// short. A caller that grows and retries compares against
+// it.
+const ErrUFindOutShort = errGenUfindOutShort
+
+// ErrUFindLin2Gen is the negative status reported when a
+// UFindLin2* operation is given too many generators.
+const ErrUFindLin2Gen = errGenUfindLin2Gen
+
+// Lin2Panic builds the panic message for a negative status
+// returned by a UFindLin2* operation, for callers in other
+// packages that drive the raw API.
+func Lin2Panic(fn string, status int32) string {
+	return lin2Panic(fn, status)
+}
+
 func lin2MapV(a []uint32, v uint32, b []uint8, lB uint32) int32 {
 	var s lin2Type
 	status := finalizeInitialization(a, &s)
@@ -1718,7 +1751,7 @@ func UFindLin2Orbits(a []uint32, t []uint32, lT uint32, x []uint32, lX uint32) i
 // lin2Panic builds the panic message for a negative
 // status returned by a UFindLin2* operation.
 func lin2Panic(fn string, status int32) string {
-	return "cgt: " + fn + ": error status " + int32ToDec(status)
+	return "generator: " + fn + ": error status " + int32ToDec(status)
 }
 
 // u32 converts a signed int32 to uint32 at runtime,
