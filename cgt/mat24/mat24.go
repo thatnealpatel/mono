@@ -125,8 +125,22 @@ func GcodeWeight(v uint32) uint32 {
 // and a 24-byte list. The first w entries are
 // the ascending set-bit positions; the rest are
 // the ascending clear-bit positions.
+//
+// VectToBitList allocates the returned slice on
+// every call; use VectToBitListArr to avoid the
+// allocation in hot paths.
 func VectToBitList(v uint32) (int, []byte) {
-	out := make([]byte, 24)
+	w, out := VectToBitListArr(v)
+	return w, out[:]
+}
+
+// VectToBitListArr is the allocation-free form of
+// VectToBitList. It returns the bit weight w of v
+// and a fixed 24-byte array whose first w entries
+// are the ascending set-bit positions and the
+// rest are the ascending clear-bit positions.
+func VectToBitListArr(v uint32) (int, [24]byte) {
+	var out [24]byte
 	w := Bw24(v)
 	v <<= 3 // bit 0 is now at position 3
 	j := w  // write to pos 0 if clear, pos w if set
@@ -140,10 +154,22 @@ func VectToBitList(v uint32) (int, []byte) {
 
 // GcodeToBitList returns the ascending set-bit
 // positions of Golay code word v.
+//
+// GcodeToBitList allocates; use GcodeToBitListArr
+// to avoid the allocation in hot paths.
 func GcodeToBitList(v uint32) []byte {
-	vect := GcodeToVectInternal(v)
-	w, out := VectToBitList(vect)
+	w, out := GcodeToBitListArr(v)
 	return out[:w]
+}
+
+// GcodeToBitListArr is the allocation-free form of
+// GcodeToBitList. It returns the bit weight w of
+// Golay code word v and a fixed 24-byte array
+// whose first w entries are the ascending set-bit
+// positions.
+func GcodeToBitListArr(v uint32) (int, [24]byte) {
+	vect := GcodeToVectInternal(v)
+	return VectToBitListArr(vect)
 }
 
 // Lsbit24 returns the position of the least
@@ -249,12 +275,30 @@ func CocodeSyndromeRaw(c1, tetrad uint32) uint32 {
 // positions of the syndrome of cocode element c.
 // See Syndrome for the meaning of tetrad.
 //
+// CocodeToBitList allocates; use CocodeToBitListArr
+// to avoid the allocation in hot paths.
+//
 // CocodeToBitList panics if tetrad is out of
 // range for the syndrome weight.
 func CocodeToBitList(c, tetrad uint32) []byte {
-	out := make([]byte, 4)
+	n, out := CocodeToBitListArr(c, tetrad)
+	res := make([]byte, n)
+	copy(res, out[:n])
+	return res
+}
+
+// CocodeToBitListArr is the allocation-free form
+// of CocodeToBitList. It returns the count n of
+// valid entries (1 to 4) and a fixed 4-byte array
+// whose first n entries are the ascending bit
+// positions of the syndrome of cocode element c.
+//
+// CocodeToBitListArr panics if tetrad is out of
+// range for the syndrome weight.
+func CocodeToBitListArr(c, tetrad uint32) (int, [4]byte) {
+	var out [4]byte
 	if tetrad > 24 {
-		panic("CocodeToBitList: tetrad out of range")
+		panic("CocodeToBitListArr: tetrad out of range")
 	}
 	var syn, length, i, tmp uint32
 	if c&0x800 == 0 { // even cocode word
@@ -292,9 +336,9 @@ func CocodeToBitList(c, tetrad uint32) []byte {
 		out[2] = byte(a[2])
 		out[3] = byte(a[3])
 		if bad != 0 && length == 4 {
-			panic("CocodeToBitList: tetrad out of range")
+			panic("CocodeToBitListArr: tetrad out of range")
 		}
-		return out[:length]
+		return int(length), out
 	}
 	// odd cocode word
 	syn = uint32(mat24SyndromeTable[c&0x7ff])
@@ -306,7 +350,7 @@ func CocodeToBitList(c, tetrad uint32) []byte {
 	}
 	out[2] = byte((syn >> 10) & 31)
 	out[3] = 24
-	return out[:length]
+	return int(length), out
 }
 
 // CocodeToSextet stores the six tetrads of the
@@ -353,16 +397,33 @@ func AllSyndromes(v uint32) []uint32 {
 // CocodeAllSyndromes returns all minimum-weight
 // Golay code syndromes of cocode element c as
 // bit vectors. The result has length 1 or 6.
+//
+// CocodeAllSyndromes allocates; use
+// CocodeAllSyndromesArr to avoid the allocation
+// in hot paths.
 func CocodeAllSyndromes(c uint32) []uint32 {
-	out := make([]uint32, 6)
+	n, out := CocodeAllSyndromesArr(c)
+	res := make([]uint32, n)
+	copy(res, out[:n])
+	return res
+}
+
+// CocodeAllSyndromesArr is the allocation-free
+// form of CocodeAllSyndromes. It returns the count
+// n (1 or 6) and a fixed 6-element array whose
+// first n entries are the minimum-weight Golay
+// code syndromes of cocode element c as bit
+// vectors.
+func CocodeAllSyndromesArr(c uint32) (int, [6]uint32) {
+	var out [6]uint32
 	syn := uint32(mat24SyndromeTable[c&0x7ff])
 	out[0] = (1 << (syn & 31)) ^ (1 << ((syn >> 5) & 31)) ^ (1 << ((syn >> 10) & 31))
 	if c&0x800 != 0 {
-		return out[:1]
+		return 1, out
 	}
 	out[0] ^= 1
 	if syn>>15 != 0 || out[0] == 0 {
-		return out[:1]
+		return 1, out
 	}
 	remain := 0xffffff & ^out[0]
 	for i := 1; i < 6; i++ {
@@ -372,7 +433,7 @@ func CocodeAllSyndromes(c uint32) []uint32 {
 		out[i] = (1 << (syn & 31)) ^ (1 << ((syn >> 5) & 31)) ^ (1 << ((syn >> 10) & 31)) ^ next
 		remain &= ^out[i]
 	}
-	return out
+	return 6, out
 }
 
 // CocodeWeight returns the minimum possible bit
@@ -682,8 +743,8 @@ func IntersectOctadTetrad(v1, v2 uint32) uint32 {
 		wUp++
 	}
 	up |= sub
-	syndromes := CocodeAllSyndromes(Vintern(up))
-	for _, s := range syndromes {
+	nSyn, syndromes := CocodeAllSyndromesArr(Vintern(up))
+	for _, s := range syndromes[:nSyn] {
 		res := up ^ s
 		sub = res & o
 		if res&v2 == v2 && Bw24(sub) == 4 {
@@ -735,12 +796,9 @@ func cocodeAsSubdodecad(c1, v1, uSingle uint32) uint32 {
 	syn = syn & ^vect1
 
 	if syn != 0 {
-		var b [24]uint8
 		var coc [5]uint32
 		var c uint32
-		bw, blist := VectToBitList(vect1)
-		_ = bw
-		copy(b[:], blist)
+		_, b := VectToBitListArr(vect1)
 		u0 := VectToCocode(syn) & 0x7ff
 		for i := 0; i <= 4; i++ {
 			coc[i] = mat24RecipBasis[b[i]&0x1f] & 0x7ff
@@ -1136,10 +1194,10 @@ func PermFromMap(h1, h2 []byte) (int, []byte, error) {
 	}
 
 	if n < 5 {
-		_, b1 := VectToBitList(bm1)
-		_, b2 := VectToBitList(bm2)
-		copy(p1[:24], b1)
-		copy(p2[:24], b2)
+		_, b1 := VectToBitListArr(bm1)
+		_, b2 := VectToBitListArr(bm2)
+		copy(p1[:24], b1[:])
+		copy(p2[:24], b2[:])
 	}
 	for i := uint32(0); i < n; i++ {
 		p1[i] = h1[i]

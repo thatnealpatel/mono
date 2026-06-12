@@ -170,7 +170,7 @@ func IndexExternToSparse(i int) uint32 {
 		if u < XofsT {
 			u = (uint32(mmAuxTblABC[u]) & 0x7ff) + u - 24
 			u += (0x2A54000 >> ((u >> 8) << 1)) & 0x300
-			return 0x2000000 + ((u & 0xc00) << 15) +
+			return SpaceTagA + ((u & 0xc00) << 15) +
 				((u & 0x3e0) << 9) + ((u & 0x1f) << 8)
 		}
 		u += 0x80000 - XofsT
@@ -400,7 +400,7 @@ func IndexLeech2ToSparse(v2 uint32) uint32 {
 		if scalar != 0 {
 			return 0
 		}
-		return 0xA000000 + ((v2 & 0x7ff000) << 2) + ((syn & 0x1f) << 8)
+		return SpaceTagX + ((v2 & 0x7ff000) << 2) + ((syn & 0x1f) << 8)
 	}
 	if v2&0x7ff000 == 0 { // Golay code word 0
 		syn = uint32(mat24.SyndromeTable(v2 & 0x7ff))
@@ -410,7 +410,7 @@ func IndexLeech2ToSparse(v2 uint32) uint32 {
 		syn = uint32(mat24.SyndromeTable((v2 ^ mat24.RecipBasis(23)) & 0x7ff))
 		syn &= 0x3ff
 		syn -= ((syn + 0x100) & 0x400) >> 5
-		return ((syn >> 5) << 14) + ((syn & 0x1f) << 8) + 0x4000000 +
+		return ((syn >> 5) << 14) + ((syn & 0x1f) << 8) + SpaceTagB +
 			((0x800000 & v2) << 2)
 	}
 	// octads (and suboctads)
@@ -420,7 +420,7 @@ func IndexLeech2ToSparse(v2 uint32) uint32 {
 	if res == 0xffffffff {
 		return 0
 	}
-	return 0x8000000 + (res << 8)
+	return SpaceTagT + (res << 8)
 }
 
 // cocodeToSuboctadInline mirrors the C inline
@@ -446,7 +446,10 @@ func vectToCocode(v uint32) uint32 { return mat24.Vintern(v) & 0xfff }
 // IndexLeech2ToInternFast converts a short
 // Leech-lattice-mod-2 vector v2 to an internal
 // index, with fewer checks. C
-// mm_aux_index_leech2_to_intern_fast.
+// mm_aux_index_leech2_to_intern_fast. Returns 0 if
+// v2 decodes to an octad index >= 759; for any other
+// non-short v2 it returns a garbage (but in-range)
+// index rather than detecting the error, matching C.
 func IndexLeech2ToInternFast(v2 uint32) uint32 {
 	gc := (v2 >> 12) & 0x7ff
 	if v2&0x800 != 0 {

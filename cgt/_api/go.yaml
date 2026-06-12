@@ -338,14 +338,14 @@
           type: "[]uint64"
         - name: a
           type: "[]uint32"
-    - name: Leech2to3Abs
+    - name: Leech2To3Abs
       c: gen_leech2to3_abs
       py: gen_leech2to3_abs
       return: "uint64"
       params:
         - name: v2
           type: "uint64"
-    - name: Leech2to3Short
+    - name: Leech2To3Short
       c: gen_leech2to3_short
       py: gen_leech2to3_short
       return: "uint64"
@@ -429,21 +429,21 @@
           type: "uint64"
         - name: v32
           type: "uint64"
-    - name: Leech3to2
+    - name: Leech3To2
       c: gen_leech3to2
       py: gen_leech3to2
       return: "uint64"
       params:
         - name: v3
           type: "uint64"
-    - name: Leech3to2Short
+    - name: Leech3To2Short
       c: gen_leech3to2_short
       py: gen_leech3to2_short
       return: "uint64"
       params:
         - name: v3
           type: "uint64"
-    - name: Leech3to2Type4
+    - name: Leech3To2Type4
       c: gen_leech3to2_type4
       py: gen_leech3to2_type4
       return: "uint64"
@@ -533,7 +533,7 @@
           type: "uint32"
         - name: dist
           type: "[]float64"
-    - name: UfindFind
+    - name: UFindFind
       c: gen_ufind_find
       py: gen_ufind_find
       return: "int32"
@@ -544,7 +544,7 @@
           type: "uint32"
         - name: n
           type: "uint32"
-    - name: UfindFindAllMin
+    - name: UFindFindAllMin
       c: gen_ufind_find_all_min
       py: gen_ufind_find_all_min
       return: "int32"
@@ -553,7 +553,7 @@
           type: "[]uint32"
         - name: length
           type: "uint32"
-    - name: UfindInit
+    - name: UFindInit
       c: gen_ufind_init
       py: gen_ufind_init
       return: "int32"
@@ -562,7 +562,7 @@
           type: "[]uint32"
         - name: length
           type: "uint32"
-    - name: UfindLin2Add
+    - name: UFindLin2Add
       c: gen_ufind_lin2_add
       py: gen_ufind_lin2_add
       return: "int32"
@@ -573,7 +573,7 @@
           type: "[]uint32"
         - name: lG
           type: "uint32"
-    - name: UfindLin2Check
+    - name: UFindLin2Check
       c: gen_ufind_lin2_check
       py: gen_ufind_lin2_check
       return: "int32"
@@ -582,7 +582,7 @@
           type: "[]uint32"
         - name: lenA
           type: "uint32"
-    - name: UfindLin2CheckFinalized
+    - name: UFindLin2CheckFinalized
       c: gen_ufind_lin2_check_finalized
       py: gen_ufind_lin2_check_finalized
       return: "int32"
@@ -591,7 +591,7 @@
           type: "[]uint32"
         - name: lenA
           type: "uint32"
-    - name: UfindLin2Compress
+    - name: UFindLin2Compress
       c: gen_ufind_lin2_compress
       py: gen_ufind_lin2_compress
       return: "int32"
@@ -606,7 +606,7 @@
           type: "[]uint32"
         - name: lC
           type: "uint32"
-    - name: UfindLin2CompressedSize
+    - name: UFindLin2CompressedSize
       c: gen_ufind_lin2_compressed_size
       py: gen_ufind_lin2_compressed_size
       return: "int32"
@@ -617,21 +617,21 @@
           type: "[]uint32"
         - name: lO
           type: "uint32"
-    - name: UfindLin2Dim
+    - name: UFindLin2Dim
       c: gen_ufind_lin2_dim
       py: gen_ufind_lin2_dim
       return: "int32"
       params:
         - name: a
           type: "[]uint32"
-    - name: UfindLin2Finalize
+    - name: UFindLin2Finalize
       c: gen_ufind_lin2_finalize
       py: gen_ufind_lin2_finalize
       return: "int32"
       params:
         - name: a
           type: "[]uint32"
-    - name: UfindLin2Gen
+    - name: UFindLin2Gen
       c: gen_ufind_lin2_gen
       py: gen_ufind_lin2_gen
       return: "int32"
@@ -644,7 +644,7 @@
           type: "[]uint32"
         - name: lG
           type: "uint32"
-    - name: UfindLin2GetMap
+    - name: UFindLin2GetMap
       c: gen_ufind_lin2_get_map
       py: gen_ufind_lin2_get_map
       return: "int32"
@@ -655,7 +655,7 @@
           type: "[]uint32"
         - name: lMap
           type: "uint32"
-    - name: UfindLin2GetTable
+    - name: UFindLin2GetTable
       c: gen_ufind_lin2_get_table
       py: gen_ufind_lin2_get_table
       return: "int32"
@@ -666,7 +666,7 @@
           type: "[]uint32"
         - name: lT
           type: "uint32"
-    - name: UfindLin2Init
+    - name: UFindLin2Init
       c: gen_ufind_lin2_init
       py: gen_ufind_lin2_init
       return: "int32"
@@ -679,7 +679,7 @@
           type: "uint32"
         - name: nG
           type: "uint32"
-    - name: UfindLin2LenOrbitV
+    - name: UFindLin2LenOrbitV
       c: gen_ufind_lin2_len_orbit_v
       py: gen_ufind_lin2_len_orbit_v
       return: "int32"
@@ -688,7 +688,7 @@
           type: "[]uint32"
         - name: v
           type: "uint32"
-    - name: UfindLin2MapV
+    - name: UFindLin2MapV
       c: gen_ufind_lin2_map_v
       py: gen_ufind_lin2_map_v
       return: "int32"
@@ -701,7 +701,7 @@
           type: "[]uint8"
         - name: lB
           type: "uint32"
-    - name: UfindLin2MapVGen
+    - name: UFindLin2MapVGen
       c: gen_ufind_lin2_map_v_gen
       py: gen_ufind_lin2_map_v_gen
       return: "int32"
@@ -710,7 +710,7 @@
           type: "[]uint32"
         - name: v
           type: "uint32"
-    - name: UfindLin2MulAffine
+    - name: UFindLin2MulAffine
       c: gen_ufind_lin2_mul_affine
       py: gen_ufind_lin2_mul_affine
       return: "uint32"
@@ -721,28 +721,28 @@
           type: "[]uint32"
         - name: n
           type: "uint32"
-    - name: UfindLin2NGen
+    - name: UFindLin2NGen
       c: gen_ufind_lin2_n_gen
       py: gen_ufind_lin2_n_gen
       return: "int32"
       params:
         - name: a
           type: "[]uint32"
-    - name: UfindLin2NMaxGen
+    - name: UFindLin2NMaxGen
       c: gen_ufind_lin2_n_max_gen
       py: gen_ufind_lin2_n_max_gen
       return: "int32"
       params:
         - name: a
           type: "[]uint32"
-    - name: UfindLin2NOrbits
+    - name: UFindLin2NOrbits
       c: gen_ufind_lin2_n_orbits
       py: gen_ufind_lin2_n_orbits
       return: "int32"
       params:
         - name: a
           type: "[]uint32"
-    - name: UfindLin2OrbitLengths
+    - name: UFindLin2OrbitLengths
       c: gen_ufind_lin2_orbit_lengths
       py: gen_ufind_lin2_orbit_lengths
       return: "int32"
@@ -753,7 +753,7 @@
           type: "[]uint32"
         - name: lR
           type: "uint32"
-    - name: UfindLin2OrbitV
+    - name: UFindLin2OrbitV
       c: gen_ufind_lin2_orbit_v
       py: gen_ufind_lin2_orbit_v
       return: "int32"
@@ -766,7 +766,7 @@
           type: "[]uint32"
         - name: lR
           type: "uint32"
-    - name: UfindLin2Orbits
+    - name: UFindLin2Orbits
       c: gen_ufind_lin2_orbits
       py: gen_ufind_lin2_orbits
       return: "int32"
@@ -781,7 +781,7 @@
           type: "[]uint32"
         - name: lX
           type: "uint32"
-    - name: UfindLin2Pad
+    - name: UFindLin2Pad
       c: gen_ufind_lin2_pad
       py: gen_ufind_lin2_pad
       return: "int32"
@@ -792,7 +792,7 @@
           type: "uint32"
         - name: nMaxG
           type: "uint32"
-    - name: UfindLin2RepV
+    - name: UFindLin2RepV
       c: gen_ufind_lin2_rep_v
       py: gen_ufind_lin2_rep_v
       return: "int32"
@@ -801,7 +801,7 @@
           type: "[]uint32"
         - name: v
           type: "uint32"
-    - name: UfindLin2Representatives
+    - name: UFindLin2Representatives
       c: gen_ufind_lin2_representatives
       py: gen_ufind_lin2_representatives
       return: "int32"
@@ -812,7 +812,7 @@
           type: "[]uint32"
         - name: lR
           type: "uint32"
-    - name: UfindLin2Size
+    - name: UFindLin2Size
       c: gen_ufind_lin2_size
       py: gen_ufind_lin2_size
       return: "int32"
@@ -821,7 +821,7 @@
           type: "uint32"
         - name: k
           type: "uint32"
-    - name: UfindLin2TransformV
+    - name: UFindLin2TransformV
       c: gen_ufind_lin2_transform_v
       py: gen_ufind_lin2_transform_v
       return: "int32"
@@ -834,7 +834,7 @@
           type: "[]uint8"
         - name: lB
           type: "uint32"
-    - name: UfindMakeMap
+    - name: UFindMakeMap
       c: gen_ufind_make_map
       py: gen_ufind_make_map
       return: "int32"
@@ -845,7 +845,7 @@
           type: "uint32"
         - name: map_
           type: "[]uint32"
-    - name: UfindPartition
+    - name: UFindPartition
       c: gen_ufind_partition
       py: gen_ufind_partition
       return: "int32"
@@ -860,7 +860,7 @@
           type: "[]uint32"
         - name: lInd
           type: "uint32"
-    - name: UfindUnion
+    - name: UFindUnion
       c: gen_ufind_union
       py: gen_ufind_union
       return: "uint32"
@@ -873,7 +873,7 @@
           type: "uint32"
         - name: n2
           type: "uint32"
-    - name: UfindUnionAffine
+    - name: UFindUnionAffine
       c: gen_ufind_union_affine
       py: gen_ufind_union_affine
       return: "int32"
@@ -941,7 +941,7 @@
           type: "uint32"
         - name: e
           type: "uint32"
-    - name: XiOpXiNosign
+    - name: XiOpXiNoSign
       c: gen_xi_op_xi_nosign
       py: gen_xi_op_xi_nosign
       return: "uint32"
@@ -1203,16 +1203,6 @@
       recv: OrbitElem2
       return: ""
       params: []
-    - name: GoString
-      py: Orbit_Elem2.__str__
-      recv: OrbitElem2
-      return: "string"
-      params: []
-    - name: Hash
-      py: Orbit_Elem2.__hash__
-      recv: OrbitElem2
-      return: "int"
-      params: []
     - name: MapVG
       py: Orbit_Elem2.map_v_G
       recv: OrbitElem2
@@ -1233,13 +1223,6 @@
         - name: img
           type: ""
           default: 0
-    - name: NotEqual
-      py: Orbit_Elem2.__ne__
-      recv: OrbitElem2
-      return: "bool"
-      params:
-        - name: value
-          type: ""
     - name: Rand
       py: Orbit_Elem2.rand
       recv: OrbitElem2
@@ -1292,16 +1275,6 @@
       recv: OrbitLin2
       return: ""
       params: []
-    - name: GoString
-      py: Orbit_Lin2.__str__
-      recv: OrbitLin2
-      return: "string"
-      params: []
-    - name: Hash
-      py: Orbit_Lin2.__hash__
-      recv: OrbitLin2
-      return: "int"
-      params: []
     - name: MapVG
       py: Orbit_Lin2.map_v_G
       recv: OrbitLin2
@@ -1350,13 +1323,6 @@
       return: "int"
       params: []
       calls: [gen_ufind_lin2_n_orbits]
-    - name: NotEqual
-      py: Orbit_Lin2.__ne__
-      recv: OrbitLin2
-      return: "bool"
-      params:
-        - name: value
-          type: ""
     - name: Orbit
       py: Orbit_Lin2.orbit
       recv: OrbitLin2
@@ -1468,23 +1434,6 @@
       params: []
     - name: Equal
       py: Random_Subgroup.__eq__
-      recv: RandomSubgroup
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: GoString
-      py: Random_Subgroup.__str__
-      recv: RandomSubgroup
-      return: ""
-      params: []
-    - name: Hash
-      py: Random_Subgroup.__hash__
-      recv: RandomSubgroup
-      return: ""
-      params: []
-    - name: NotEqual
-      py: Random_Subgroup.__ne__
       recv: RandomSubgroup
       return: ""
       params:
@@ -1835,25 +1784,6 @@
       params:
         - name: other
           type: ""
-    - name: GoString
-      py: XLeech2.__str__
-      recv: XLeech2
-      return: "string"
-      params: []
-    - name: IDiv
-      py: XLeech2.__itruediv__
-      recv: XLeech2
-      return: "*XLeech2"
-      params:
-        - name: other
-          type: ""
-    - name: IMul
-      py: XLeech2.__imul__
-      recv: XLeech2
-      return: "*XLeech2"
-      params:
-        - name: other
-          type: ""
     - name: Invert
       py: XLeech2.__invert__
       recv: XLeech2
@@ -1886,22 +1816,10 @@
       recv: XLeech2
       return: "*XLeech2"
       params: []
-    - name: NotEqual
-      py: XLeech2.__ne__
-      recv: XLeech2
-      return: "bool"
-      params:
-        - name: other
-          type: ""
     - name: OctadNumber
       py: XLeech2.octad_number
       recv: XLeech2
       return: ""
-      params: []
-    - name: Pos
-      py: XLeech2.__pos__
-      recv: XLeech2
-      return: "*XLeech2"
       params: []
     - name: Pow
       py: XLeech2.__pow__
@@ -1917,7 +1835,7 @@
       return: "*XLeech2"
       params:
         - name: other
-          type: "int"
+          type: "*XLeech2"
       calls: [gen_leech2_mul, gen_leech2_pow]
     - name: RAnd
       py: XLeech2.__rand__
@@ -1941,7 +1859,7 @@
       return: "*XLeech2"
       params:
         - name: other
-          type: "*XLeech2"
+          type: "int"
       calls: [gen_leech2_mul, gen_leech2_pow]
     - name: RMul
       py: XLeech2.__rmul__
@@ -1957,7 +1875,7 @@
       return: "*XLeech2"
       params:
         - name: other
-          type: "*XLeech2"
+          type: "int"
       calls: [gen_leech2_mul]
     - name: Reduce
       py: XLeech2.reduce
@@ -1968,11 +1886,6 @@
       py: XLeech2.split
       recv: XLeech2
       return: ""
-      params: []
-    - name: Str
-      py: XLeech2.str
-      recv: XLeech2
-      return: "string"
       params: []
     - name: String
       py: XLeech2.__repr__
@@ -2025,7 +1938,7 @@
       params:
         - name: v1
           type: "uint32"
-    - name: CheckEndianess
+    - name: CheckEndianness
       c: mat24_check_endianess
       py: check_endianess
       return: "int32"
@@ -2192,7 +2105,7 @@
       params:
         - name: v1
           type: "uint32"
-    - name: M24numRandAdjustXy
+    - name: M24numRandAdjustXY
       c: mat24_m24num_rand_adjust_xy
       py: m24num_rand_adjust_xy
       return: "int32"
@@ -2701,10 +2614,6 @@
         - name: unique
           type: ""
           default: 1
-    - name: NewAutPlGroup
-      py: AutPlGroup.__init__
-      return: "*AutPlGroup"
-      params: []
     - name: NewCocode
       py: Cocode.__init__
       return: "*Cocode"
@@ -2820,11 +2729,6 @@
       params:
         - name: other
           type: ""
-    - name: GoString
-      py: AutPL.__str__
-      recv: AutPL
-      return: "string"
-      params: []
     - name: Invert
       py: AutPL.__invert__
       recv: AutPL
@@ -2834,13 +2738,6 @@
       py: AutPL.__mul__
       recv: AutPL
       return: "*AutPL"
-      params:
-        - name: other
-          type: ""
-    - name: NotEqual
-      py: AutPL.__ne__
-      recv: AutPL
-      return: "bool"
       params:
         - name: other
           type: ""
@@ -2870,95 +2767,10 @@
       recv: AutPL
       return: "*AutPL"
       params: []
-    - name: Str
-      py: AutPL.str
-      recv: AutPL
-      return: "string"
-      params: []
     - name: String
       py: AutPL.__repr__
       recv: AutPL
       return: "string"
-      params: []
-    - name: AsTuples
-      py: AutPlGroup.as_tuples
-      recv: AutPlGroup
-      return: ""
-      params:
-        - name: g
-          type: ""
-    - name: Atom
-      py: AutPlGroup.atom
-      recv: AutPlGroup
-      return: ""
-      params:
-        - name: tag
-          type: ""
-          default: None
-        - name: data
-          type: ""
-          default: None
-    - name: Contains
-      py: AutPlGroup.__contains__
-      recv: AutPlGroup
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: CopyWord
-      py: AutPlGroup.copy_word
-      recv: AutPlGroup
-      return: ""
-      params:
-        - name: g1
-          type: ""
-    - name: Equal
-      py: AutPlGroup.__eq__
-      recv: AutPlGroup
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: GoString
-      py: AutPlGroup.__str__
-      recv: AutPlGroup
-      return: ""
-      params: []
-    - name: Hash
-      py: AutPlGroup.__hash__
-      recv: AutPlGroup
-      return: ""
-      params: []
-    - name: Neutral
-      py: AutPlGroup.neutral
-      recv: AutPlGroup
-      return: ""
-      params: []
-    - name: NotEqual
-      py: AutPlGroup.__ne__
-      recv: AutPlGroup
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: Reduce
-      py: AutPlGroup.reduce
-      recv: AutPlGroup
-      return: ""
-      params:
-        - name: g
-          type: ""
-    - name: StrWord
-      py: AutPlGroup.str_word
-      recv: AutPlGroup
-      return: ""
-      params:
-        - name: g
-          type: ""
-    - name: String
-      py: AutPlGroup.__repr__
-      recv: AutPlGroup
-      return: ""
       params: []
     - name: Add
       py: Cocode.__add__
@@ -2973,7 +2785,7 @@
       return: "*Cocode"
       params:
         - name: other
-          type: "*Cocode"
+          type: "*GcVector"
     - name: AllSyndromes
       py: Cocode.all_syndromes
       recv: Cocode
@@ -3030,63 +2842,11 @@
       return: "*Cocode"
       params:
         - name: other
-          type: "int"
+          type: "*AutPL"
     - name: Neg
       py: Cocode.__neg__
       recv: Cocode
       return: "*Cocode"
-      params: []
-    - name: NotEqual
-      py: Cocode.__ne__
-      recv: Cocode
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: Pos
-      py: Cocode.__pos__
-      recv: Cocode
-      return: "*Cocode"
-      params: []
-    - name: RAdd
-      py: Cocode.__radd__
-      recv: Cocode
-      return: "*Cocode"
-      params:
-        - name: other
-          type: "*Cocode"
-    - name: RAddByGcVector
-      py: Cocode.__radd__
-      recv: Cocode
-      return: "*Cocode"
-      params:
-        - name: other
-          type: "*Cocode"
-    - name: RMul
-      py: Cocode.__rmul__
-      recv: Cocode
-      return: "*Cocode"
-      params:
-        - name: other
-          type: "int"
-    - name: RSub
-      py: Cocode.__rsub__
-      recv: Cocode
-      return: "*Cocode"
-      params:
-        - name: other
-          type: "*Cocode"
-    - name: RSubByGcVector
-      py: Cocode.__rsub__
-      recv: Cocode
-      return: "*Cocode"
-      params:
-        - name: other
-          type: "*Cocode"
-    - name: Str
-      py: Cocode.str
-      recv: Cocode
-      return: "string"
       params: []
     - name: String
       py: Cocode.__repr__
@@ -3106,7 +2866,7 @@
       return: "*Cocode"
       params:
         - name: other
-          type: "*Cocode"
+          type: "*GcVector"
     - name: Syndrome
       py: Cocode.syndrome
       recv: Cocode
@@ -3146,7 +2906,7 @@
       return: "*GcVector"
       params:
         - name: other
-          type: "*GCode"
+          type: "*GcVector"
     - name: And
       py: GCode.__and__
       recv: GCode
@@ -3160,14 +2920,14 @@
       return: "*Parity"
       params:
         - name: other
-          type: "*GCode"
+          type: "*Cocode"
     - name: AndByGcVector
       py: GCode.__and__
       recv: GCode
       return: "*GcVector"
       params:
         - name: other
-          type: "*GCode"
+          type: "*GcVector"
     - name: Div
       py: GCode.__truediv__
       recv: GCode
@@ -3226,59 +2986,12 @@
       return: "*GCode"
       params:
         - name: other
-          type: "int"
+          type: "*AutPL"
     - name: Neg
       py: GCode.__neg__
       recv: GCode
       return: "*GCode"
       params: []
-    - name: NotEqual
-      py: GCode.__ne__
-      recv: GCode
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: Pos
-      py: GCode.__pos__
-      recv: GCode
-      return: "*GCode"
-      params: []
-    - name: RAdd
-      py: GCode.__radd__
-      recv: GCode
-      return: "*GCode"
-      params:
-        - name: other
-          type: "*GCode"
-    - name: RAddByGcVector
-      py: GCode.__radd__
-      recv: GCode
-      return: "*GcVector"
-      params:
-        - name: other
-          type: "*GCode"
-    - name: RMul
-      py: GCode.__rmul__
-      recv: GCode
-      return: "*GCode"
-      params:
-        - name: other
-          type: "int"
-    - name: RSub
-      py: GCode.__rsub__
-      recv: GCode
-      return: "*GCode"
-      params:
-        - name: other
-          type: "*GCode"
-    - name: RSubByGcVector
-      py: GCode.__rsub__
-      recv: GCode
-      return: "*GcVector"
-      params:
-        - name: other
-          type: "*GCode"
     - name: Split
       py: GCode.split
       recv: GCode
@@ -3288,11 +3001,6 @@
       py: GCode.split_octad
       recv: GCode
       return: "GCodeSplitOctadResult"
-      params: []
-    - name: Str
-      py: GCode.str
-      recv: GCode
-      return: "string"
       params: []
     - name: String
       py: GCode.__repr__
@@ -3312,7 +3020,7 @@
       return: "*GcVector"
       params:
         - name: other
-          type: "*GCode"
+          type: "*GcVector"
     - name: Theta
       py: GCode.theta
       recv: GCode
@@ -3334,7 +3042,7 @@
       return: "*GCode"
       params:
         - name: other
-          type: "*GcVector"
+          type: "*GCode"
     - name: AllSyndromes
       py: GcVector.all_syndromes
       recv: GcVector
@@ -3353,7 +3061,7 @@
       return: "*GCode"
       params:
         - name: other
-          type: "*GcVector"
+          type: "*GCode"
     - name: Div
       py: GcVector.__truediv__
       recv: GcVector
@@ -3368,11 +3076,6 @@
       params:
         - name: other
           type: ""
-    - name: GoString
-      py: GcVector.__str__
-      recv: GcVector
-      return: "string"
-      params: []
     - name: Invert
       py: GcVector.__invert__
       recv: GcVector
@@ -3403,77 +3106,11 @@
       return: "*GcVector"
       params:
         - name: other
-          type: "int"
+          type: "*AutPL"
     - name: Neg
       py: GcVector.__neg__
       recv: GcVector
       return: "*GcVector"
-      params: []
-    - name: NotEqual
-      py: GcVector.__ne__
-      recv: GcVector
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: Pos
-      py: GcVector.__pos__
-      recv: GcVector
-      return: "*GcVector"
-      params: []
-    - name: RAdd
-      py: GcVector.__radd__
-      recv: GcVector
-      return: "*GcVector"
-      params:
-        - name: other
-          type: "*GcVector"
-    - name: RAddByGCode
-      py: GcVector.__radd__
-      recv: GcVector
-      return: "*GCode"
-      params:
-        - name: other
-          type: "*GcVector"
-    - name: RAnd
-      py: GcVector.__rand__
-      recv: GcVector
-      return: "*GcVector"
-      params:
-        - name: other
-          type: "*GcVector"
-    - name: RAndByGCode
-      py: GcVector.__rand__
-      recv: GcVector
-      return: "*GCode"
-      params:
-        - name: other
-          type: "*GcVector"
-    - name: RMul
-      py: GcVector.__rmul__
-      recv: GcVector
-      return: "*GcVector"
-      params:
-        - name: other
-          type: "int"
-    - name: RSub
-      py: GcVector.__rsub__
-      recv: GcVector
-      return: "*GcVector"
-      params:
-        - name: other
-          type: "*GcVector"
-    - name: RSubByGCode
-      py: GcVector.__rsub__
-      recv: GcVector
-      return: "*GCode"
-      params:
-        - name: other
-          type: "*GcVector"
-    - name: Str
-      py: GcVector.str
-      recv: GcVector
-      return: "string"
       params: []
     - name: String
       py: GcVector.__repr__
@@ -3493,7 +3130,7 @@
       return: "*GCode"
       params:
         - name: other
-          type: "*GcVector"
+          type: "*GCode"
     - name: Syndrome
       py: GcVector.syndrome
       recv: GcVector
@@ -3536,7 +3173,7 @@
       return: "*GcVector"
       params:
         - name: other
-          type: "*GCode"
+          type: "*GcVector"
     - name: And
       py: PLoop.__and__
       recv: PLoop
@@ -3550,14 +3187,14 @@
       return: "*Parity"
       params:
         - name: other
-          type: "*GCode"
+          type: "*Cocode"
     - name: AndByGcVector
       py: PLoop.__and__
       recv: PLoop
       return: "*GcVector"
       params:
         - name: other
-          type: "*GCode"
+          type: "*GcVector"
     - name: Div
       py: PLoop.__truediv__
       recv: PLoop
@@ -3571,7 +3208,7 @@
       return: "*PLoop"
       params:
         - name: other
-          type: "*PLoop"
+          type: "int"
     - name: Equal
       py: PLoop.__eq__
       recv: PLoop
@@ -3579,11 +3216,6 @@
       params:
         - name: other
           type: ""
-    - name: GoString
-      py: PLoop.__str__
-      recv: PLoop
-      return: "string"
-      params: []
     - name: Invert
       py: PLoop.__invert__
       recv: PLoop
@@ -3614,28 +3246,16 @@
       return: "*PLoop"
       params:
         - name: other
-          type: "*PLoop"
+          type: "*AutPL"
     - name: MulByInt
       py: PLoop.__mul__
       recv: PLoop
       return: "*GCode"
       params:
         - name: other
-          type: "*PLoop"
+          type: "int"
     - name: Neg
       py: PLoop.__neg__
-      recv: PLoop
-      return: "*PLoop"
-      params: []
-    - name: NotEqual
-      py: PLoop.__ne__
-      recv: PLoop
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: Pos
-      py: PLoop.__pos__
       recv: PLoop
       return: "*PLoop"
       params: []
@@ -3652,28 +3272,14 @@
       return: "*PLoop"
       params:
         - name: other
-          type: "int"
+          type: "*PLoop"
     - name: PowByParity
       py: PLoop.__pow__
       recv: PLoop
       return: "*PLoop"
       params:
         - name: other
-          type: "int"
-    - name: RAdd
-      py: PLoop.__radd__
-      recv: PLoop
-      return: "*GCode"
-      params:
-        - name: other
-          type: "*GCode"
-    - name: RAddByGcVector
-      py: PLoop.__radd__
-      recv: PLoop
-      return: "*GcVector"
-      params:
-        - name: other
-          type: "*GCode"
+          type: "*Parity"
     - name: RDiv
       py: PLoop.__rtruediv__
       recv: PLoop
@@ -3681,27 +3287,6 @@
       params:
         - name: other
           type: "int"
-    - name: RMul
-      py: PLoop.__rmul__
-      recv: PLoop
-      return: "*GCode"
-      params:
-        - name: other
-          type: "int"
-    - name: RSub
-      py: PLoop.__rsub__
-      recv: PLoop
-      return: "*GCode"
-      params:
-        - name: other
-          type: "*GCode"
-    - name: RSubByGcVector
-      py: PLoop.__rsub__
-      recv: PLoop
-      return: "*GcVector"
-      params:
-        - name: other
-          type: "*GCode"
     - name: Split
       py: PLoop.split
       recv: PLoop
@@ -3711,11 +3296,6 @@
       py: PLoop.split_octad
       recv: PLoop
       return: "PLoopSplitOctadResult"
-      params: []
-    - name: Str
-      py: PLoop.str
-      recv: PLoop
-      return: "string"
       params: []
     - name: String
       py: PLoop.__repr__
@@ -3735,7 +3315,7 @@
       return: "*GcVector"
       params:
         - name: other
-          type: "*GCode"
+          type: "*GcVector"
     - name: Theta
       py: PLoop.theta
       recv: PLoop
@@ -3757,7 +3337,7 @@
       return: "*Parity"
       params:
         - name: other
-          type: "int"
+          type: "*Parity"
     - name: Div
       py: Parity.__truediv__
       recv: Parity
@@ -3772,11 +3352,6 @@
       params:
         - name: other
           type: ""
-    - name: GoString
-      py: Parity.__str__
-      recv: Parity
-      return: "string"
-      params: []
     - name: Mod
       py: Parity.__mod__
       recv: Parity
@@ -3797,66 +3372,12 @@
       return: "*Parity"
       params:
         - name: other
-          type: "int"
+          type: "*Parity"
     - name: Neg
       py: Parity.__neg__
       recv: Parity
       return: "*Parity"
       params: []
-    - name: NotEqual
-      py: Parity.__ne__
-      recv: Parity
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: Pos
-      py: Parity.__pos__
-      recv: Parity
-      return: "*Parity"
-      params: []
-    - name: RAdd
-      py: Parity.__radd__
-      recv: Parity
-      return: "*Parity"
-      params:
-        - name: other
-          type: "int"
-    - name: RAddByParity
-      py: Parity.__radd__
-      recv: Parity
-      return: "*Parity"
-      params:
-        - name: other
-          type: "int"
-    - name: RMul
-      py: Parity.__rmul__
-      recv: Parity
-      return: "*Parity"
-      params:
-        - name: other
-          type: "int"
-    - name: RMulByParity
-      py: Parity.__rmul__
-      recv: Parity
-      return: "*Parity"
-      params:
-        - name: other
-          type: "int"
-    - name: RSub
-      py: Parity.__rsub__
-      recv: Parity
-      return: "*Parity"
-      params:
-        - name: other
-          type: "int"
-    - name: RSubByParity
-      py: Parity.__rsub__
-      recv: Parity
-      return: "*Parity"
-      params:
-        - name: other
-          type: "int"
     - name: String
       py: Parity.__repr__
       recv: Parity
@@ -3875,9 +3396,99 @@
       return: "*Parity"
       params:
         - name: other
-          type: "int"
+          type: "*Parity"
 
-- package: mm
+- package: mmindex
+  funcs:
+    - name: ArrayExternToSparse
+      c: mm_aux_array_extern_to_sparse
+      py: mm_aux_array_extern_to_sparse
+      params:
+        - name: a
+          type: "[]uint32"
+        - name: len
+          type: "uint32"
+    - name: IndexCheckIntern
+      c: mm_aux_index_check_intern
+      py: mm_aux_index_check_intern
+      return: "int32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: IndexExternToIntern
+      c: mm_aux_index_extern_to_intern
+      py: mm_aux_index_extern_to_intern
+      return: "int32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: IndexExternToSparse
+      c: mm_aux_index_extern_to_sparse
+      py: mm_aux_index_extern_to_sparse
+      return: "uint32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: IndexInternToLeech2
+      c: mm_aux_index_intern_to_leech2
+      py: mm_aux_index_intern_to_leech2
+      return: "uint32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: IndexInternToSparse
+      c: mm_aux_index_intern_to_sparse
+      py: mm_aux_index_intern_to_sparse
+      return: "uint32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: IndexLeech2ToInternFast
+      c: mm_aux_index_leech2_to_intern_fast
+      py: mm_aux_index_leech2_to_intern_fast
+      return: "uint32"
+      params:
+        - name: v2
+          type: "uint32"
+    - name: IndexLeech2ToSparse
+      c: mm_aux_index_leech2_to_sparse
+      py: mm_aux_index_leech2_to_sparse
+      return: "uint32"
+      params:
+        - name: v2
+          type: "uint32"
+    - name: IndexSparseToExtern
+      c: mm_aux_index_sparse_to_extern
+      py: mm_aux_index_sparse_to_extern
+      return: "int32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: IndexSparseToIntern
+      c: mm_aux_index_sparse_to_intern
+      py: mm_aux_index_sparse_to_intern
+      return: "int32"
+      params:
+        - name: i
+          type: "uint32"
+    - name: IndexSparseToLeech
+      c: mm_aux_index_sparse_to_leech
+      py: mm_aux_index_sparse_to_leech
+      return: "int32"
+      params:
+        - name: i
+          type: "uint32"
+        - name: v
+          type: "[]int32"
+    - name: IndexSparseToLeech2
+      c: mm_aux_index_sparse_to_leech2
+      py: mm_aux_index_sparse_to_leech2
+      return: "uint32"
+      params:
+        - name: i
+          type: "uint32"
+
+- package: monster
   funcs:
     - name: AuxAddMmv
       c: mm_aux_add_mmv
@@ -4749,7 +4360,7 @@
           type: "uint32"
         - name: y1
           type: "uint32"
-    - name: OpLoadLeech3matrix
+    - name: OpLoadLeech3Matrix
       c: mm_op_load_leech3matrix
       py: mm_op_load_leech3matrix
       return: "int32"
@@ -4943,7 +4554,7 @@
           type: "int32"
         - name: e
           type: "int32"
-    - name: OpXy
+    - name: OpXY
       c: mm_op_xy
       py: mm_op_xy
       return: "int32"
@@ -5312,7 +4923,7 @@
           type: "uint32"
         - name: pTbl
           type: "[]uint32"
-    - name: SubTestPrepXy
+    - name: SubTestPrepXY
       c: mm_sub_test_prep_xy
       py: mm_sub_test_prep_xy
       params:
@@ -5533,27 +5144,6 @@
           type: ""
         - name: b
           type: ""
-    - name: Ihex
-      py: ihex
-      return: ""
-      params:
-        - name: x
-          type: ""
-        - name: length
-          type: ""
-          default: None
-    - name: ImportGroups
-      py: import_groups
-      return: ""
-      params: []
-    - name: ImportRandMmElement
-      py: import_rand_mm_element
-      return: ""
-      params: []
-    - name: ImportXsp2Co1
-      py: import_Xsp2_Co1
-      return: ""
-      params: []
     - name: IndexI
       py: index_I
       return: ""
@@ -5615,73 +5205,6 @@
           type: ""
         - name: i
           type: "int"
-    - name: IndexToLinear
-      py: MMSpace.index_to_linear
-      return: ""
-      params:
-        - name: tag
-          type: ""
-        - name: i0
-          type: ""
-          default: -1
-        - name: i1
-          type: ""
-          default: -1
-      calls: [mm_aux_index_sparse_to_extern]
-    - name: IndexToShort
-      py: MMSpace.index_to_short
-      return: ""
-      params:
-        - name: tag
-          type: ""
-        - name: i0
-          type: ""
-          default: -1
-        - name: i1
-          type: ""
-          default: -1
-      calls: [mm_aux_index_sparse_to_leech]
-    - name: IndexToShortMod2
-      py: MMSpace.index_to_short_mod2
-      return: ""
-      params:
-        - name: tag
-          type: ""
-        - name: i0
-          type: ""
-          default: -1
-        - name: i1
-          type: ""
-          default: -1
-      calls: [mm_aux_index_sparse_to_leech2]
-    - name: IndexToSparse
-      py: MMSpace.index_to_sparse
-      return: ""
-      params:
-        - name: tag
-          type: "int"
-        - name: i0
-          type: ""
-          default: -1
-        - name: i1
-          type: ""
-          default: -1
-      calls: [mm_aux_index_extern_to_sparse, mm_aux_index_leech2_to_sparse]
-      dispatch:
-        - on: "int"
-          returns: ""
-    - name: IndexToTuple
-      py: MMSpace.index_to_tuple
-      return: ""
-      params:
-        - name: tag
-          type: ""
-        - name: i0
-          type: ""
-          default: -1
-        - name: i1
-          type: ""
-          default: -1
     - name: IndicesToSparse
       py: indices_to_sparse
       return: ""
@@ -5958,10 +5481,6 @@
       note: "constructor family; see also: NewMMFromTag, NewMMFromAtoms, NewMMRandom, NewMMFromString, NewMMFromTuples, NewMMCopy, NewMMFromAutPL, NewMMFromCocode, NewMMFromXLeech2, NewMMFromXsp2Co1"
       return: "*MM"
       params: []
-    - name: NewMM0Group
-      py: MM0Group.__init__
-      return: "*MM0Group"
-      params: []
     - name: NewMMCopy
       py: MM.__init__
       note: "copy constructor"
@@ -6023,10 +5542,6 @@
       params:
         - name: x
           type: "*Xsp2Co1"
-    - name: NewMMGroup
-      py: MMGroup.__init__
-      return: "*MMGroup"
-      params: []
     - name: NewMMRandom
       py: MM.__init__
       note: "random element"
@@ -6034,14 +5549,6 @@
       params:
         - name: subgroup
           type: "string"
-    - name: NewMMSpace
-      py: MMSpace.__init__
-      return: "*MMSpace"
-      params: []
-    - name: NewMMSpaceCRT
-      py: MMSpaceCRT.__init__
-      return: "*MMSpaceCRT"
-      params: []
     - name: NewMMVector
       py: MMVector.__init__
       return: "*MMVector"
@@ -6417,18 +5924,6 @@
         - name: i1
           type: ""
           default: slice(None, None, None)
-    - name: TupleToIndex
-      py: MMSpace.tuple_to_index
-      return: ""
-      params:
-        - name: tag
-          type: ""
-        - name: i0
-          type: ""
-          default: -1
-        - name: i1
-          type: ""
-          default: -1
     - name: TupleToSparse
       py: tuple_to_sparse
       return: ""
@@ -6499,16 +5994,6 @@
       params:
         - name: other
           type: ""
-    - name: GoString
-      py: AutP3.__str__
-      recv: AutP3
-      return: ""
-      params: []
-    - name: Hash
-      py: AutP3.__hash__
-      recv: AutP3
-      return: ""
-      params: []
     - name: Invert
       py: AutP3.__invert__
       recv: AutP3
@@ -6531,13 +6016,6 @@
       params: []
     - name: Mul
       py: AutP3.__mul__
-      recv: AutP3
-      return: ""
-      params:
-        - name: other
-          type: ""
-    - name: NotEqual
-      py: AutP3.__ne__
       recv: AutP3
       return: ""
       params:
@@ -6579,29 +6057,10 @@
       recv: AutP3
       return: ""
       params: []
-    - name: Str
-      py: AutP3.str
-      recv: AutP3
-      return: ""
-      params: []
     - name: String
       py: AutP3.__repr__
       recv: AutP3
       return: ""
-      params: []
-    - name: AxisType
-      py: Axis.axis_type
-      recv: Axis
-      return: "string"
-      params:
-        - name: e
-          type: ""
-          default: 0
-      calls: [mm_op_t_A]
-    - name: AxisTypeInfo
-      py: Axis.axis_type_info
-      recv: Axis
-      return: "AxisTypeInfoResult"
       params: []
     - name: CentralInvolution
       py: Axis.central_involution
@@ -6664,13 +6123,6 @@
       params:
         - name: index
           type: ""
-    - name: IMul
-      py: Axis.__imul__
-      recv: Axis
-      return: "*Axis"
-      params:
-        - name: g
-          type: "*MM"
     - name: InSpace
       py: Axis.in_space
       recv: Axis
@@ -6688,7 +6140,7 @@
         - name: d
           type: "int"
       calls: [leech3matrix_compress, leech3matrix_kernel_image, leech3matrix_sub_diag]
-    - name: Leech3matrix
+    - name: Leech3Matrix
       py: Axis.leech3matrix
       recv: Axis
       return: "[]uint64"
@@ -6728,7 +6180,7 @@
       recv: Axis
       return: "*Axis"
       params: []
-    - name: ReduceGX0
+    - name: ReduceGx0
       py: Axis.reduce_G_x0
       recv: Axis
       return: "*MM"
@@ -6744,6 +6196,20 @@
           type: ""
           default: False
       calls: [mm_aux_index_mmv, mm_op_scalprod, mm_op_scalprod_ind]
+    - name: Type
+      py: Axis.axis_type
+      recv: Axis
+      return: "string"
+      params:
+        - name: e
+          type: ""
+          default: 0
+      calls: [mm_op_t_A]
+    - name: TypeInfo
+      py: Axis.axis_type_info
+      recv: Axis
+      return: "AxisTypeInfoResult"
+      params: []
     - name: AxisType
       py: BabyAxis.axis_type
       recv: BabyAxis
@@ -6832,18 +6298,6 @@
       params:
         - name: index
           type: ""
-    - name: GoString
-      py: BabyAxis.__str__
-      recv: BabyAxis
-      return: "string"
-      params: []
-    - name: IMul
-      py: BabyAxis.__imul__
-      recv: BabyAxis
-      return: "*BabyAxis"
-      params:
-        - name: g
-          type: "*MM"
     - name: InSpace
       py: BabyAxis.in_space
       recv: BabyAxis
@@ -6861,7 +6315,7 @@
         - name: d
           type: "int"
       calls: [leech3matrix_compress, leech3matrix_kernel_image, leech3matrix_sub_diag]
-    - name: Leech3matrix
+    - name: Leech3Matrix
       py: BabyAxis.leech3matrix
       recv: BabyAxis
       return: "[]uint64"
@@ -6874,13 +6328,6 @@
       params:
         - name: g
           type: "*MM"
-    - name: NotEqual
-      py: BabyAxis.__ne__
-      recv: BabyAxis
-      return: "bool"
-      params:
-        - name: value
-          type: ""
     - name: ProductClass
       py: BabyAxis.product_class
       recv: BabyAxis
@@ -6908,7 +6355,7 @@
       recv: BabyAxis
       return: "*BabyAxis"
       params: []
-    - name: ReduceGX0
+    - name: ReduceGx0
       py: BabyAxis.reduce_G_x0
       recv: BabyAxis
       return: "*MM"
@@ -6958,16 +6405,6 @@
       params:
         - name: other
           type: ""
-    - name: GoString
-      py: BiMM.__str__
-      recv: BiMM
-      return: "string"
-      params: []
-    - name: Hash
-      py: BiMM.__hash__
-      recv: BiMM
-      return: "int"
-      params: []
     - name: Invert
       py: BiMM.__invert__
       recv: BiMM
@@ -6977,13 +6414,6 @@
       py: BiMM.__mul__
       recv: BiMM
       return: "*BiMM"
-      params:
-        - name: other
-          type: ""
-    - name: NotEqual
-      py: BiMM.__ne__
-      recv: BiMM
-      return: "bool"
       params:
         - name: other
           type: ""
@@ -7023,11 +6453,6 @@
       recv: BiMM
       return: ""
       params: []
-    - name: Str
-      py: BiMM.str
-      recv: BiMM
-      return: "string"
-      params: []
     - name: String
       py: BiMM.__repr__
       recv: BiMM
@@ -7064,7 +6489,7 @@
       recv: MM
       return: "bool"
       params: []
-    - name: ChiGX0
+    - name: ChiGx0
       py: MM.chi_G_x0
       recv: MM
       return: "[4]int"
@@ -7139,11 +6564,6 @@
       params:
         - name: i
           type: ""
-    - name: GoString
-      py: MM.__str__
-      recv: MM
-      return: "string"
-      params: []
     - name: HalfOrder
       py: MM.half_order
       recv: MM
@@ -7160,17 +6580,17 @@
         - name: ntrials
           type: "int"
           default: 40
-    - name: InGX0
+    - name: InGx0
       py: MM.in_G_x0
       recv: MM
       return: "bool"
       params: []
-    - name: InNX0
+    - name: InNx0
       py: MM.in_N_x0
       recv: MM
       return: "bool"
       params: []
-    - name: InQX0
+    - name: InQx0
       py: MM.in_Q_x0
       recv: MM
       return: "bool"
@@ -7194,13 +6614,6 @@
       py: MM.__mul__
       recv: MM
       return: "*MM"
-      params:
-        - name: other
-          type: ""
-    - name: NotEqual
-      py: MM.__ne__
-      recv: MM
-      return: "bool"
       params:
         - name: other
           type: ""
@@ -7254,778 +6667,11 @@
         - name: verbose
           type: ""
           default: 0
-    - name: Str
-      py: MM.str
-      recv: MM
-      return: "string"
-      params: []
     - name: String
       py: MM.__repr__
       recv: MM
       return: "string"
       params: []
-    - name: AsTuples
-      py: MM0Group.as_tuples
-      recv: MM0Group
-      return: ""
-      params:
-        - name: g
-          type: ""
-    - name: Atom
-      py: MM0Group.atom
-      recv: MM0Group
-      return: ""
-      params:
-        - name: args
-          type: ""
-    - name: Contains
-      py: MM0Group.__contains__
-      recv: MM0Group
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: CopyWord
-      py: MM0Group.copy_word
-      recv: MM0Group
-      return: ""
-      params:
-        - name: g1
-          type: ""
-    - name: Equal
-      py: MM0Group.__eq__
-      recv: MM0Group
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: GoString
-      py: MM0Group.__str__
-      recv: MM0Group
-      return: ""
-      params: []
-    - name: Hash
-      py: MM0Group.__hash__
-      recv: MM0Group
-      return: ""
-      params: []
-    - name: Neutral
-      py: MM0Group.neutral
-      recv: MM0Group
-      return: ""
-      params: []
-    - name: NotEqual
-      py: MM0Group.__ne__
-      recv: MM0Group
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: RawStrWord
-      py: MM0Group.raw_str_word
-      recv: MM0Group
-      return: ""
-      params:
-        - name: g
-          type: ""
-    - name: Reduce
-      py: MM0Group.reduce
-      recv: MM0Group
-      return: ""
-      params:
-        - name: g1
-          type: ""
-      calls: [mm_group_mul_words]
-    - name: StrWord
-      py: MM0Group.str_word
-      recv: MM0Group
-      return: ""
-      params:
-        - name: g
-          type: ""
-    - name: String
-      py: MM0Group.__repr__
-      recv: MM0Group
-      return: ""
-      params: []
-    - name: AsTuples
-      py: MMGroup.as_tuples
-      recv: MMGroup
-      return: ""
-      params:
-        - name: g
-          type: ""
-    - name: Atom
-      py: MMGroup.atom
-      recv: MMGroup
-      return: ""
-      params:
-        - name: args
-          type: ""
-    - name: Contains
-      py: MMGroup.__contains__
-      recv: MMGroup
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: CopyWord
-      py: MMGroup.copy_word
-      recv: MMGroup
-      return: ""
-      params:
-        - name: g1
-          type: ""
-    - name: Equal
-      py: MMGroup.__eq__
-      recv: MMGroup
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: GoString
-      py: MMGroup.__str__
-      recv: MMGroup
-      return: ""
-      params: []
-    - name: Hash
-      py: MMGroup.__hash__
-      recv: MMGroup
-      return: ""
-      params: []
-    - name: Neutral
-      py: MMGroup.neutral
-      recv: MMGroup
-      return: ""
-      params: []
-    - name: NotEqual
-      py: MMGroup.__ne__
-      recv: MMGroup
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: RawStrWord
-      py: MMGroup.raw_str_word
-      recv: MMGroup
-      return: ""
-      params:
-        - name: g
-          type: ""
-    - name: Reduce
-      py: MMGroup.reduce
-      recv: MMGroup
-      return: ""
-      params:
-        - name: g1
-          type: ""
-      calls: [mm_reduce_M]
-    - name: StrWord
-      py: MMGroup.str_word
-      recv: MMGroup
-      return: ""
-      params:
-        - name: g
-          type: ""
-    - name: String
-      py: MMGroup.__repr__
-      recv: MMGroup
-      return: ""
-      params: []
-    - name: AdditemsSparse
-      py: MMSpace.additems_sparse
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v
-          type: ""
-        - name: aIndices
-          type: ""
-      calls: [mm_aux_mmv_add_sparse]
-    - name: AsBytes
-      py: MMSpace.as_bytes
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-      calls: [mm_aux_mmv_to_bytes]
-    - name: AsSparse
-      py: MMSpace.as_sparse
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-      calls: [mm_aux_mmv_to_sparse]
-    - name: AsTuples
-      py: MMSpace.as_tuples
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-    - name: Check
-      py: MMSpace.check
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-      calls: [mm_aux_check_mmv, mm_aux_mmv_size]
-    - name: Contains
-      py: MMSpace.__contains__
-      recv: MMSpace
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: CopyVector
-      py: MMSpace.copy_vector
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-    - name: Equal
-      py: MMSpace.__eq__
-      recv: MMSpace
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: EqualVectors
-      py: MMSpace.equal_vectors
-      recv: MMSpace
-      return: "bool"
-      params:
-        - name: v1
-          type: ""
-        - name: v2
-          type: ""
-      calls: [mm_op_compare]
-    - name: FromBytes
-      py: MMSpace.from_bytes
-      recv: MMSpace
-      return: ""
-      params:
-        - name: p
-          type: ""
-        - name: b
-          type: ""
-      calls: [mm_aux_bytes_to_mmv]
-    - name: FromSparse
-      py: MMSpace.from_sparse
-      recv: MMSpace
-      return: ""
-      params:
-        - name: aSparse
-          type: ""
-    - name: GetitemsSparse
-      py: MMSpace.getitems_sparse
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: aIndices
-          type: ""
-      calls: [mm_aux_mmv_extract_sparse]
-    - name: GoString
-      py: MMSpace.__str__
-      recv: MMSpace
-      return: ""
-      params: []
-    - name: Hash
-      py: MMSpace.__hash__
-      recv: MMSpace
-      return: ""
-      params: []
-    - name: Iadd
-      py: MMSpace.iadd
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: v2
-          type: ""
-      calls: [mm_op_vector_add]
-    - name: IaddTuple
-      py: MMSpace.iadd_tuple
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: t
-          type: ""
-    - name: ImulGroupWord
-      py: MMSpace.imul_group_word
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: g
-          type: ""
-      calls: [mm_op_word, mm_vector]
-    - name: ImulScalar
-      py: MMSpace.imul_scalar
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: a
-          type: ""
-      calls: [mm_op_scalar_mul]
-    - name: IshiftRight
-      py: MMSpace.ishift_right
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: shift
-          type: ""
-    - name: NotEqual
-      py: MMSpace.__ne__
-      recv: MMSpace
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: Parse
-      py: MMSpace.parse
-      recv: MMSpace
-      return: ""
-      params:
-        - name: s
-          type: ""
-    - name: RandUniform
-      py: MMSpace.rand_uniform
-      recv: MMSpace
-      return: ""
-      params: []
-    - name: RandVector
-      py: MMSpace.rand_vector
-      recv: MMSpace
-      return: ""
-      params:
-        - name: tags
-          type: ""
-          default: None
-        - name: minWeight
-          type: ""
-          default: 1
-        - name: maxWeight
-          type: ""
-          default: 0
-    - name: RawStrVector
-      py: MMSpace.raw_str_vector
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-    - name: Reduce
-      py: MMSpace.reduce
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-      calls: [mm_aux_reduce_mmv]
-    - name: SetPreimage
-      py: MMSpace.set_preimage
-      recv: MMSpace
-      return: ""
-      params:
-        - name: space
-          type: ""
-        - name: morphism
-          type: ""
-    - name: SetRandUniform
-      py: MMSpace.set_rand_uniform
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: seed
-          type: ""
-          default: None
-      calls: [mm_aux_random_mmv]
-    - name: SetitemsSparse
-      py: MMSpace.setitems_sparse
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v
-          type: ""
-        - name: aIndices
-          type: ""
-      calls: [mm_aux_mmv_set_sparse]
-    - name: StrVector
-      py: MMSpace.str_vector
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-    - name: String
-      py: MMSpace.__repr__
-      recv: MMSpace
-      return: ""
-      params: []
-    - name: Unit
-      py: MMSpace.unit
-      recv: MMSpace
-      return: ""
-      params:
-        - name: data
-          type: ""
-    - name: VectorGetItem
-      py: MMSpace.vector_get_item
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: item
-          type: ""
-    - name: VectorMulExp
-      py: MMSpace.vector_mul_exp
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: g
-          type: ""
-        - name: e
-          type: ""
-        - name: breakG
-          type: ""
-          default: False
-      calls: [mm_op_word, mm_vector]
-    - name: VectorSetItem
-      py: MMSpace.vector_set_item
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: item
-          type: ""
-        - name: value
-          type: ""
-    - name: ViaSparse
-      py: MMSpace.via_sparse
-      recv: MMSpace
-      return: ""
-      params:
-        - name: v1
-          type: ""
-    - name: Zero
-      py: MMSpace.zero
-      recv: MMSpace
-      return: "*MMVector"
-      params:
-        - name: p
-          type: ""
-    - name: AdditemsSparse
-      py: MMSpaceCRT.additems_sparse
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: args
-          type: ""
-        - name: kwds
-          type: ""
-    - name: AsBytes
-      py: MMSpaceCRT.as_bytes
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: args
-          type: ""
-        - name: kwds
-          type: ""
-    - name: AsSparse
-      py: MMSpaceCRT.as_sparse
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: args
-          type: ""
-        - name: kwds
-          type: ""
-    - name: AsTuples
-      py: MMSpaceCRT.as_tuples
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: args
-          type: ""
-        - name: kwds
-          type: ""
-    - name: Check
-      py: MMSpaceCRT.check
-      recv: MMSpaceCRT
-      return: "bool"
-      params:
-        - name: v1
-          type: ""
-    - name: Contains
-      py: MMSpaceCRT.__contains__
-      recv: MMSpaceCRT
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: CopyVector
-      py: MMSpaceCRT.copy_vector
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: v1
-          type: ""
-    - name: Equal
-      py: MMSpaceCRT.__eq__
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: EqualVectors
-      py: MMSpaceCRT.equal_vectors
-      recv: MMSpaceCRT
-      return: "bool"
-      params:
-        - name: v1
-          type: ""
-        - name: v2
-          type: ""
-    - name: FromBytes
-      py: MMSpaceCRT.from_bytes
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: args
-          type: ""
-        - name: kwds
-          type: ""
-    - name: FromSparse
-      py: MMSpaceCRT.from_sparse
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: aSparse
-          type: ""
-    - name: GetitemsSparse
-      py: MMSpaceCRT.getitems_sparse
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: v
-          type: ""
-        - name: aSparse
-          type: ""
-    - name: GoString
-      py: MMSpaceCRT.__str__
-      recv: MMSpaceCRT
-      return: ""
-      params: []
-    - name: Hash
-      py: MMSpaceCRT.__hash__
-      recv: MMSpaceCRT
-      return: ""
-      params: []
-    - name: Iadd
-      py: MMSpaceCRT.iadd
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: v2
-          type: ""
-    - name: IaddTuple
-      py: MMSpaceCRT.iadd_tuple
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: t
-          type: ""
-    - name: ImulGroupWord
-      py: MMSpaceCRT.imul_group_word
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: g
-          type: ""
-      calls: [mm_aux_mmv_size, mm_group_n_clear, mm_group_n_mul_word_scan, mm_group_n_to_word]
-    - name: ImulScalar
-      py: MMSpaceCRT.imul_scalar
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: a
-          type: ""
-    - name: IshiftRight
-      py: MMSpaceCRT.ishift_right
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: v1
-          type: ""
-        - name: shift
-          type: ""
-    - name: NotEqual
-      py: MMSpaceCRT.__ne__
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: Parse
-      py: MMSpaceCRT.parse
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: args
-          type: ""
-        - name: kwds
-          type: ""
-    - name: RandUniform
-      py: MMSpaceCRT.rand_uniform
-      recv: MMSpaceCRT
-      return: ""
-      params: []
-    - name: RandVector
-      py: MMSpaceCRT.rand_vector
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: tags
-          type: ""
-          default: None
-        - name: minWeight
-          type: ""
-          default: 1
-        - name: maxWeight
-          type: ""
-          default: 0
-    - name: RawStrVector
-      py: MMSpaceCRT.raw_str_vector
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: v1
-          type: ""
-    - name: Reduce
-      py: MMSpaceCRT.reduce
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: v1
-          type: ""
-    - name: SetPreimage
-      py: MMSpaceCRT.set_preimage
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: space
-          type: ""
-        - name: morphism
-          type: ""
-    - name: SetRandUniform
-      py: MMSpaceCRT.set_rand_uniform
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: args
-          type: ""
-        - name: kwds
-          type: ""
-    - name: SetitemsSparse
-      py: MMSpaceCRT.setitems_sparse
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: args
-          type: ""
-        - name: kwds
-          type: ""
-    - name: StrVector
-      py: MMSpaceCRT.str_vector
-      recv: MMSpaceCRT
-      return: "string"
-      params:
-        - name: v1
-          type: ""
-    - name: String
-      py: MMSpaceCRT.__repr__
-      recv: MMSpaceCRT
-      return: ""
-      params: []
-    - name: Unit
-      py: MMSpaceCRT.unit
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: data
-          type: ""
-    - name: VectorGetItem
-      py: MMSpaceCRT.vector_get_item
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: v
-          type: ""
-        - name: item
-          type: ""
-      calls: [mm_crt_combine_bytes]
-    - name: VectorMulExp
-      py: MMSpaceCRT.vector_mul_exp
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: args
-          type: ""
-        - name: kwds
-          type: ""
-    - name: VectorSetItem
-      py: MMSpaceCRT.vector_set_item
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: args
-          type: ""
-        - name: kwd
-          type: ""
-    - name: ViaSparse
-      py: MMSpaceCRT.via_sparse
-      recv: MMSpaceCRT
-      return: ""
-      params:
-        - name: v1
-          type: ""
-    - name: Zero
-      py: MMSpaceCRT.zero
-      recv: MMSpaceCRT
-      return: "*MMVectorCRT"
-      params:
-        - name: shift
-          type: ""
     - name: Add
       py: MMVector.__add__
       recv: MMVector
@@ -8115,34 +6761,6 @@
       params:
         - name: aSparse
           type: "[]uint32"
-    - name: GoString
-      py: MMVector.__str__
-      recv: MMVector
-      return: "string"
-      params: []
-    - name: Hash
-      py: MMVector.hash
-      recv: MMVector
-      return: "int"
-      params:
-        - name: tags
-          type: ""
-          default: None
-      calls: [mm_aux_hash]
-    - name: IAdd
-      py: MMVector.__iadd__
-      recv: MMVector
-      return: "*MMVector"
-      params:
-        - name: other
-          type: ""
-    - name: IDiv
-      py: MMVector.__itruediv__
-      recv: MMVector
-      return: "*MMVector"
-      params:
-        - name: other
-          type: "int"
     - name: ILshift
       py: MMVector.__ilshift__
       recv: MMVector
@@ -8150,22 +6768,8 @@
       params:
         - name: other
           type: ""
-    - name: IMul
-      py: MMVector.__imul__
-      recv: MMVector
-      return: "*MMVector"
-      params:
-        - name: other
-          type: "int"
     - name: IRshift
       py: MMVector.__irshift__
-      recv: MMVector
-      return: "*MMVector"
-      params:
-        - name: other
-          type: ""
-    - name: ISub
-      py: MMVector.__isub__
       recv: MMVector
       return: "*MMVector"
       params:
@@ -8207,18 +6811,6 @@
           default: False
     - name: Neg
       py: MMVector.__neg__
-      recv: MMVector
-      return: "*MMVector"
-      params: []
-    - name: NotEqual
-      py: MMVector.__ne__
-      recv: MMVector
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: Pos
-      py: MMVector.__pos__
       recv: MMVector
       return: "*MMVector"
       params: []
@@ -8291,11 +6883,6 @@
         - name: p
           type: "int"
           default: 0
-    - name: Str
-      py: MMVector.str
-      recv: MMVector
-      return: "string"
-      params: []
     - name: String
       py: MMVector.__repr__
       recv: MMVector
@@ -8374,34 +6961,8 @@
       params:
         - name: aSparse
           type: "[]uint32"
-    - name: GoString
-      py: MMVectorCRT.__str__
-      recv: MMVectorCRT
-      return: "string"
-      params: []
-    - name: IAdd
-      py: MMVectorCRT.__iadd__
-      recv: MMVectorCRT
-      return: "*MMVectorCRT"
-      params:
-        - name: other
-          type: ""
-    - name: IDiv
-      py: MMVectorCRT.__itruediv__
-      recv: MMVectorCRT
-      return: "*MMVectorCRT"
-      params:
-        - name: other
-          type: "int"
     - name: ILshift
       py: MMVectorCRT.__ilshift__
-      recv: MMVectorCRT
-      return: "*MMVectorCRT"
-      params:
-        - name: other
-          type: "int"
-    - name: IMul
-      py: MMVectorCRT.__imul__
       recv: MMVectorCRT
       return: "*MMVectorCRT"
       params:
@@ -8414,13 +6975,6 @@
       params:
         - name: other
           type: "int"
-    - name: ISub
-      py: MMVectorCRT.__isub__
-      recv: MMVectorCRT
-      return: "*MMVectorCRT"
-      params:
-        - name: other
-          type: ""
     - name: Lshift
       py: MMVectorCRT.__lshift__
       recv: MMVectorCRT
@@ -8451,18 +7005,6 @@
       py: MMVectorCRT.norm
       recv: MMVectorCRT
       return: "float64"
-      params: []
-    - name: NotEqual
-      py: MMVectorCRT.__ne__
-      recv: MMVectorCRT
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: Pos
-      py: MMVectorCRT.__pos__
-      recv: MMVectorCRT
-      return: "*MMVectorCRT"
       params: []
     - name: Projection
       py: MMVectorCRT.projection
@@ -8540,11 +7082,6 @@
       params:
         - name: sh
           type: "int"
-    - name: Str
-      py: MMVectorCRT.str
-      recv: MMVectorCRT
-      return: "string"
-      params: []
     - name: String
       py: MMVectorCRT.__repr__
       recv: MMVectorCRT
@@ -8564,11 +7101,6 @@
       params:
         - name: other
           type: ""
-    - name: GoString
-      py: P3_node.__str__
-      recv: P3Node
-      return: "string"
-      params: []
     - name: Mul
       py: P3_node.__mul__
       recv: P3Node
@@ -8584,13 +7116,6 @@
       recv: P3Node
       return: "string"
       params: []
-    - name: NotEqual
-      py: P3_node.__ne__
-      recv: P3Node
-      return: "bool"
-      params:
-        - name: other
-          type: ""
     - name: String
       py: P3_node.__repr__
       recv: P3Node
@@ -8679,23 +7204,6 @@
         - name: group
           type: ""
           default: <class 'mmgroup.mm_group.MM'>
-    - name: GoString
-      py: RandomBabyAxis.__str__
-      recv: RandomBabyAxis
-      return: ""
-      params: []
-    - name: Hash
-      py: RandomBabyAxis.__hash__
-      recv: RandomBabyAxis
-      return: ""
-      params: []
-    - name: NotEqual
-      py: RandomBabyAxis.__ne__
-      recv: RandomBabyAxis
-      return: ""
-      params:
-        - name: value
-          type: ""
     - name: String
       py: RandomBabyAxis.__repr__
       recv: RandomBabyAxis
@@ -8712,96 +7220,6 @@
       recv: RandomBabyAxis
       return: ""
       params: []
-
-- package: mmindex
-  funcs:
-    - name: AuxArrayExternToSparse
-      c: mm_aux_array_extern_to_sparse
-      py: mm_aux_array_extern_to_sparse
-      params:
-        - name: a
-          type: "[]uint32"
-        - name: len
-          type: "uint32"
-    - name: AuxIndexCheckIntern
-      c: mm_aux_index_check_intern
-      py: mm_aux_index_check_intern
-      return: "int32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexExternToIntern
-      c: mm_aux_index_extern_to_intern
-      py: mm_aux_index_extern_to_intern
-      return: "int32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexExternToSparse
-      c: mm_aux_index_extern_to_sparse
-      py: mm_aux_index_extern_to_sparse
-      return: "uint32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexInternToLeech2
-      c: mm_aux_index_intern_to_leech2
-      py: mm_aux_index_intern_to_leech2
-      return: "uint32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexInternToSparse
-      c: mm_aux_index_intern_to_sparse
-      py: mm_aux_index_intern_to_sparse
-      return: "uint32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexLeech2ToInternFast
-      c: mm_aux_index_leech2_to_intern_fast
-      py: mm_aux_index_leech2_to_intern_fast
-      return: "uint32"
-      params:
-        - name: v2
-          type: "uint32"
-    - name: AuxIndexLeech2ToSparse
-      c: mm_aux_index_leech2_to_sparse
-      py: mm_aux_index_leech2_to_sparse
-      return: "uint32"
-      params:
-        - name: v2
-          type: "uint32"
-    - name: AuxIndexSparseToExtern
-      c: mm_aux_index_sparse_to_extern
-      py: mm_aux_index_sparse_to_extern
-      return: "int32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexSparseToIntern
-      c: mm_aux_index_sparse_to_intern
-      py: mm_aux_index_sparse_to_intern
-      return: "int32"
-      params:
-        - name: i
-          type: "uint32"
-    - name: AuxIndexSparseToLeech
-      c: mm_aux_index_sparse_to_leech
-      py: mm_aux_index_sparse_to_leech
-      return: "int32"
-      params:
-        - name: i
-          type: "uint32"
-        - name: v
-          type: "[]int32"
-    - name: AuxIndexSparseToLeech2
-      c: mm_aux_index_sparse_to_leech2
-      py: mm_aux_index_sparse_to_leech2
-      return: "uint32"
-      params:
-        - name: i
-          type: "uint32"
 
 - package: qstate12
   funcs:
@@ -9108,7 +7526,7 @@
           type: "*qstate12Type"
         - name: pfactor
           type: "[]int32"
-    - name: Matmul
+    - name: MatMul
       c: qstate12_matmul
       return: "int32"
       params:
@@ -9702,20 +8120,6 @@
       recv: QState12
       return: "*QState12"
       params: []
-    - name: IDiv
-      py: QState12.__itruediv__
-      recv: QState12
-      return: "*QState12"
-      params:
-        - name: value
-          type: ""
-    - name: IMul
-      py: QState12.__imul__
-      recv: QState12
-      return: "*QState12"
-      params:
-        - name: value
-          type: ""
     - name: IsReduced
       py: QState12.is_reduced
       recv: QState12
@@ -9758,18 +8162,6 @@
           default: 0
     - name: Neg
       py: QState12.__neg__
-      recv: QState12
-      return: "*QState12"
-      params: []
-    - name: NotEqual
-      py: QState12.__ne__
-      recv: QState12
-      return: "bool"
-      params:
-        - name: value
-          type: ""
-    - name: Pos
-      py: QState12.__pos__
       recv: QState12
       return: "*QState12"
       params: []
@@ -9991,25 +8383,6 @@
       params:
         - name: item
           type: ""
-    - name: GoString
-      py: QStateMatrix.__str__
-      recv: QStateMatrix
-      return: "string"
-      params: []
-    - name: IDiv
-      py: QStateMatrix.__itruediv__
-      recv: QStateMatrix
-      return: ""
-      params:
-        - name: value
-          type: ""
-    - name: IMul
-      py: QStateMatrix.__imul__
-      recv: QStateMatrix
-      return: ""
-      params:
-        - name: value
-          type: ""
     - name: Int32
       py: QStateMatrix.int32
       recv: QStateMatrix
@@ -10075,13 +8448,6 @@
       recv: QStateMatrix
       return: "*QStateMatrix"
       params: []
-    - name: NotEqual
-      py: QStateMatrix.__ne__
-      recv: QStateMatrix
-      return: "bool"
-      params:
-        - name: value
-          type: ""
     - name: Order
       py: QStateMatrix.order
       recv: QStateMatrix
@@ -10103,11 +8469,6 @@
       py: QStateMatrix.pauli_vector
       recv: QStateMatrix
       return: ""
-      params: []
-    - name: Pos
-      py: QStateMatrix.__pos__
-      recv: QStateMatrix
-      return: "*QStateMatrix"
       params: []
     - name: Power
       py: QStateMatrix.power
@@ -10476,23 +8837,6 @@
       params:
         - name: value
           type: ""
-    - name: GoString
-      py: GtSubWord.__str__
-      recv: GtSubWord
-      return: ""
-      params: []
-    - name: Hash
-      py: GtSubWord.__hash__
-      recv: GtSubWord
-      return: ""
-      params: []
-    - name: NotEqual
-      py: GtSubWord.__ne__
-      recv: GtSubWord
-      return: ""
-      params:
-        - name: value
-          type: ""
     - name: String
       py: GtSubWord.__repr__
       recv: GtSubWord
@@ -10542,16 +8886,6 @@
       params:
         - name: value
           type: ""
-    - name: GoString
-      py: GtWord.__str__
-      recv: GtWord
-      return: "string"
-      params: []
-    - name: Hash
-      py: GtWord.__hash__
-      recv: GtWord
-      return: "int"
-      params: []
     - name: Len
       py: GtWord.__len__
       recv: GtWord
@@ -10565,13 +8899,6 @@
         - name: group
           type: ""
           default: None
-    - name: NotEqual
-      py: GtWord.__ne__
-      recv: GtWord
-      return: "bool"
-      params:
-        - name: value
-          type: ""
     - name: Reduce
       py: GtWord.reduce
       recv: GtWord
@@ -10976,21 +9303,6 @@
           type: "uint64"
         - name: bl
           type: "[]uint8"
-    - name: Bin
-      py: bin
-      return: ""
-      params:
-        - name: x
-          type: ""
-        - name: l
-          type: ""
-          default: 24
-        - name: d
-          type: ""
-          default: 8
-        - name: reverse
-          type: ""
-          default: False
     - name: Binbv
       py: binbv
       return: ""
@@ -11084,26 +9396,8 @@
           type: ""
         - name: args
           type: ""
-    - name: Bitlen
-      py: bitlen
-      return: ""
-      params:
-        - name: x
-          type: ""
     - name: Bitparity
       py: bitparity
-      return: ""
-      params:
-        - name: x
-          type: ""
-    - name: Bits2list
-      py: bits2list
-      return: ""
-      params:
-        - name: x
-          type: ""
-    - name: Bitweight
-      py: bitweight
       return: ""
       params:
         - name: x
@@ -11158,18 +9452,6 @@
       params:
         - name: listList
           type: ""
-    - name: Lmap
-      py: lmap
-      return: ""
-      params:
-        - name: args
-          type: ""
-    - name: Lrange
-      py: lrange
-      return: ""
-      params:
-        - name: args
-          type: ""
     - name: PivotBinaryHigh
       py: pivot_binary_high
       return: ""
@@ -11201,12 +9483,6 @@
       py: uint64_to_bitlist
       return: ""
       params: []
-    - name: Unnumpy
-      py: unnumpy
-      return: ""
-      params:
-        - name: obj
-          type: ""
     - name: V2
       py: v2
       return: ""
@@ -11990,14 +10266,6 @@
         - name: length
           type: ""
       calls: [xsp2co1_error_pool]
-    - name: ImportConstructMm
-      py: import_construct_mm
-      return: ""
-      params: []
-    - name: ImportMM
-      py: import_MM
-      return: ""
-      params: []
     - name: MmgroupToXsp2co1
       py: mmgroup_to_xsp2co1
       return: ""
@@ -12044,10 +10312,6 @@
           type: "byte"
         - name: value
           type: "int"
-    - name: NewXsp2Co1Group
-      py: Xsp2_Co1_Group.__init__
-      return: "*Xsp2Co1Group"
-      params: []
     - name: NewXsp2Co1Random
       py: Xsp2_Co1.__init__
       return: "*Xsp2Co1"
@@ -12089,120 +10353,6 @@
         - name: xsp
           type: ""
       calls: [xsp2co1_elem_to_word]
-    - name: AsTuples
-      py: Xsp2_Co1_Group.as_tuples
-      recv: Xsp2Co1Group
-      return: ""
-      params:
-        - name: g
-          type: "*Xsp2Co1"
-    - name: Atom
-      py: Xsp2_Co1_Group.atom
-      recv: Xsp2Co1Group
-      return: "*Xsp2Co1"
-      params:
-        - name: tag
-          type: ""
-          default: None
-        - name: i
-          type: ""
-          default: 'r'
-    - name: Contains
-      py: Xsp2_Co1_Group.__contains__
-      recv: Xsp2Co1Group
-      return: "bool"
-      params:
-        - name: other
-          type: ""
-    - name: CopyWord
-      py: Xsp2_Co1_Group.copy_word
-      recv: Xsp2Co1Group
-      return: "*Xsp2Co1"
-      params:
-        - name: g1
-          type: "*Xsp2Co1"
-      calls: [xsp2co1_copy_elem]
-    - name: Equal
-      py: Xsp2_Co1_Group.__eq__
-      recv: Xsp2Co1Group
-      return: "bool"
-      params:
-        - name: value
-          type: ""
-    - name: FromData
-      py: Xsp2_Co1_Group.from_data
-      recv: Xsp2Co1Group
-      return: "*Xsp2Co1"
-      params:
-        - name: data
-          type: "[]uint32"
-    - name: FromQs
-      py: Xsp2_Co1_Group.from_qs
-      recv: Xsp2Co1Group
-      return: "*Xsp2Co1"
-      params:
-        - name: qs
-          type: "*QState12"
-        - name: x
-          type: ""
-      calls: [xsp2co1_qs_to_elem_i]
-    - name: FromXsp
-      py: Xsp2_Co1_Group.from_xsp
-      recv: Xsp2Co1Group
-      return: "*Xsp2Co1"
-      params:
-        - name: x
-          type: "int"
-      calls: [xsp2co1_elem_xspecial]
-    - name: GoString
-      py: Xsp2_Co1_Group.__str__
-      recv: Xsp2Co1Group
-      return: "string"
-      params: []
-    - name: Hash
-      py: Xsp2_Co1_Group.__hash__
-      recv: Xsp2Co1Group
-      return: "int"
-      params: []
-    - name: Neutral
-      py: Xsp2_Co1_Group.neutral
-      recv: Xsp2Co1Group
-      return: "*Xsp2Co1"
-      params: []
-    - name: NotEqual
-      py: Xsp2_Co1_Group.__ne__
-      recv: Xsp2Co1Group
-      return: "bool"
-      params:
-        - name: value
-          type: ""
-    - name: RawStrWord
-      py: Xsp2_Co1_Group.raw_str_word
-      recv: Xsp2Co1Group
-      return: "string"
-      params:
-        - name: g
-          type: "*Xsp2Co1"
-    - name: Reduce
-      py: Xsp2_Co1_Group.reduce
-      recv: Xsp2Co1Group
-      return: "*Xsp2Co1Group"
-      params:
-        - name: g1
-          type: "*Xsp2Co1"
-      calls: [xsp2co1_reduce_elem]
-    - name: StrWord
-      py: Xsp2_Co1_Group.str_word
-      recv: Xsp2Co1Group
-      return: "string"
-      params:
-        - name: v1
-          type: "*Xsp2Co1"
-    - name: String
-      py: Xsp2_Co1_Group.__repr__
-      recv: Xsp2Co1Group
-      return: "string"
-      params: []
 
 - constants:
     - name: MaxGtWordData

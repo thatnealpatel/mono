@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	oraclepkg "patel.codes/cgt/internal/oracle"
 )
 
 // bitMat is a test-only GroupElem: an invertible n x n bit
@@ -80,7 +82,7 @@ func orbitOracle(t *testing.T, gens [][]uint32, expr string) []byte {
 	b.WriteString("]\n")
 	b.WriteString("o=Orbit_Lin2(lambda x: x, gens)\n")
 	fmt.Fprintf(&b, "print(json.dumps(%s))\n", expr)
-	out, err := pyCmd(b.String()).CombinedOutput()
+	out, err := oraclepkg.Cmd(b.String()).CombinedOutput()
 	if err != nil {
 		t.Fatalf("orbit oracle failed: %v\n%s", err, out)
 	}
@@ -213,7 +215,7 @@ func orbitOracleSetup(t *testing.T, gens [][]uint32, setup, expr string) int64 {
 	b.WriteString("]\n")
 	b.WriteString(setup)
 	fmt.Fprintf(&b, "print(json.dumps(%s))\n", expr)
-	out, err := pyCmd(b.String()).CombinedOutput()
+	out, err := oraclepkg.Cmd(b.String()).CombinedOutput()
 	if err != nil {
 		t.Fatalf("orbit oracle setup failed: %v\n%s", err, out)
 	}
@@ -293,7 +295,7 @@ func orbitMapWordGenSigns(t *testing.T, gens [][]uint32, v uint32) [][2]int {
 	b.WriteString("G.gen_ufind_lin2_finalize(a)\n")
 	fmt.Fprintf(&b, "buf=np.zeros(64,dtype=np.uint8)\nr=G.gen_ufind_lin2_map_v(a,%d,buf,64)\n", v)
 	b.WriteString("print(json.dumps([[int(x>>1), 1 if (x&1)==0 else -1] for x in buf[:r]]))\n")
-	out, err := pyCmd(b.String()).CombinedOutput()
+	out, err := oraclepkg.Cmd(b.String()).CombinedOutput()
 	if err != nil {
 		t.Fatalf("map word oracle failed: %v\n%s", err, out)
 	}

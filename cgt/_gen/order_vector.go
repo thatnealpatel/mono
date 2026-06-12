@@ -110,7 +110,7 @@ func genOrderVector(w io.Writer, _ string) error {
 	buf.WriteString("// MM_ORDER_VECTOR_TAG_DATA in the same file; it drives\n")
 	buf.WriteString("// recovery of a G_x0 element from the image of the\n")
 	buf.WriteString("// order vector under that element.\n\n")
-	buf.WriteString("package cgt\n")
+	buf.WriteString("package monster\n")
 	writeHexTable(&buf, "orderVectorTable", "...", "uint64", 16, valsPerLine, packed)
 	writeHexTable(&buf, "orderTagTable", "...", "uint32", 8, valsPerLine, tagVals)
 

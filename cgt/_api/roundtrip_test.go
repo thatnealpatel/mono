@@ -2,9 +2,180 @@ package main
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
+
+// goYAMLCRe matches a `  c: <symbol>` provenance line in go.yaml.
+var goYAMLCRe = regexp.MustCompile(`^\s+c:\s+(\S+)\s*$`)
+
+// goYAMLPyRe matches a `  py: <symbol>` provenance line in go.yaml. The
+// symbol is a Class.method, a bare module-function name, or a delegated C
+// function name (the Xsp2_Co1 family correlates under its C name).
+var goYAMLPyRe = regexp.MustCompile(`^\s+py:\s+(\S+)\s*$`)
+
+// TestPySurfaceLedgerFresh is the M3 freshness guard and the Python-side
+// mirror of TestCSurfaceLedgerFresh: it makes the runtime mmgroup Python
+// public surface authoritative by re-deriving the denominator live from the
+// committed python.yaml and holding every public method/module-function
+// against the committed go.yaml plus the two M3 ledger tables. It fails
+// closed when an upstream public symbol carries no go.yaml py: correlation,
+// no delegated-to-C entry, and no out-of-scope classification (a new or
+// reclassified upstream surface), and equally when a ledger table key goes
+// stale (names no live-but-uncovered symbol, or has since been covered).
+//
+// It exercises the same assertPySurfaceFresh logic the generator runs, but
+// reads the committed go.yaml py:/c: sets straight from the file (go.yaml is
+// write-only output with no round-trip parser) and the committed python.yaml
+// through parsePythonYAML, so `go test .` catches surface drift without a
+// full generation cycle.
+func TestPySurfaceLedgerFresh(t *testing.T) {
+	raw, err := os.ReadFile(goOut)
+	if err != nil {
+		t.Fatalf("reading %s: %v", goOut, err)
+	}
+	covered := map[string]bool{}
+	goC := map[string]bool{}
+	for _, ln := range strings.Split(string(raw), "\n") {
+		if m := goYAMLPyRe.FindStringSubmatch(ln); m != nil {
+			covered[m[1]] = true
+		}
+		if m := goYAMLCRe.FindStringSubmatch(ln); m != nil {
+			goC[m[1]] = true
+		}
+	}
+	if len(covered) == 0 {
+		t.Fatalf("no py: provenance lines parsed from %s", goOut)
+	}
+
+	pyRaw, err := os.ReadFile(pythonOut)
+	if err != nil {
+		t.Fatalf("reading %s: %v", pythonOut, err)
+	}
+	py, err := parsePythonYAML(string(pyRaw))
+	if err != nil {
+		t.Fatalf("parsePythonYAML: %v", err)
+	}
+
+	delegatesSeen := map[string]bool{}
+	outOfScopeSeen := map[string]bool{}
+	pyEachPublicSurface(py, func(sym, where string) {
+		switch {
+		case covered[sym]:
+		case pyDelegatesToC[sym] != "":
+			delegatesSeen[sym] = true
+		case pyOutOfScope[sym].class != "":
+			outOfScopeSeen[sym] = true
+		default:
+			t.Errorf("unclassified public runtime Python symbol: %s (in %s) — extend the M3 ledger (go.yaml py:, pyDelegatesToC, or pyOutOfScope)", sym, where)
+		}
+	})
+
+	for sym, cName := range pyDelegatesToC {
+		if delegatesSeen[sym] && !goC[cName] {
+			t.Errorf("pyDelegatesToC[%q] = %q names no live go.yaml c: entry (delegation target not translated; method genuinely missing)", sym, cName)
+		}
+	}
+
+	live := pyLivePublicSet(py)
+	for sym := range pyDelegatesToC {
+		if delegatesSeen[sym] {
+			continue
+		}
+		if !live[sym] {
+			t.Errorf("pyDelegatesToC key %q names no live public Python symbol (stale ledger)", sym)
+		} else {
+			t.Errorf("pyDelegatesToC key %q is now covered by a go.yaml py: key (redundant ledger entry)", sym)
+		}
+	}
+	for sym := range pyOutOfScope {
+		if outOfScopeSeen[sym] {
+			continue
+		}
+		if !live[sym] {
+			t.Errorf("pyOutOfScope key %q names no live public Python symbol (stale ledger)", sym)
+		} else {
+			t.Errorf("pyOutOfScope key %q is now covered by a go.yaml py: key (drop its classification)", sym)
+		}
+	}
+}
+
+// TestCSurfaceLedgerFresh is the M2 freshness guard: it makes the upstream
+// C public surface authoritative by re-deriving the denominator live from
+// the `%%EXPORT`-marked functions in the `.ske` tree and holding every
+// export against the committed go.yaml plus the two M2 ledger tables. It
+// fails closed when upstream gains an export that carries no go.yaml
+// correlation, no translated-internal entry, and no (b)/(c) classification
+// (a new or reclassified upstream export), and equally when a ledger table
+// key goes stale (names no live export, or has since been correlated).
+//
+// It exercises the same assertCSurfaceFresh logic the generator runs, but
+// reads the committed go.yaml `c:` set straight from the file (go.yaml is
+// write-only output with no round-trip parser), so `go test .` catches
+// surface drift without a full generation cycle.
+func TestCSurfaceLedgerFresh(t *testing.T) {
+	exports, err := extractSkeExports()
+	if err != nil {
+		t.Fatalf("extractSkeExports: %v", err)
+	}
+	if len(exports) == 0 {
+		t.Fatal("no EXPORT-marked functions extracted from .ske tree (skeRoot wrong, or extractor broke)")
+	}
+
+	raw, err := os.ReadFile(goOut)
+	if err != nil {
+		t.Fatalf("reading %s: %v", goOut, err)
+	}
+	goC := map[string]bool{}
+	for _, ln := range strings.Split(string(raw), "\n") {
+		if m := goYAMLCRe.FindStringSubmatch(ln); m != nil {
+			goC[m[1]] = true
+		}
+	}
+	if len(goC) == 0 {
+		t.Fatalf("no c: provenance lines parsed from %s", goOut)
+	}
+
+	internalSeen := map[string]bool{}
+	untranslatedSeen := map[string]bool{}
+	var unclassified []string
+	for name, ske := range exports {
+		switch {
+		case cExportInGoYAML(name, goC):
+		case cTranslatedInternal[name] != "":
+			internalSeen[name] = true
+		case cUntranslated[name].class != "":
+			untranslatedSeen[name] = true
+		default:
+			unclassified = append(unclassified, name+" (in "+ske+")")
+		}
+	}
+	for _, u := range unclassified {
+		t.Errorf("unclassified upstream %%EXPORT function: %s — extend the M2 ledger (go.yaml c:, cTranslatedInternal, or cUntranslated)", u)
+	}
+
+	for name := range cTranslatedInternal {
+		if internalSeen[name] {
+			continue
+		}
+		if _, live := exports[name]; !live {
+			t.Errorf("cTranslatedInternal key %q names no live %%EXPORT function (stale ledger)", name)
+		} else {
+			t.Errorf("cTranslatedInternal key %q is now correlated in go.yaml (redundant ledger entry)", name)
+		}
+	}
+	for name := range cUntranslated {
+		if untranslatedSeen[name] {
+			continue
+		}
+		if _, live := exports[name]; !live {
+			t.Errorf("cUntranslated key %q names no live %%EXPORT function (stale ledger)", name)
+		} else {
+			t.Errorf("cUntranslated key %q is now correlated in go.yaml (drop its (b)/(c) classification)", name)
+		}
+	}
+}
 
 // TestPythonYAMLRoundTripTypeKeys is a step[6] guard: it parses the
 // generated python.yaml back through parsePythonYAML and asserts that the

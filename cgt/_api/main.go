@@ -18,17 +18,25 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 )
 
 var pxdRoot = filepath.Join("..", "..", "mmgroup", "src", "mmgroup", "dev", "pxd_files")
+
+// skeRoot is the upstream `.ske` source tree. Its `%%EXPORT`-marked
+// functions are the authoritative C public surface — the denominator
+// assertCSurfaceFresh holds the Go translation against (M2). It sits one
+// directory up from pxdRoot (dev/pxd_files → dev).
+var skeRoot = filepath.Join("..", "..", "mmgroup", "src", "mmgroup", "dev")
 
 const (
 	mmgroupPythonPath  = "/home/neal/code/mono/mmgroup/src"
@@ -99,7 +107,15 @@ func main() {
 	log.SetFlags(0)
 
 	out := flag.String("out", "", "run only this stage (cython.yaml, python.yaml, or go.yaml)")
+	report := flag.Bool("report", false, "emit the M2/M3 surface ledger tallies as JSON instead of generating (for the Me5 completeness report)")
 	flag.Parse()
+
+	if *report {
+		if err := runSurfaceReport(cythonOut, pythonOut, os.Stdout); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 
 	if *out != "" {
 		if err := runStage(filepath.Base(*out)); err != nil {
@@ -688,30 +704,45 @@ func sortedUnique(in []string) []string {
 // per-package plan: every entry carries c: and/or py: provenance, mapping
 // each operation to its target cgt package, an exported Go name, and Go
 // parameter/return types (GAPS7_8 §8.5/§8.6, Q1/Q15).
-func genGo(cythonPath, pythonPath, outPath string) error {
+// buildPlan reads the committed cython.yaml and python.yaml manifests and
+// builds the in-memory Go plan: it parses both, fails closed on stale
+// drop/rename tables, populates goStruct, groups the C functions into Go
+// packages, and folds the Python surface in. It performs the entire genGo
+// derivation up to (but excluding) the M2/M3 surface assertions and the
+// go.yaml write, so both the generator (genGo) and the completeness report
+// (-report) share one build path. It reads only the committed manifests, not
+// live mmgroup, so it is cheap and deterministic.
+func buildPlan(cythonPath, pythonPath string) (cythonManifest, pythonManifest, []goPackage, foldStats, error) {
 	data, err := os.ReadFile(cythonPath)
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", cythonPath, err)
+		return cythonManifest{}, pythonManifest{}, nil, foldStats{}, fmt.Errorf("reading %s: %w", cythonPath, err)
 	}
 	man, err := parseCythonYAML(string(data))
 	if err != nil {
-		return fmt.Errorf("%s: %w", cythonPath, err)
+		return cythonManifest{}, pythonManifest{}, nil, foldStats{}, fmt.Errorf("%s: %w", cythonPath, err)
 	}
 
 	pyData, err := os.ReadFile(pythonPath)
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", pythonPath, err)
+		return cythonManifest{}, pythonManifest{}, nil, foldStats{}, fmt.Errorf("reading %s: %w", pythonPath, err)
 	}
 	py, err := parsePythonYAML(string(pyData))
 	if err != nil {
-		return fmt.Errorf("%s: %w", pythonPath, err)
+		return cythonManifest{}, pythonManifest{}, nil, foldStats{}, fmt.Errorf("%s: %w", pythonPath, err)
 	}
 
 	// The drop tables (dropClasses, dropModuleFns) must track upstream
 	// exactly: a key that no longer names a live class/function is a stale
 	// drop masking a real change, so fail closed before folding.
 	if err := assertDropTablesFresh(py); err != nil {
-		return err
+		return cythonManifest{}, pythonManifest{}, nil, foldStats{}, err
+	}
+
+	// The Python-side rename table (pyRenameOverrides) must track upstream
+	// exactly: a key that no longer names a live Class.method is a stale
+	// rename masking a real change, so fail closed before folding.
+	if err := assertPyRenamesFresh(py); err != nil {
+		return cythonManifest{}, pythonManifest{}, nil, foldStats{}, err
 	}
 
 	// Populate goStruct from the parsed ctypedef struct names rather
@@ -722,7 +753,7 @@ func genGo(cythonPath, pythonPath, outPath string) error {
 
 	pkgs, err := groupGo(man.Funcs)
 	if err != nil {
-		return err
+		return cythonManifest{}, pythonManifest{}, nil, foldStats{}, err
 	}
 
 	// Fold the Python surface into the C-derived plan: correlate Python
@@ -731,6 +762,84 @@ func genGo(cythonPath, pythonPath, outPath string) error {
 	// pure-Python helpers) with blank parameter types (PYGEN Q16-A).
 	stats, err := foldPython(pkgs, py)
 	if err != nil {
+		return cythonManifest{}, pythonManifest{}, nil, foldStats{}, err
+	}
+
+	return man, py, pkgs, stats, nil
+}
+
+// surfaceReport is the M2/M3 ledger half of the Me5 completeness report: the
+// two upstream-surface tallies the assertions emit, derived from committed
+// cython.yaml/python.yaml plus the live `.ske` tree. cmd/report joins this with
+// the M1 coverage matrix into the headline ratios. It is emitted as a single
+// JSON object so cmd/report can decode it from the generator's stdout without
+// importing this package main.
+type surfaceReport struct {
+	C  cSurfaceTally  `json:"c_surface"`
+	Py pySurfaceTally `json:"py_surface"`
+}
+
+// runSurfaceReport builds the in-memory plan from the committed manifests, runs
+// the M2 and M3 surface ledgers, and writes the combined tally as one JSON
+// object. It returns an error (so main exits non-zero) when either ledger
+// reports an unclassified gap or a stale/redundant key — the same fail-closed
+// contract the genGo assertions carry, surfaced here so the completeness report
+// cannot emit a ratio derived from a rotted ledger. Output is deterministic:
+// the underlying classification passes sort their gap lists and the JSON
+// encoder emits struct fields in declaration order, so two runs are
+// byte-identical.
+func runSurfaceReport(cythonPath, pythonPath string, w io.Writer) error {
+	_, py, pkgs, _, err := buildPlan(cythonPath, pythonPath)
+	if err != nil {
+		return err
+	}
+
+	cTally, err := cSurfaceLedger(pkgs)
+	if err != nil {
+		return err
+	}
+	pyTally, err := pySurfaceLedger(pkgs, py)
+	if err != nil {
+		return err
+	}
+
+	// Fail closed on any ledger defect before emitting, mirroring the genGo
+	// assertions: a report over an unclassified or stale surface would be a
+	// belief, not a measurement.
+	if err := assertCSurfaceFresh(pkgs); err != nil {
+		return err
+	}
+	if err := assertPySurfaceFresh(pkgs, py); err != nil {
+		return err
+	}
+
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(surfaceReport{C: cTally, Py: pyTally})
+}
+
+func genGo(cythonPath, pythonPath, outPath string) error {
+	man, py, pkgs, stats, err := buildPlan(cythonPath, pythonPath)
+	if err != nil {
+		return err
+	}
+
+	// The C-side denominator is authoritative (M2): every %%EXPORT-marked
+	// upstream function must be accounted for — correlated to a go.yaml
+	// c: entry, counted translated-internal, or carrying a (b)/(c) drop
+	// classification. A new upstream export with no classification, or a
+	// stale table key, fails closed here rather than rotting silently.
+	if err := assertCSurfaceFresh(pkgs); err != nil {
+		return err
+	}
+
+	// The runtime Python public surface is authoritative (M3): every public
+	// method/module-function must be accounted for — covered by a go.yaml py:
+	// key, dropped by policy, delegated-to-C under the C function name, or
+	// carrying an out-of-scope classification. A new upstream public symbol
+	// with no classification, or a stale ledger key, fails closed here rather
+	// than rotting silently. The mirror of assertCSurfaceFresh.
+	if err := assertPySurfaceFresh(pkgs, py); err != nil {
 		return err
 	}
 
@@ -1232,7 +1341,7 @@ type pkgRule struct {
 
 var pkgRules = []pkgRule{
 	{prefix: "mat24_", pkg: "mat24"},
-	{prefix: "mm_", pkg: "mm"},
+	{prefix: "mm_", pkg: "monster"},
 	{prefix: "gen_", pkg: "generator"},
 	{prefix: "xsp2co1_", pkg: "xsp2co1"},
 	{prefix: "qstate12_", pkg: "qstate12"},
@@ -1261,10 +1370,11 @@ var pkgRules = []pkgRule{
 // It is keyed by the dotless Python provenance name. The two xleech2 module
 // functions that fold the monster representation — MM_to_Q_x0 (takes an *MM)
 // and rand_xleech2_type (indexes the mm-rep short-vector table) — belong in
-// mm even though mmgroup.structures.xleech2 otherwise routes to leech.
+// the monster package even though mmgroup.structures.xleech2 otherwise routes
+// to leech.
 var moduleFnPkgOverride = map[string]string{
-	"MM_to_Q_x0":        "mm",
-	"rand_xleech2_type": "mm",
+	"MM_to_Q_x0":        "monster",
+	"rand_xleech2_type": "monster",
 }
 
 // cfuncPkgOverride reroutes a C function from the package its pkgRules
@@ -1291,18 +1401,46 @@ var cfuncPkgOverride = map[string]string{
 }
 
 // renameOverrides maps a C symbol to the Go name it must use, bypassing
-// the computed name from goName. It resolves collisions that arise when
-// collapsing width-bearing C prefixes into a single package: e.g.
-// bitvector32_sort and bitvector64_sort would both reduce to "sort".
+// the computed name from goName. It serves two purposes:
+//
+//   - Collision resolution: width-bearing C prefixes that collapse into a
+//     single package would otherwise clash, e.g. bitvector32_sort and
+//     bitvector64_sort both reducing to "sort".
+//   - Spelling correction: a Go name may intentionally diverge from a
+//     misspelled C symbol, e.g. mat24_check_endianess → CheckEndianness.
+//     The c: provenance line retains the original C symbol, so correlation
+//     and the Me1 join are unaffected.
 var renameOverrides = map[string]string{
-	"bitvector32_sort":     "SortBV32",
-	"bitvector64_sort":     "SortBV64",
-	"bitvector32_heapsort": "HeapsortBV32",
-	"bitvector64_heapsort": "HeapsortBV64",
-	"bitvector32_copy":     "CopyBV32",
-	"bitvector64_copy":     "CopyBV64",
-	"bitvector32_bsearch":  "BsearchBV32",
-	"bitvector64_bsearch":  "BsearchBV64",
+	"bitvector32_sort":      "SortBV32",
+	"bitvector64_sort":      "SortBV64",
+	"bitvector32_heapsort":  "HeapsortBV32",
+	"bitvector64_heapsort":  "HeapsortBV64",
+	"bitvector32_copy":      "CopyBV32",
+	"bitvector64_copy":      "CopyBV64",
+	"bitvector32_bsearch":   "BsearchBV32",
+	"bitvector64_bsearch":   "BsearchBV64",
+	"mat24_check_endianess": "CheckEndianness",
+
+	// mmindex Aux-prefix drop (Ap3). cfuncPkgOverride reroutes the
+	// mm_aux_index_* / mm_aux_array_* family from mm to the mmindex package
+	// (it mirrors C's mm_index.c). The aux file-layer prefix is redundant
+	// inside that dedicated package, so the shipped surface drops it
+	// (mm_aux_index_check_intern -> IndexCheckIntern). The c:/py: provenance
+	// retains the full C symbol. mm_aux_index_mmv is excluded: it stays in
+	// the mm package (mm_aux.ske, an mmv vector op) and keeps its Aux prefix
+	// to match the mm-package mm_aux_* naming.
+	"mm_aux_array_extern_to_sparse":      "ArrayExternToSparse",
+	"mm_aux_index_check_intern":          "IndexCheckIntern",
+	"mm_aux_index_extern_to_intern":      "IndexExternToIntern",
+	"mm_aux_index_extern_to_sparse":      "IndexExternToSparse",
+	"mm_aux_index_intern_to_leech2":      "IndexInternToLeech2",
+	"mm_aux_index_intern_to_sparse":      "IndexInternToSparse",
+	"mm_aux_index_leech2_to_intern_fast": "IndexLeech2ToInternFast",
+	"mm_aux_index_leech2_to_sparse":      "IndexLeech2ToSparse",
+	"mm_aux_index_sparse_to_extern":      "IndexSparseToExtern",
+	"mm_aux_index_sparse_to_intern":      "IndexSparseToIntern",
+	"mm_aux_index_sparse_to_leech":       "IndexSparseToLeech",
+	"mm_aux_index_sparse_to_leech2":      "IndexSparseToLeech2",
 }
 
 // pyModuleRule maps a Python module prefix to the target Go package, the
@@ -1374,14 +1512,14 @@ var pyModuleRules = []pyModuleRule{
 
 	// Everything Monster-level: bimm, the MM group/word/space/reduce
 	// machinery, the abstract bases, and the axis reducers.
-	{prefix: "mmgroup.bimm", pkg: "mm"},
-	{prefix: "mmgroup.mm_group", pkg: "mm"},
-	{prefix: "mmgroup.mm_space", pkg: "mm"},
-	{prefix: "mmgroup.mm_crt_space", pkg: "mm"},
+	{prefix: "mmgroup.bimm", pkg: "monster"},
+	{prefix: "mmgroup.mm_group", pkg: "monster"},
+	{prefix: "mmgroup.mm_space", pkg: "monster"},
+	{prefix: "mmgroup.mm_crt_space", pkg: "monster"},
 	{prefix: "mmgroup.mm_reduce", pkg: "reduce"},
-	{prefix: "mmgroup.mm_op", pkg: "mm"},
-	{prefix: "mmgroup.structures", pkg: "mm"},
-	{prefix: "mmgroup.tests.axes", pkg: "mm"},
+	{prefix: "mmgroup.mm_op", pkg: "monster"},
+	{prefix: "mmgroup.structures", pkg: "monster"},
+	{prefix: "mmgroup.tests.axes", pkg: "monster"},
 }
 
 // packageOfModule routes a Python module to its Go package via the first
@@ -1541,15 +1679,52 @@ func packageOf(cname string) (pkg, rem string, ok bool) {
 	return "", "", false
 }
 
+// segmentOverrides reconciles initialisms and multi-word tokens that
+// upperFirstRune mangles when a single snake_case segment is really a
+// compound or an embedded initialism. Each key is one exact underscore-
+// delimited segment (matched whole, never as a substring); the value is
+// the idiomatic Go rendering of that segment. This is the Ap3 resolution
+// of the Q-e initialism drift the constNameOverrides comment defers:
+//
+//   - ufind is union-find; the U and Find are distinct words (UFind).
+//   - xy/matmul/nosign read as Xy/Matmul/Nosign under a naive first-letter
+//     rule but are XY (the x_e x_eps generator coords), MatMul, and NoSign.
+//   - leech2to3/leech3to2/leech3matrix carry embedded words after a digit
+//     (To, Matrix) that upperFirstRune cannot see; they render verbatim
+//     otherwise (leech2to3 -> Leech2to3 instead of Leech2To3).
+//
+// Both the C name path (groupGo) and the Python name path (goMethod,
+// goSiteForModuleFn) funnel through goName, so fixing it here keeps the
+// two derivations byte-identical — a divergence would defeat mergePython's
+// correlate-by-bare-name fold and split one entry into a C/Python pair.
+// The x0 subgroup-subscript family (chi_G_x0 -> ChiGx0) is NOT reconciled
+// here because x0 is not rendered uniformly (MM_to_Q_x0 -> MMToQX0 keeps
+// X0); those five Python entries are pinned individually in
+// pyRenameOverrides instead.
+var segmentOverrides = map[string]string{
+	"ufind":        "UFind",
+	"xy":           "XY",
+	"matmul":       "MatMul",
+	"nosign":       "NoSign",
+	"leech2to3":    "Leech2To3",
+	"leech3to2":    "Leech3To2",
+	"leech3matrix": "Leech3Matrix",
+}
+
 // goName converts a snake_case C remainder to an exported
 // PascalCase Go identifier. All-caps and digit-bearing tokens from
 // the C source (Co1, Gx0, ABC, 2A, 32bit) are preserved verbatim
 // apart from upper-casing the first letter of each segment, so the
-// result stays traceable to the C symbol.
+// result stays traceable to the C symbol. A segment listed in
+// segmentOverrides renders as its idiomatic compound instead.
 func goName(rem string) string {
 	var b strings.Builder
 	for _, seg := range strings.Split(rem, "_") {
 		if seg == "" {
+			continue
+		}
+		if ov, has := segmentOverrides[seg]; has {
+			b.WriteString(ov)
 			continue
 		}
 		b.WriteString(upperFirstRune(seg))
@@ -1979,6 +2154,16 @@ func foldPython(pkgs []goPackage, py pythonManifest) (foldStats, error) {
 		// under recv: PLoopIntersection would duplicate the parent's API on a
 		// type with no Go struct (A4). The collapse is detected by the
 		// mapping differing from the identity "*"+className.
+		//
+		// Note (M3 finding 1): this literal-name comparison also skips
+		// Xsp2_Co1 (→ *Xsp2Co1, an underscore-strip, not a true collapse), so
+		// the Xsp2_Co1 method surface never gains a Python-name py: key here;
+		// its methods are correlated under their delegated C names instead and
+		// resolved by the M3 ledger (pyDelegatesToC / pyOutOfScope). Widening
+		// the guard to goName(cls.Name) would fold the class like MM, but that
+		// ripples into the hand-authored manualConstructors principal (which
+		// assumes foldPython does not emit NewXsp2Co1) — out of M3's scope, so
+		// the ledger carries the coverage instead.
 		if g, ok := pyClassToGo[cls.Name]; ok && g != "*"+cls.Name {
 			continue
 		}
@@ -1995,11 +2180,29 @@ func foldPython(pkgs []goPackage, py pythonManifest) (foldStats, error) {
 		// while routing stays in deterministic first-seen order.
 		var order []string
 		chosen := map[string]goFunc{}
+		// hasRepr records whether this receiver carries a __repr__ (→ Go
+		// String), so the __str__ (→ GoString) drop only fires when a String
+		// already exists on the same receiver (Ge4 Python-protocol prune).
+		hasRepr := false
+		for _, m := range cls.Methods {
+			if m.Name == "__repr__" {
+				hasRepr = true
+				break
+			}
+		}
 		for _, m := range cls.Methods {
 			// Inherited methods only land on the leaf concrete type (H11): on
 			// a non-leaf the same method is re-emitted on the subclass that
 			// inherits it, so skip it here to avoid the parent/child duplicate.
 			if m.Inherited && !leaf {
+				continue
+			}
+			// Python-protocol glue with no Go equivalent is pruned here (Ge4)
+			// so go.yaml carries only the Go API surface; python.yaml remains
+			// the full provenance record. Dropping at the method level (rather
+			// than emitting then filtering) also prevents expandDispatch from
+			// fabricating By-operand siblings off a dropped reflected operator.
+			if dropPyMethod(cls.Name, m.Name, hasRepr) {
 				continue
 			}
 			gf, ok := goFuncForMethod(cls.Name, recv, m)
@@ -2192,6 +2395,19 @@ func expandDispatch(p *goPackage, stats *foldStats) {
 				Params: f.Params,
 				Calls:  f.Calls,
 			}
+			// A type-guard sibling's operand type is the arm's guard type,
+			// not the dominant arm's. f.Params is shared backing (parent and
+			// every sibling alias one array), so clone before mutating to
+			// avoid corrupting the others. Value-guard arms (DivBy2, DivBy4)
+			// keep the parent's type — the operand stays the dominant int.
+			if !isValueGuard(arm.On) {
+				if len(f.Params) != 1 {
+					log.Fatalf("expandDispatch: %s.%s: type-guard arm %q expects a single binary-dunder operand, got %d params",
+						f.Recv, f.Name, arm.On, len(f.Params))
+				}
+				sib.Params = slices.Clone(f.Params)
+				sib.Params[0].Type = arm.On
+			}
 			siblings = append(siblings, sib)
 			stats.dispatchSiblings++
 		}
@@ -2270,7 +2486,7 @@ type manualClass struct {
 // list stays in sync with Siblings automatically (manualSeeAlso).
 var manualConstructors = []manualClass{
 	{
-		Pkg:   "mm",
+		Pkg:   "monster",
 		Class: "MM",
 		Principal: goFunc{
 			Name:   "NewMM",
@@ -2303,16 +2519,16 @@ var manualConstructors = []manualClass{
 		Siblings: []goFunc{
 			{Name: "NewXLeech2FromInt", Py: "XLeech2.__init__", Return: "*XLeech2", Params: []goParam{{Name: "v", Type: "uint32"}}},
 			{Name: "NewXLeech2Random", Py: "XLeech2.__init__", Return: "*XLeech2"},
-			// The mm-coupled XLeech2 constructors land in mm (P3a): they
+			// The mm-coupled XLeech2 constructors land in monster (P3a): they
 			// take/yield an *MM, parse a named q-element, or index the mm-rep
 			// short-vector table; the pure XLeech2 surface stays in leech.
-			{Name: "NewXLeech2RandomType", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "mm", Params: []goParam{{Name: "vtype", Type: "int"}}},
-			{Name: "NewXLeech2FromShort", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "mm", Params: []goParam{{Name: "index", Type: "int"}}},
+			{Name: "NewXLeech2RandomType", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "monster", Params: []goParam{{Name: "vtype", Type: "int"}}},
+			{Name: "NewXLeech2FromShort", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "monster", Params: []goParam{{Name: "index", Type: "int"}}},
 			{Name: "NewXLeech2FromPLoop", Py: "XLeech2.__init__", Return: "*XLeech2", Params: []goParam{{Name: "d", Type: "*PLoop"}, {Name: "c", Type: "*Cocode"}}},
 			{Name: "NewXLeech2Copy", Py: "XLeech2.__init__", Return: "*XLeech2", Params: []goParam{{Name: "x", Type: "*XLeech2"}}},
-			{Name: "NewXLeech2FromMM", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "mm", Params: []goParam{{Name: "g", Type: "*MM"}}},
-			{Name: "NewXLeech2FromBasisVector", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "mm", Params: []goParam{{Name: "tag", Type: "byte"}, {Name: "i0", Type: "int"}, {Name: "i1", Type: "int"}}},
-			{Name: "NewXLeech2FromName", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "mm", Params: []goParam{{Name: "name", Type: "string"}}},
+			{Name: "NewXLeech2FromMM", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "monster", Params: []goParam{{Name: "g", Type: "*MM"}}},
+			{Name: "NewXLeech2FromBasisVector", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "monster", Params: []goParam{{Name: "tag", Type: "byte"}, {Name: "i0", Type: "int"}, {Name: "i1", Type: "int"}}},
+			{Name: "NewXLeech2FromName", Py: "XLeech2.__init__", Return: "*XLeech2", Pkg: "monster", Params: []goParam{{Name: "name", Type: "string"}}},
 		},
 	},
 	{
@@ -2349,7 +2565,7 @@ var manualConstructors = []manualClass{
 		},
 	},
 	{
-		Pkg:   "mm",
+		Pkg:   "monster",
 		Class: "BiMM",
 		Principal: goFunc{
 			Name:   "NewBiMM",
@@ -2646,12 +2862,6 @@ var typeSupplements = []typeSupplement{
 		Source: "tests/axes/axis.py:541 (find_short: tests/axes/axis.py:179)",
 	},
 	{
-		Key:    "Axis.__imul__",
-		Return: "*Axis", // in-place multiply returns self
-		Params: map[string]string{"g": "*MM"},
-		Source: "tests/axes/axis.py:460",
-	},
-	{
 		Key:          "Axis.kernel_A",
 		Return:       "KernelAResult", // hetero tuple (ker, isect, M_img, M_ker): two ints, two 24-row mod-3 matrices (Q-q)
 		ResultStruct: "Ker int; Isect int; MImg []uint64; MKer []uint64",
@@ -2692,11 +2902,6 @@ var typeSupplements = []typeSupplement{
 		Source: "dev/clifford12/clifford12.pyx:804", // value polymorphic (Complex or QState12)
 	},
 	{
-		Key:    "QState12.__imul__",
-		Return: "*QState12",                         // in-place scalar/state multiply returns self
-		Source: "dev/clifford12/clifford12.pyx:782", // value polymorphic (Complex or QState12)
-	},
-	{
 		Key:    "QState12.__rmul__",
 		Return: "*QState12", // __rmul__ = __mul__
 		Source: "dev/clifford12/clifford12.pyx:807",
@@ -2705,11 +2910,6 @@ var typeSupplements = []typeSupplement{
 		Key:    "QState12.__truediv__",
 		Return: "*QState12",                         // copy().__itruediv__; scalar divide
 		Source: "dev/clifford12/clifford12.pyx:816", // value is a scalar (Complex); polymorphic, left blank
-	},
-	{
-		Key:    "QState12.__itruediv__",
-		Return: "*QState12", // in-place scalar divide returns self
-		Source: "dev/clifford12/clifford12.pyx:809",
 	},
 	{
 		Key:    "QState12.set_zero",
@@ -2910,12 +3110,6 @@ var typeSupplements = []typeSupplement{
 		Source:       "tests/axes/axis.py:513 (Axis.axis_type_info)",
 	},
 	{
-		Key:    "BabyAxis.__imul__",
-		Return: "*BabyAxis", // in-place multiply by a Baby group element, returns self
-		Params: map[string]string{"g": "*MM"},
-		Source: "tests/axes/axis.py:1007",
-	},
-	{
 		Key:    "BabyAxis.__mul__",
 		Return: "*BabyAxis", // copy-then-multiply
 		Params: map[string]string{"g": "*MM"},
@@ -2970,11 +3164,6 @@ var typeSupplements = []typeSupplement{
 		Source: "structures/abstract_rep_space.py:187",
 	},
 	{
-		Key:    "MMVectorCRT.__iadd__",
-		Return: "*MMVectorCRT", // already typed by walker; entry harmless (fill-only)
-		Source: "structures/abstract_rep_space.py:177",
-	},
-	{
 		Key:    "MMVectorCRT.__sub__",
 		Return: "*MMVectorCRT",
 		Source: "structures/abstract_rep_space.py:192",
@@ -2983,11 +3172,6 @@ var typeSupplements = []typeSupplement{
 		Key:    "MMVectorCRT.__rsub__",
 		Return: "*MMVectorCRT",
 		Source: "structures/abstract_rep_space.py:195",
-	},
-	{
-		Key:    "MMVectorCRT.__isub__",
-		Return: "*MMVectorCRT",
-		Source: "structures/abstract_rep_space.py:189",
 	},
 	{
 		Key:    "MMVectorCRT.__mul__",
@@ -3000,19 +3184,9 @@ var typeSupplements = []typeSupplement{
 		Source: "structures/abstract_rep_space.py:126",
 	},
 	{
-		Key:    "MMVectorCRT.__imul__",
-		Return: "*MMVectorCRT",
-		Source: "structures/abstract_rep_space.py:117", // other already typed int by walker
-	},
-	{
 		Key:    "MMVectorCRT.__truediv__",
 		Return: "*MMVectorCRT",
 		Source: "structures/abstract_rep_space.py:150",
-	},
-	{
-		Key:    "MMVectorCRT.__itruediv__",
-		Return: "*MMVectorCRT",                         // in-place scalar divide returns self
-		Source: "structures/abstract_rep_space.py:129", // other already typed int by walker
 	},
 	{
 		Key:    "MMVectorCRT.__neg__",
@@ -3141,34 +3315,14 @@ var typeSupplements = []typeSupplement{
 		Source: "structures/abstract_group.py:62", // other polymorphic, left blank
 	},
 	{
-		Key:    "BiMM.__ne__",
-		Return: "bool",                            // not __eq__
-		Source: "structures/abstract_group.py:72", // other polymorphic, left blank
-	},
-	{
 		Key:    "BiMM.as_tuples",
 		Return: "[]BiMMAsTuplesItem", // list of (tag, value) tuples (Q-p)
 		Source: "structures/abstract_group.py:189",
 	},
 	{
-		Key:    "BiMM.str",
-		Return: "string", // group.str_word
-		Source: "structures/abstract_group.py:181",
-	},
-	{
-		Key:    "BiMM.__str__",
-		Return: "string", // __repr__ = str
-		Source: "structures/abstract_group.py:181",
-	},
-	{
 		Key:    "BiMM.__repr__",
 		Return: "string", // __repr__ = str
 		Source: "structures/abstract_group.py:181",
-	},
-	{
-		Key:    "BiMM.__hash__",
-		Return: "int", // hash of (hash(m1), hash(m2), alpha)
-		Source: "bimm/bimm.py:182",
 	},
 	{
 		Key:    "BiMM.order",
@@ -3192,16 +3346,6 @@ var typeSupplements = []typeSupplement{
 		Key:    "P3_node.__eq__",
 		Return: "bool",               // isinstance + _ord compare
 		Source: "bimm/inc_p3.py:140", // other polymorphic, left blank
-	},
-	{
-		Key:    "P3_node.__ne__",
-		Return: "bool",               // not __eq__
-		Source: "bimm/inc_p3.py:142", // other polymorphic, left blank
-	},
-	{
-		Key:    "P3_node.__str__",
-		Return: "string", // "P3<point|line N>"
-		Source: "bimm/inc_p3.py:137",
 	},
 	{
 		Key:    "P3_node.name",
@@ -3254,17 +3398,7 @@ var typeSupplements = []typeSupplement{
 		Source: "dev/mm_reduce/mm_reduce.pyx:260",
 	},
 	{
-		Key:    "GtWord.__str__",
-		Return: "string", // group_name + atom strings
-		Source: "dev/mm_reduce/mm_reduce.pyx:235",
-	},
-	{
 		Key:    "GtWord.__eq__",
-		Return: "bool",                           // object-default identity comparison
-		Source: "dev/mm_reduce/mm_reduce.pyx:62", // value polymorphic, left blank
-	},
-	{
-		Key:    "GtWord.__ne__",
 		Return: "bool",                           // object-default identity comparison
 		Source: "dev/mm_reduce/mm_reduce.pyx:62", // value polymorphic, left blank
 	},
@@ -3272,58 +3406,8 @@ var typeSupplements = []typeSupplement{
 	// uint32 array or a group element depending on the `group` argument
 	// (shape-polymorphic). GtWord.subwords left blank: returns (fpos, list of
 	// internal GtSubWord objects), whose element type is not an API receiver.
-	// ---- structures.Xsp2_Co1_Group (D3 pass 2) ---------------------------
-	{
-		Key:    "Xsp2_Co1_Group.copy_word",
-		Params: map[string]string{"g1": "*Xsp2Co1"}, // return already *Xsp2Co1
-		Source: "structures/xsp2_co1.py:622",
-	},
-	{
-		Key:    "Xsp2_Co1_Group.reduce",
-		Return: "*Xsp2Co1Group", // returns self
-		Params: map[string]string{"g1": "*Xsp2Co1"},
-		Source: "structures/xsp2_co1.py:627",
-	},
-	{
-		Key:    "Xsp2_Co1_Group.from_qs",
-		Return: "*Xsp2Co1",                           // builds an element from a quadratic state
-		Params: map[string]string{"qs": "*QState12"}, // x is an index; left blank
-		Source: "structures/xsp2_co1.py:646",
-	},
-	{
-		Key:    "Xsp2_Co1_Group.from_xsp",
-		Params: map[string]string{"x": "int"}, // return already *Xsp2Co1; x is xspecial number
-		Source: "structures/xsp2_co1.py:660",
-	},
-	{
-		Key:    "Xsp2_Co1_Group.from_data",
-		Params: map[string]string{"data": "[]uint32"}, // return already *Xsp2Co1
-		Source: "structures/xsp2_co1.py:665",
-	},
-	{
-		Key:    "Xsp2_Co1_Group.str_word",
-		Params: map[string]string{"v1": "*Xsp2Co1"}, // return already string
-		Source: "structures/xsp2_co1.py:653",
-	},
-	{
-		Key:    "Xsp2_Co1_Group.raw_str_word",
-		Params: map[string]string{"g": "*Xsp2Co1"}, // return already string
-		Source: "structures/abstract_mm_group.py:229",
-	},
-	{
-		Key:    "Xsp2_Co1_Group.as_tuples",
-		Params: map[string]string{"g": "*Xsp2Co1"}, // abstract as_tuples raises; return left blank
-		Source: "structures/abstract_group.py:299",
-	},
-	{
-		Key:    "Xsp2_Co1_Group.__eq__",
-		Return: "bool",                                // singleton group equality
-		Source: "structures/abstract_mm_group.py:277", // value polymorphic, left blank
-	},
-	{
-		Key:    "Xsp2_Co1_Group.atom",
-		Source: "structures/xsp2_co1.py:609", // return already *Xsp2Co1; tag/i polymorphic, left blank
-	},
+	// Xsp2_Co1_Group supplements removed: the whole group-as-object surface is
+	// dropped via dropClassMethods (Ge4), so no go.yaml entry remains to fill.
 	// ---- general.Orbit_Lin2 (D3 pass 2) -----------------------------------
 	{
 		Key:    "Orbit_Lin2.n_orbits",
@@ -3404,11 +3488,6 @@ var typeSupplements = []typeSupplement{
 		Return: "bool",                     // object-default identity comparison
 		Source: "general/orbit_lin2.py:96", // value polymorphic, left blank
 	},
-	{
-		Key:    "Orbit_Lin2.__ne__",
-		Return: "bool", // object-default identity comparison
-		Source: "general/orbit_lin2.py:96",
-	},
 	// Orbit_Lin2.generators/rand return arbitrary group-element objects (the
 	// element type depends on the caller-supplied generator set), left blank.
 	// Orbit_Lin2.map_v_word_G returns a list of (generator, sign) tuples whose
@@ -3430,11 +3509,6 @@ var typeSupplements = []typeSupplement{
 		Key:    "Orbit_Elem2.__eq__",
 		Return: "bool",                      // object-default identity comparison
 		Source: "general/orbit_lin2.py:546", // value polymorphic, left blank
-	},
-	{
-		Key:    "Orbit_Elem2.__ne__",
-		Return: "bool", // object-default identity comparison
-		Source: "general/orbit_lin2.py:546",
 	},
 	// Orbit_Elem2.generators/rand/rand_kernel return arbitrary group-element
 	// objects, left blank. Orbit_Elem2.map_v_word_G returns a list of
@@ -3539,13 +3613,17 @@ var dropClasses = map[string]string{
 }
 
 // dropModuleFns names the module-level Python functions that must be kept
-// out of go.yaml because they are not API. The value is the reason. Two
-// groups: the lazy-import bootstrap shims that mmgroup's deferred-import
+// out of go.yaml because they are not API. The value is the reason. The
+// groups are: the lazy-import bootstrap shims that mmgroup's deferred-import
 // machinery calls to populate a module's globals on first use (they wrap no
 // C symbol and have no Go counterpart, surfacing from several modules via
-// the module-level function pass), and the gen_rng_* Cython convenience
-// shims plus the Orbit_Lin2 chk error helper (A5 triage). assertDropTablesFresh
-// verifies every key still names a live module function.
+// the module-level function pass); the gen_rng_* Cython convenience shims
+// plus the Orbit_Lin2 chk error helper (A5 triage); the Python-language
+// helpers that exist only for Python 2/3 compatibility or Python-string
+// formatting (Go has them in the standard library or as language built-ins);
+// and the two bitfunctions pure-Python duplicates of C-backed bit primitives
+// (Ge4). assertDropTablesFresh verifies every key still names a live module
+// function.
 //
 // Note: make_table/invert_table/split_table are NOT listed here — pyToCAlias
 // (Change 1) correlates them onto the gen_xi_* C entries, so they never
@@ -3555,6 +3633,11 @@ var dropModuleFns = map[string]string{
 	"complete_import":           "lazy-import bootstrap shim",
 	"import_mm_order_functions": "lazy-import bootstrap shim",
 	"complete_import_mm_reduce": "lazy-import bootstrap shim",
+	"import_MM":                 "lazy-import bootstrap shim",
+	"import_groups":             "lazy-import bootstrap shim",
+	"import_construct_mm":       "lazy-import bootstrap shim",
+	"import_Xsp2_Co1":           "lazy-import bootstrap shim",
+	"import_rand_mm_element":    "lazy-import bootstrap shim",
 	// Orbit_Lin2 helper and gen_rng_* Cython shims (A5 triage).
 	"chk":                     "error-code helper for Orbit_Lin2; not API",
 	"rand_bytes_modp":         "Cython shim over gen_rng_bytes_modp",
@@ -3562,6 +3645,103 @@ var dropModuleFns = map[string]string{
 	"rand_gen_bitfields_modp": "Cython shim over gen_rng_bitfields_modp",
 	"rand_gen_modp":           "Cython shim over gen_rng_modp",
 	"rand_make_seed":          "Cython shim over gen_rng_seed_no",
+	// Python-language helpers (Ge4): Python 2/3 compat or string formatting.
+	"lmap":      "Python 2 map() compat; Go has range/slices",
+	"lrange":    "Python 2 range() compat; Go has range",
+	"unnumpy":   "strips numpy scalar types; not a Go concern",
+	"bin":       "Python binary-string formatter; Go has fmt/strconv",
+	"ihex":      "Python hex-string formatter; Go has fmt/strconv",
+	"bits2list": "bit-position list helper; Go language built-ins suffice",
+	// bitfunctions pure-Python duplicates of C-backed primitives (Ge4):
+	// bitlen → uint64_bit_len (BitLen), bitweight → uint64_bit_weight (BitWeight).
+	"bitlen":    "pure-Python duplicate of C uint64_bit_len (BitLen)",
+	"bitweight": "pure-Python duplicate of C uint64_bit_weight (BitWeight)",
+}
+
+// dropPyMethod reports whether a class method (named by its Python class and
+// method/dunder name) is Python-protocol glue with no Go equivalent and so
+// must be kept out of go.yaml (Ge4). go.yaml carries only what Go needs to
+// build; python.yaml stays the full provenance record. hasRepr says whether
+// the receiver also carries __repr__ (→ Go String), gating the __str__ drop.
+//
+// Three categories, each freshness-asserted by assertDropTablesFresh:
+//
+//   - dropMethodNames: a bare method/dunder name dropped on every receiver
+//     (Go has no Python-protocol counterpart). __ne__ (Go: !a.Equal(b)),
+//     __pos__ (identity op), __hash__ (Go comparability), the in-place ops
+//     __iadd__/__isub__/__imul__/__itruediv__ (Go returns new values), and
+//     the plain-named String/Hash twins str/hash (each is the very function
+//     __repr__/__hash__ aliases, so String/Hash already cover them).
+//   - __str__ → GoString, dropped only when String already exists on the
+//     receiver (hasRepr); without a __repr__ the __str__ render would be the
+//     receiver's only string form and must survive.
+//   - dropReflectedClasses: the commutative receivers whose reflected
+//     __radd__/__rsub__/__rmul__/__rand__ duplicate the forward op
+//     (a+b == b+a there); the R-prefixed Go method and any By-operand
+//     siblings expandDispatch would synthesize from it are redundant.
+//     Reflected ops on non-commutative receivers (MM, XLeech2, BiMM, AutP3,
+//     AutPL, Xsp2_Co1, MMVector(CRT), QState12, QStateMatrix) are kept, as is
+//     PLoop.__rtruediv__ (1/p is inversion, not p/1, so genuinely reflected).
+//   - dropClassMethods: every method of a group-as-object or space-as-object
+//     class. Go models neither (element types carry the group ops; vectors
+//     stand alone), so MMGroup/MM0Group/AutPlGroup/Xsp2_Co1_Group and
+//     MMSpace/MMSpaceCRT contribute no surface, constructors included.
+func dropPyMethod(class, method string, hasRepr bool) bool {
+	if _, ok := dropClassMethods[class]; ok {
+		return true
+	}
+	if _, ok := dropMethodNames[method]; ok {
+		return true
+	}
+	if method == "__str__" && hasRepr {
+		return true
+	}
+	if _, ok := dropReflectedClasses[class]; ok {
+		switch method {
+		case "__radd__", "__rsub__", "__rmul__", "__rand__":
+			return true
+		}
+	}
+	return false
+}
+
+// dropMethodNames lists bare Python method/dunder names dropped on every
+// receiver. The value is the reason. See dropPyMethod for the rationale.
+var dropMethodNames = map[string]string{
+	"__ne__":       "Go: !a.Equal(b)",
+	"__pos__":      "identity op; no Go surface",
+	"__hash__":     "Go comparability subsumes __hash__",
+	"__iadd__":     "in-place op; Go returns new values",
+	"__isub__":     "in-place op; Go returns new values",
+	"__imul__":     "in-place op; Go returns new values",
+	"__itruediv__": "in-place op; Go returns new values",
+	"str":          "plain twin of __repr__ (→ String)",
+	"hash":         "plain twin of __hash__",
+}
+
+// dropReflectedClasses lists the commutative receivers whose reflected
+// add/sub/mul/and operators duplicate the forward op. The value is the
+// reason. See dropPyMethod for the rationale.
+var dropReflectedClasses = map[string]string{
+	"Cocode":   "commutative; reflected ops duplicate forward",
+	"GCode":    "commutative; reflected ops duplicate forward",
+	"GcVector": "commutative; reflected ops duplicate forward",
+	"Parity":   "commutative; reflected ops duplicate forward",
+	"PLoop":    "commutative; reflected add/sub/mul duplicate forward",
+}
+
+// dropClassMethods lists the group-as-object and space-as-object classes
+// whose entire method surface (constructors included) is dropped because Go
+// models neither. The value is the reason. See dropPyMethod. These classes
+// are not in dropClasses because their non-method provenance still belongs in
+// python.yaml; only their go.yaml surface is suppressed.
+var dropClassMethods = map[string]string{
+	"MMGroup":        "group-as-object; element types carry the ops",
+	"MM0Group":       "group-as-object; element types carry the ops",
+	"AutPlGroup":     "group-as-object; element types carry the ops",
+	"Xsp2_Co1_Group": "group-as-object; element types carry the ops",
+	"MMSpace":        "space-as-object; vectors stand alone",
+	"MMSpaceCRT":     "space-as-object; vectors stand alone",
 }
 
 // dropModuleFn reports whether a module-level Python function must be kept out
@@ -3570,8 +3750,10 @@ var dropModuleFns = map[string]string{
 // trivial pure-Python duplicate of the C-backed mat24_bw24, whereas the
 // mmgroup.mat24 bw24 is the Cython builtin that correlates onto (and supplies
 // the py: provenance of) the mat24_bw24 entry, so it must survive. The
-// sibling mmgroup.bitfunctions helpers (bitweight, bitparity, ...) are wanted,
-// so only bw24 is named here rather than dropping the whole module.
+// bitfunctions bitlen/bitweight duplicates of the C-backed uint64_bit_len/
+// uint64_bit_weight are dropped via dropModuleFns, not here, since their names
+// alone (not module-qualified) suffice; the remaining bitfunctions helpers
+// (bitparity, list_xor, ...) are genuine algorithms and survive.
 func dropModuleFn(fn pyModuleFn) bool {
 	if _, ok := dropModuleFns[fn.Name]; ok {
 		return true
@@ -3586,12 +3768,42 @@ func dropModuleFn(fn pyModuleFn) bool {
 // must track upstream exactly, never carry dead entries.
 func assertDropTablesFresh(py pythonManifest) error {
 	classNames := make(map[string]bool, len(py.Classes))
+	methodNames := map[string]bool{}                 // any method/dunder name seen
+	reflectedByClass := map[string]map[string]bool{} // class → reflected dunders it has
+	reflected := map[string]bool{"__radd__": true, "__rsub__": true, "__rmul__": true, "__rand__": true}
 	for _, c := range py.Classes {
 		classNames[c.Name] = true
+		for _, m := range c.Methods {
+			methodNames[m.Name] = true
+			if reflected[m.Name] {
+				if reflectedByClass[c.Name] == nil {
+					reflectedByClass[c.Name] = map[string]bool{}
+				}
+				reflectedByClass[c.Name][m.Name] = true
+			}
+		}
 	}
 	for name := range dropClasses {
 		if !classNames[name] {
 			return fmt.Errorf("dropClasses key %q names no class in python.yaml (stale drop table; upstream removed it?)", name)
+		}
+	}
+	for name := range dropClassMethods {
+		if !classNames[name] {
+			return fmt.Errorf("dropClassMethods key %q names no class in python.yaml (stale drop table; upstream removed it?)", name)
+		}
+	}
+	for name := range dropMethodNames {
+		if !methodNames[name] {
+			return fmt.Errorf("dropMethodNames key %q names no class method in python.yaml (stale drop table; upstream removed it?)", name)
+		}
+	}
+	for name := range dropReflectedClasses {
+		if !classNames[name] {
+			return fmt.Errorf("dropReflectedClasses key %q names no class in python.yaml (stale drop table; upstream removed it?)", name)
+		}
+		if len(reflectedByClass[name]) == 0 {
+			return fmt.Errorf("dropReflectedClasses key %q has no reflected add/sub/mul/and operator in python.yaml (stale drop table; upstream removed them?)", name)
 		}
 	}
 	fnNames := make(map[string]bool, len(py.ModuleFns))
@@ -3604,6 +3816,734 @@ func assertDropTablesFresh(py pythonManifest) error {
 		}
 	}
 	return nil
+}
+
+// assertPyRenamesFresh verifies every "Class.method" key in pyRenameOverrides
+// still names a live method on that class in the parsed python.yaml. A stale
+// key (upstream renamed or removed the method, so the override is now a no-op
+// silently masking a real change) is a hard error: the rename table must track
+// upstream exactly, the dropClasses precedent.
+func assertPyRenamesFresh(py pythonManifest) error {
+	methods := make(map[string]bool)
+	for _, c := range py.Classes {
+		for _, m := range c.Methods {
+			methods[c.Name+"."+m.Name] = true
+		}
+	}
+	for key := range pyRenameOverrides {
+		if !methods[key] {
+			return fmt.Errorf("pyRenameOverrides key %q names no class method in python.yaml (stale rename table; upstream renamed/removed it?)", key)
+		}
+	}
+	return nil
+}
+
+// assertCSurfaceFresh makes the upstream C public surface authoritative
+// (M2, EXECUTION.md Track M item M2). It re-derives the denominator live
+// from the `%%EXPORT`-marked functions in the `.ske` source tree, then
+// holds every export against the Go translation: each must land in exactly
+// one of three ledger states —
+//
+//   - correlated: a go.yaml `c:` entry wraps it (after the template-form
+//     normalization decision 2: `.ske` spells templated functions
+//     `mm_op%{P}_*`/`bitvector%{N}_*`, go.yaml correlates the `%{P}` family
+//     under the base spelling `mm_op_*` but expands `%{N}` to both
+//     `bitvector32_*`/`bitvector64_*`; cExportInGoYAML checks the literal
+//     name, the variable-stripped base, and every modulus/bitwidth
+//     expansion, so either spelling matches);
+//   - translated-internal: implemented in Go behind an unexported helper
+//     (the genOp*/mm_compress internals) that carries a doc-comment
+//     citation but no go.yaml `c:` correlation, because go.yaml tracks the
+//     public API surface (decision 1: rather than minting synthetic `c:`
+//     entries for unexported Go functions, the ledger records a third state
+//     "translated-internal" in cTranslatedInternal; it counts as
+//     translated, never missing);
+//   - untranslated: deliberately not ported, carrying exactly one (b)
+//     debug-test-only or (c) superseded classification in cUntranslated.
+//
+// C4 settled the classification: the class-(a) "needed" set is empty, so a
+// live export that matches none of the three states is, by construction, a
+// new or reclassified upstream export — a hard error, the dropClasses
+// precedent. Stale table keys (an entry that no longer names a live export)
+// are equally fatal: the tables must track upstream exactly, never carry
+// dead entries that silently mask a real change.
+//
+// Also folded in are the still-live Go-policy classifications (H7: the
+// OpEvalARankMod3 d=0 residue; the p-gates on EvalA/AxisType/
+// OpEvalARankMod3) — those are caller-side decisions over already-correlated
+// exports (G7 verified the callers), not surface gaps, so they need no
+// ledger row here; the C symbols they gate are correlated in go.yaml.
+//
+// The denominator is read from skeRoot, the live `.ske` tree, so a newly
+// added upstream `%%EXPORT` fails this check on the next `go generate`
+// rather than rotting unnoticed.
+func assertCSurfaceFresh(pkgs []goPackage) error {
+	tally, err := cSurfaceLedger(pkgs)
+	if err != nil {
+		return err
+	}
+	if len(tally.Unclassified) > 0 {
+		return fmt.Errorf("%d upstream %%EXPORT function(s) carry no go.yaml correlation, translated-internal entry, or (b)/(c) classification (new or reclassified upstream export — extend the M2 ledger):\n  %s",
+			len(tally.Unclassified), strings.Join(tally.Unclassified, "\n  "))
+	}
+	if tally.staleErr != nil {
+		return tally.staleErr
+	}
+	return nil
+}
+
+// cSurfaceTally is the M2 ledger's classification of the live `.ske` C public
+// surface against the Go translation: every `%%EXPORT` function counted into
+// exactly one state. It is the denominator-and-numerators form of
+// assertCSurfaceFresh's pass, consumed by both the assertion (which turns any
+// gap or stale key into an error) and the Me5 completeness report (which turns
+// the same counts into coverage ratios).
+type cSurfaceTally struct {
+	Exports      int      `json:"exports"`      // total live %%EXPORT functions (the denominator)
+	Correlated   int      `json:"correlated"`   // go.yaml c: entry wraps it
+	Internal     int      `json:"internal"`     // translated behind an unexported helper
+	Untranslated int      `json:"untranslated"` // deliberately not ported: (b)/(c) classification
+	Unclassified []string `json:"unclassified"` // no state matched — a real gap (sorted)
+
+	// staleErr, when non-nil, is a stale-table-key error (a ledger key that no
+	// longer names a live-but-uncovered export). It is fatal to the assertion;
+	// the report surfaces it the same way (the ledger is not authoritative if
+	// its keys have rotted, so a ratio derived from it would be a lie).
+	staleErr error `json:"-"`
+}
+
+// cSurfaceLedger runs the M2 classification pass once and returns the tally.
+// Translated = Correlated + Internal; Untranslated entries are complete by
+// classification (C4: the class-(a) "needed" set is empty). It re-derives the
+// denominator live from skeRoot, so a newly added upstream export shows up as
+// Unclassified rather than silently inflating the ratio.
+func cSurfaceLedger(pkgs []goPackage) (cSurfaceTally, error) {
+	exports, err := extractSkeExports()
+	if err != nil {
+		return cSurfaceTally{}, fmt.Errorf("extracting .ske C surface: %w", err)
+	}
+	goC := goYAMLCSymbols(pkgs)
+
+	// classified tracks which table keys actually matched a live export, so
+	// a stale key (no live export) can be reported after the pass.
+	internalSeen := make(map[string]bool, len(cTranslatedInternal))
+	untranslatedSeen := make(map[string]bool, len(cUntranslated))
+
+	tally := cSurfaceTally{Exports: len(exports)}
+	var unclassified []string
+	for name := range exports {
+		switch {
+		case cExportInGoYAML(name, goC):
+			// correlated: the public API surface wraps it.
+			tally.Correlated++
+		case cTranslatedInternal[name] != "":
+			internalSeen[name] = true
+			tally.Internal++
+		case cUntranslated[name].class != "":
+			untranslatedSeen[name] = true
+			tally.Untranslated++
+		default:
+			unclassified = append(unclassified, fmt.Sprintf("%s (in %s)", name, exports[name]))
+		}
+	}
+	sort.Strings(unclassified)
+	tally.Unclassified = unclassified
+
+	tally.staleErr = cSurfaceStaleKey(exports, internalSeen, untranslatedSeen)
+	return tally, nil
+}
+
+// cSurfaceStaleKey reports the first ledger key that no longer names a
+// live-but-uncovered export: a stale entry (no live export) or a redundant one
+// (now correlated in go.yaml). Either is fatal — the tables must track
+// upstream exactly. Returns nil when every key is still load-bearing.
+func cSurfaceStaleKey(exports map[string]string, internalSeen, untranslatedSeen map[string]bool) error {
+	// Freshness: every table key must still name a live export.
+	for name := range cTranslatedInternal {
+		if !internalSeen[name] {
+			// A key can fail to be "seen" two ways: it names no live export
+			// at all, or upstream now exposes it through go.yaml (so it is
+			// correlated and the internal entry is redundant). Distinguish.
+			if _, live := exports[name]; !live {
+				return fmt.Errorf("cTranslatedInternal key %q names no live %%EXPORT function (stale ledger; upstream removed or renamed it?)", name)
+			}
+			return fmt.Errorf("cTranslatedInternal key %q is now correlated in go.yaml (redundant ledger entry; drop it — the public surface covers it)", name)
+		}
+	}
+	for name := range cUntranslated {
+		if !untranslatedSeen[name] {
+			if _, live := exports[name]; !live {
+				return fmt.Errorf("cUntranslated key %q names no live %%EXPORT function (stale ledger; upstream removed or renamed it?)", name)
+			}
+			return fmt.Errorf("cUntranslated key %q is now correlated in go.yaml (export was translated; drop its (b)/(c) classification)", name)
+		}
+	}
+	return nil
+}
+
+// extractSkeExports walks skeRoot and returns every `%%EXPORT`-marked C
+// function name mapped to the `.ske` file (relative to skeRoot) that
+// declares it. The denominator is the public C surface only:
+// `%%EXPORT_TABLE` entries (lookup tables, handled as Go generated
+// constants) are excluded by exportMarker, which matches the bare marker
+// with optional p/px flags but not the `_TABLE` suffix.
+//
+// Templated functions keep their `%{P}`/`%{N}` spelling (e.g.
+// `mm_op%{P}_t`); cExportInGoYAML canonicalizes them at the join.
+func extractSkeExports() (map[string]string, error) {
+	var files []string
+	err := filepath.Walk(skeRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(path, ".ske") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(files)
+
+	exports := map[string]string{}
+	for _, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		rel, err := filepath.Rel(skeRoot, path)
+		if err != nil {
+			return nil, err
+		}
+		lines := strings.Split(string(data), "\n")
+		for i, ln := range lines {
+			if !exportMarker.MatchString(ln) {
+				continue
+			}
+			// The declaration is the next non-blank, non-comment line; its
+			// function name is the identifier immediately before the `(`.
+			for j := i + 1; j < len(lines); j++ {
+				body := strings.TrimSpace(lines[j])
+				if body == "" || strings.HasPrefix(body, "//") {
+					continue
+				}
+				if m := cFuncNameRe.FindStringSubmatch(lines[j]); m != nil {
+					exports[m[1]] = filepath.ToSlash(rel)
+				}
+				break
+			}
+		}
+	}
+	return exports, nil
+}
+
+// exportMarker matches a `// %%EXPORT` comment with an optional p/px flag.
+// It deliberately does not match `%%EXPORT_TABLE` (the `\s` after the
+// optional flag cannot consume the `_TABLE` suffix), so lookup-table
+// exports stay out of the function denominator.
+var exportMarker = regexp.MustCompile(`^\s*//\s*%%EXPORT(\s+\w+)?\s*$`)
+
+// cFuncNameRe pulls a C function name out of a declaration line: the
+// identifier immediately before the parameter list's opening `(`. It
+// admits the templated `mm_op%{P}_t(` spelling so templated exports keep
+// their `%{P}`/`%{N}` form for the join.
+var cFuncNameRe = regexp.MustCompile(`([A-Za-z_]\w*(?:%\{[A-Za-z]\}\w*)?)\s*\(`)
+
+// goYAMLCSymbols collects every C symbol that the emitted go.yaml plan
+// correlates (the `c:` provenance on each entry). It is the authoritative
+// "translated through the public surface" set the ledger joins against —
+// built from the in-memory plan, so it reflects exactly what go.yaml will
+// carry, not a re-read of the file.
+func goYAMLCSymbols(pkgs []goPackage) map[string]bool {
+	c := map[string]bool{}
+	for _, p := range pkgs {
+		for _, f := range p.Funcs {
+			if f.C != "" {
+				c[f.C] = true
+			}
+		}
+	}
+	return c
+}
+
+// cExportInGoYAML reports whether a (possibly templated) `.ske` export
+// correlates to a go.yaml `c:` entry, canonicalizing the three template
+// spellings (decision 2). It checks the literal name, the
+// variable-stripped base form (the `%{P}` convention: `mm_op%{P}_t` →
+// `mm_op_t`), and every modulus/bitwidth expansion (the `%{N}` convention:
+// `bitvector%{N}_sort` → `bitvector32_sort`/`bitvector64_sort`). go.yaml
+// uses base spelling for the modulus family and expanded spelling for the
+// bitwidth family, so admitting both forms covers either.
+func cExportInGoYAML(name string, goC map[string]bool) bool {
+	if goC[name] {
+		return true
+	}
+	if !cTemplateVar.MatchString(name) {
+		return false
+	}
+	if goC[cTemplateVar.ReplaceAllString(name, "")] {
+		return true
+	}
+	exps := cBitwidthExpansions
+	if strings.Contains(name, "%{P}") {
+		exps = cModulusExpansions
+	}
+	for _, e := range exps {
+		if goC[cTemplateVar.ReplaceAllString(name, e)] {
+			return true
+		}
+	}
+	return false
+}
+
+// cTemplateVar matches a `.ske` template variable: `%{P}` (the modulus) or
+// `%{N}` (the bitvector bitwidth).
+var cTemplateVar = regexp.MustCompile(`%\{[A-Za-z]\}`)
+
+// cModulusExpansions is the set the C build expands `%{P}` into.
+var cModulusExpansions = []string{"3", "7", "15", "31", "127", "255"}
+
+// cBitwidthExpansions is the set the C build expands `%{N}` into.
+var cBitwidthExpansions = []string{"32", "64"}
+
+// cTranslatedInternal is the third ledger state (decision 1): upstream
+// `%%EXPORT` functions implemented in Go behind an unexported helper that
+// carries a doc-comment citation but no go.yaml `c:` correlation. go.yaml
+// tracks the public API surface, so these internal implementations get no
+// `c:` entry; the ledger records them here as "translated-internal" and
+// counts them as translated, never missing. The value is the Go helper
+// family and the rationale. Names keep their `.ske` `%{P}` spelling so they
+// match the live export denominator directly (the join in cTranslatedInternal
+// is by literal `.ske` name, not the canonicalized form). C4 enumerated
+// this set; assertCSurfaceFresh fails if a key no longer names a live export
+// or if upstream later exposes it through go.yaml.
+var cTranslatedInternal = map[string]string{
+	// mm_op permutation/delta internals (genOpPi/genOpDelta in mm_op_p_gen.go).
+	"mm_op%{P}_neg_scalprod_d_i": "internal genOpPi family; cited, unexported",
+	"mm_op%{P}_delta":            "internal genOpDelta family; cited, unexported",
+	"mm_op%{P}_pi_tag_ABC":       "internal genOpPi family; cited, unexported",
+	"mm_op%{P}_delta_tag_ABC":    "internal genOpDelta family; cited, unexported",
+	// mm_op triality internals (genOpT/genOpTABC in mm_op_p_gen.go).
+	"mm_op%{P}_t":     "internal genOpT; full triality in Go, cited, unexported",
+	"mm_op%{P}_t_ABC": "internal genOpTABC; full triality in Go, cited, unexported",
+	// mm_op xi internals (genOpXi in mm_op_p_gen.go).
+	"mm_op%{P}_xi":       "internal genOpXi family; cited, unexported",
+	"mm_op%{P}_xi_tag_A": "internal genOpXi family; cited, unexported",
+	// mm_op xy internal (genOpXy in mm_op_p_gen.go).
+	"mm_op%{P}_xy_tag_ABC": "internal genOpXy family; cited, unexported",
+	// mm_basics group-word iterator and table-prep internals.
+	"mm_group_iter_start": "internal group-word iterator; cited, unexported",
+	"mm_group_iter_next":  "internal group-word iterator; cited, unexported",
+	"mm_sub_prep_pi":      "internal table-prep helper; cited, unexported",
+	"mm_sub_prep_xy":      "internal table-prep helper; cited, unexported",
+	// mm_reduce compress internals (mm_compress.go).
+	"mm_compress_pc_add_type4": "internal mm_compress helper; cited, unexported",
+	"mm_compress_pc_add_t":     "internal mm_compress helper; cited, unexported",
+	"mm_compress_pc":           "internal mm_compress driver; cited, unexported",
+}
+
+// cUntranslated is the deliberately-unported residue (C4 classification).
+// Every key carries exactly one class — (b) debug-test-only or
+// (c) superseded — with the evidence. The class-(a) "needed" set is empty:
+// nothing here is required for completeness. assertCSurfaceFresh fails if a
+// key no longer names a live export, or if upstream later exposes it through
+// go.yaml (translation would moot its classification).
+var cUntranslated = map[string]cDrop{
+	// (c) superseded: the RC4-based mm_rng_* PRNG layer is unused; Go uses
+	// xoshiro256** (gen_rng_* from gen_random.ske).
+	"mm_rng_seed":     {class: "c", evidence: "superseded: Go uses xoshiro256** (gen_rng_*); RC4-based mm_rng_* unused"},
+	"mm_rng_gen_modp": {class: "c", evidence: "superseded: Go uses xoshiro256** (gen_rng_*); RC4-based mm_rng_* unused"},
+	// (b) debug-test-only: the mm_sparse family is consumed only by
+	// tests/test_mm_op/test_group_op.py and internally; Go uses different
+	// sparse handling patterns.
+	"mm_sparse_purge":        {class: "b", evidence: "debug-test-only: consumed only by upstream test_group_op.py and internally"},
+	"mm_sparse_bitsort":      {class: "b", evidence: "debug-test-only: consumed only by upstream test_group_op.py and internally"},
+	"mm_sparse_alloc_reduce": {class: "b", evidence: "debug-test-only: consumed only by upstream test_group_op.py and internally"},
+	"mm_sparse_reduce":       {class: "b", evidence: "debug-test-only: consumed only by upstream test_group_op.py and internally"},
+	"mm_sparse_mul":          {class: "b", evidence: "debug-test-only: consumed only by upstream test_group_op.py and internally"},
+	// (c) superseded: the mod-3 G_x0 state machine; Go reduces via mod-15
+	// (the xsp2co1_rep_mod3.ske family, Q-m prior confirmed).
+	"mm_order_find_Gx0_v1_mod3_init":  {class: "c", evidence: "superseded: mod-3 G_x0 state machine; Go reduces via mod-15 (Q-m)"},
+	"mm_order_find_Gx0_v1_mod3_state": {class: "c", evidence: "superseded: mod-3 G_x0 state machine; Go reduces via mod-15 (Q-m)"},
+}
+
+// cDrop is one row of cUntranslated: the single (b)/(c) class and the
+// evidence justifying that an upstream `%%EXPORT` function is deliberately
+// not ported.
+type cDrop struct {
+	class    string // "b" (debug-test-only) or "c" (superseded)
+	evidence string
+}
+
+// assertPySurfaceFresh makes the runtime `mmgroup` Python public surface
+// authoritative (M3, EXECUTION.md Track M item M3) — the Python-side mirror
+// of assertCSurfaceFresh. It re-derives the denominator live from the parsed
+// python.yaml (the committed runtime surface the walker emits) and holds
+// every public method/module-function against the Go translation: each must
+// land in exactly one of these ledger states —
+//
+//   - covered: a go.yaml entry carries it as a `py:` provenance key (the
+//     covered set is the in-memory plan's `py:` values, built by
+//     goYAMLPySymbols — the Python analogue of goYAMLCSymbols);
+//   - dropped: the existing drop machinery (dropClasses, dropClassMethods,
+//     pyClassToGo collapse, dropPyMethod, dropModuleFn, the pyDropModule and
+//     inherited-non-leaf filters) keeps it out of go.yaml by policy, so it is
+//     accounted-for-by-construction and never a surface gap;
+//   - delegated-to-C: a Python method that go.yaml carries under its C
+//     function name (a `py: <c_symbol>` key set by foldPython on the C
+//     entry), not its Python method name, so a naive method-name join reports
+//     it missing. pyDelegatesToC maps Python method -> primary C symbol; the
+//     ledger counts the method covered when that C symbol is in go.yaml. This
+//     is the Xsp2_Co1 finding (M3 decision 1): the whole class delegates to
+//     the clifford12 extension, and go.yaml records the C names;
+//   - out-of-scope: a deliberately-unported peripheral pure-Python helper or
+//     abstract-base residue, carrying exactly one classification in
+//     pyOutOfScope (M3 decisions 2 and 3, the cUntranslated precedent).
+//
+// A surviving public symbol that matches none of the four states is, by
+// construction, a new or reclassified upstream addition — a hard error, the
+// dropClasses precedent. Stale ledger keys (a pyDelegatesToC or pyOutOfScope
+// entry that no longer names a live-but-uncovered symbol) are equally fatal:
+// the tables must track upstream exactly, never carry dead entries that
+// silently mask a real change.
+//
+// The denominator is re-derived from the parsed python.yaml, so a newly
+// added upstream public method fails this check on the next `go generate`
+// rather than rotting unnoticed.
+func assertPySurfaceFresh(pkgs []goPackage, py pythonManifest) error {
+	tally, err := pySurfaceLedger(pkgs, py)
+	if err != nil {
+		return err
+	}
+	if len(tally.Unclassified) > 0 {
+		return fmt.Errorf("%d public runtime Python symbol(s) carry no go.yaml py: correlation, delegated-to-C entry, or out-of-scope classification (new or reclassified upstream surface — extend the M3 ledger):\n  %s",
+			len(tally.Unclassified), strings.Join(tally.Unclassified, "\n  "))
+	}
+	if tally.staleErr != nil {
+		return tally.staleErr
+	}
+	return nil
+}
+
+// pySurfaceTally is the M3 ledger's classification of the live runtime
+// `mmgroup` public Python surface (re-derived from python.yaml) against the Go
+// translation: every public method/module-function counted into exactly one
+// state. The denominator-and-numerators form of assertPySurfaceFresh's pass,
+// consumed by both the assertion and the Me5 completeness report.
+type pySurfaceTally struct {
+	Surface      int      `json:"surface"`      // total live public symbols (the denominator)
+	Covered      int      `json:"covered"`      // go.yaml py: key carries it
+	Delegated    int      `json:"delegated"`    // covered under a delegated C function name
+	OutOfScope   int      `json:"out_of_scope"` // deliberately unported peripheral/abstract residue
+	Unclassified []string `json:"unclassified"` // no state matched — a real gap (sorted)
+
+	staleErr error `json:"-"` // stale/redundant ledger key (fatal; see cSurfaceTally.staleErr)
+}
+
+// pySurfaceLedger runs the M3 classification pass once and returns the tally.
+// Translated = Covered + Delegated; OutOfScope entries are complete by
+// classification. It re-derives the denominator from python.yaml, so a newly
+// added upstream public method shows up as Unclassified rather than silently
+// inflating the ratio.
+func pySurfaceLedger(pkgs []goPackage, py pythonManifest) (pySurfaceTally, error) {
+	covered := goYAMLPySymbols(pkgs)
+	goC := goYAMLCSymbols(pkgs)
+
+	delegatesSeen := make(map[string]bool, len(pyDelegatesToC))
+	outOfScopeSeen := make(map[string]bool, len(pyOutOfScope))
+
+	var tally pySurfaceTally
+	var unclassified []string
+	classify := func(sym, where string) {
+		tally.Surface++
+		switch {
+		case covered[sym]:
+			// covered: a go.yaml entry carries it as a py: key.
+			tally.Covered++
+		case pyDelegatesToC[sym] != "":
+			// delegated-to-C: covered under the C function's name. Verified
+			// below that the C symbol is actually in go.yaml.
+			delegatesSeen[sym] = true
+			tally.Delegated++
+		case pyOutOfScope[sym].class != "":
+			outOfScopeSeen[sym] = true
+			tally.OutOfScope++
+		default:
+			unclassified = append(unclassified, fmt.Sprintf("%s (in %s)", sym, where))
+		}
+	}
+	pyEachPublicSurface(py, classify)
+	sort.Strings(unclassified)
+	tally.Unclassified = unclassified
+
+	tally.staleErr = pySurfaceStaleKey(py, goC, delegatesSeen, outOfScopeSeen)
+	return tally, nil
+}
+
+// pySurfaceStaleKey reports the first ledger defect: a delegated-to-C method
+// whose C target is not actually in go.yaml (the delegation claim is wrong), or
+// a pyDelegatesToC/pyOutOfScope key that no longer names a live-but-uncovered
+// symbol (stale or redundant). Any is fatal. Returns nil when the ledger is
+// clean.
+func pySurfaceStaleKey(py pythonManifest, goC, delegatesSeen, outOfScopeSeen map[string]bool) error {
+	// A pyDelegatesToC entry only counts as covered when its C symbol is
+	// actually present in go.yaml; otherwise the method is genuinely missing
+	// and the delegation claim is wrong.
+	for sym, cName := range pyDelegatesToC {
+		if delegatesSeen[sym] && !goC[cName] {
+			return fmt.Errorf("pyDelegatesToC[%q] = %q names no live go.yaml c: entry (the delegation target is not translated; the method is genuinely missing)", sym, cName)
+		}
+	}
+
+	// Freshness: every table key must still name a live-but-uncovered public
+	// symbol. A key that fails to be "seen" either no longer names a live
+	// surface symbol, or upstream now covers it through a py: key (so the
+	// ledger entry is redundant). Distinguish the two for a precise message.
+	live := pyLivePublicSet(py)
+	for sym := range pyDelegatesToC {
+		if delegatesSeen[sym] {
+			continue
+		}
+		if !live[sym] {
+			return fmt.Errorf("pyDelegatesToC key %q names no live public Python symbol (stale ledger; upstream removed or renamed it?)", sym)
+		}
+		return fmt.Errorf("pyDelegatesToC key %q is now covered by a go.yaml py: key (redundant ledger entry; drop it — the surface covers it)", sym)
+	}
+	for sym := range pyOutOfScope {
+		if outOfScopeSeen[sym] {
+			continue
+		}
+		if !live[sym] {
+			return fmt.Errorf("pyOutOfScope key %q names no live public Python symbol (stale ledger; upstream removed or renamed it?)", sym)
+		}
+		return fmt.Errorf("pyOutOfScope key %q is now covered by a go.yaml py: key (surface was translated; drop its classification)", sym)
+	}
+	return nil
+}
+
+// goYAMLPySymbols collects every Python provenance key (the `py:` value on
+// each entry) the emitted go.yaml plan carries. It is the authoritative
+// "covered through the surface" set assertPySurfaceFresh joins against —
+// built from the in-memory plan so it reflects exactly what go.yaml will
+// carry. A method correlated onto a C entry under the C function name (the
+// Xsp2_Co1 family) appears here as that C name, not its Python method name;
+// pyDelegatesToC bridges the two.
+func goYAMLPySymbols(pkgs []goPackage) map[string]bool {
+	p := map[string]bool{}
+	for _, pkg := range pkgs {
+		for _, f := range pkg.Funcs {
+			if f.Py != "" {
+				p[f.Py] = true
+			}
+		}
+	}
+	return p
+}
+
+// pyEachPublicSurface walks the parsed python.yaml and calls visit(sym,
+// where) for every public method/module-function that survives the same drop
+// machinery foldPython applies, so the ledger's denominator is exactly the
+// set of symbols foldPython would (or deliberately would not) emit. A method
+// that goFuncForMethod declines (an un-whitelisted dunder with no Go surface)
+// is still surfaced for classification: it is public Python that produces no
+// go.yaml entry, so the ledger must classify it (out-of-scope), never drop it
+// silently (M3 decision 2: GcVector.__or__). The drop tables consulted here
+// (dropModuleFn, dropClasses, dropClassMethods, dropPyMethod, pyClassToGo)
+// are the same ones foldPython uses, so a symbol foldPython drops by policy is
+// excluded from the denominator and never reaches the ledger as a gap.
+func pyEachPublicSurface(py pythonManifest, visit func(sym, where string)) {
+	// Module-level functions: dropped exactly as foldPython drops them.
+	for _, fn := range py.ModuleFns {
+		if fn.Module == pyDropModule || dropModuleFn(fn) {
+			continue
+		}
+		visit(fn.Name, fn.Module)
+	}
+
+	// Concrete-leaf computation mirrors foldPython: a class used as a base of
+	// some surviving (non-dropped) class is not a leaf, so its inherited
+	// methods land on the subclass, not here.
+	usedAsBase := map[string]bool{}
+	for _, cls := range py.Classes {
+		if _, dropped := dropClasses[cls.Name]; dropped {
+			continue
+		}
+		for _, b := range cls.Bases {
+			usedAsBase[b] = true
+		}
+	}
+
+	for _, cls := range py.Classes {
+		if _, dropped := dropClasses[cls.Name]; dropped {
+			continue // dropped class: no surface (dropClasses precedent)
+		}
+		// A class genuinely collapsed onto a *different* Go type
+		// (PLoopIntersection -> *Cocode) contributes no surface of its own.
+		// A name-normalized class whose Go type is just the de-underscored
+		// form of its own name (Xsp2_Co1 -> *Xsp2Co1) is NOT a collapse: its
+		// methods are still its own surface, and the foldPython class loop
+		// skips them only because its collapse guard compares against the
+		// literal name "*"+cls.Name rather than the normalized goName — which
+		// is exactly why the Xsp2_Co1 method surface never gets a Python-name
+		// py: key and must be resolved through pyDelegatesToC (M3 finding 1).
+		// The denominator compares against the normalized name so those
+		// methods stay in scope and reach the ledger.
+		if g, ok := pyClassToGo[cls.Name]; ok && g != "*"+goName(cls.Name) {
+			continue
+		}
+		leaf := !usedAsBase[cls.Name]
+		hasRepr := false
+		for _, m := range cls.Methods {
+			if m.Name == "__repr__" {
+				hasRepr = true
+				break
+			}
+		}
+		for _, m := range cls.Methods {
+			if m.Inherited && !leaf {
+				continue // inherited methods land on the leaf only
+			}
+			if dropPyMethod(cls.Name, m.Name, hasRepr) {
+				continue // Python-protocol glue with no Go counterpart
+			}
+			visit(cls.Name+"."+m.Name, cls.Module)
+		}
+	}
+}
+
+// pyLivePublicSet is the membership form of pyEachPublicSurface: the set of
+// every public Python symbol the ledger's denominator covers, used by the
+// freshness check to tell a stale table key (names no live symbol) from a
+// redundant one (now covered by a py: key).
+func pyLivePublicSet(py pythonManifest) map[string]bool {
+	live := map[string]bool{}
+	pyEachPublicSurface(py, func(sym, _ string) { live[sym] = true })
+	return live
+}
+
+// pyDelegatesToC maps a public Python method that go.yaml carries under its
+// delegated C function name (not its Python method name) to that primary C
+// symbol (M3 decision 1, the Xsp2_Co1 finding). The Xsp2_Co1 class delegates
+// its whole operation set to the clifford12 / generators extensions, and
+// foldPython sets the matching go.yaml entry's py: key to the C function name
+// (e.g. py: xsp2co1_traces_fast), so a method-name join reports the method
+// missing even though it is implemented. The ledger resolves the method
+// through this map: it is covered when the named C symbol is a live go.yaml
+// c: entry. The C symbols are read from the canonical mmgroup source
+// (structures/xsp2_co1.py method bodies); assertPySurfaceFresh fails if a key
+// no longer names a live-but-uncovered method, if upstream later covers it
+// under its Python name, or if its C target is not in go.yaml.
+var pyDelegatesToC = map[string]string{
+	// Xsp2_Co1: the whole class delegates to the clifford12 / generators
+	// extensions; go.yaml carries each C name as the py: key (M3 decision 1).
+	"Xsp2_Co1.__neg__":                     "xsp2co1_neg_elem",
+	"Xsp2_Co1.as_xsp":                      "xsp2co1_xspecial_vector",
+	"Xsp2_Co1.type_Q_x0":                   "gen_leech2_type",
+	"Xsp2_Co1.as_Co1_bitmatrix":            "xsp2co1_elem_to_bitmatrix",
+	"Xsp2_Co1.as_compressed_Co1_bitmatrix": "gen_leech2_op_word_matrix24",
+	"Xsp2_Co1.xsp_conjugate":               "xsp2co1_xspecial_conjugate",
+	"Xsp2_Co1.mul_data":                    "xsp2co1_mul_elem_word",
+	"Xsp2_Co1.conjugate_involution":        "xsp2co1_elem_conjugate_involution",
+	"Xsp2_Co1.conjugate_involution_G_x0":   "xsp2co1_elem_conjugate_involution_Gx0",
+	"Xsp2_Co1.chi_G_x0":                    "xsp2co1_traces_fast",
+	// as_Q_x0_atom is a direct alias of as_xsp (xsp2_co1.py:
+	// `as_Q_x0_atom = as_xsp`), so it delegates to the same C symbol.
+	"Xsp2_Co1.as_Q_x0_atom": "xsp2co1_xspecial_vector",
+	// qs_matrix.py module shims: one-line Python wrappers over the C
+	// functions go.yaml already carries under the C names
+	// (structures/qs_matrix.py: `def pauli_vector_mul(...): return
+	// qstate12_pauli_vector_mul(...)`).
+	"pauli_vector_mul": "qstate12_pauli_vector_mul",
+	"pauli_vector_exp": "qstate12_pauli_vector_exp",
+}
+
+// pyOutOfScope is the deliberately-uncovered residue of the runtime Python
+// surface (M3 decisions 2 and 3, the cUntranslated precedent): the public
+// methods/functions that survive every drop table yet have no go.yaml py:
+// key and no C delegation. Every key carries exactly one class with evidence:
+//
+//   - "abstract": an inherited AbstractMMGroupWord group-word method on
+//     Xsp2_Co1 (__mul__, __invert__, reduce, copy, ...) — the "interface
+//     later" deferral (Q-a / M3 decision 3). These are the same framework
+//     methods MM carries as py: keys, but Xsp2_Co1's class loop is skipped by
+//     foldPython's literal-name collapse guard (M3 finding 1), so its
+//     inherited surface gains no Python-name py: key and the deferral is
+//     recorded here instead. The C symbols the framework ultimately dispatches
+//     to (xsp2co1_mul_elem, xsp2co1_inv_elem, ...) are already in go.yaml; the
+//     abstract base method itself is what stays deferred.
+//   - "peripheral": a pure-Python diagnostic/sample helper with no Go
+//     equivalent that is not needed for completeness. The basis-string
+//     renderers (Cocode/GCode/PLoop str_basis/show_basis) print or format a
+//     fixed basis as a string for human inspection; the BabyAxis classmethod
+//     overrides return baby-monster sample-axis dictionaries from the
+//     tests/axes data tables.
+//   - "flagged": a non-abstract remainder Ap1 has not yet ruled on; recorded,
+//     not silently dropped, so it stays visible until resolved (M3 decision 3:
+//     "if Ap1's verdicts are available, encode them; otherwise leave those
+//     entries flagged, not silently dropped"). Xsp2_Co1.order is the lone
+//     live flag: an own mixed method (Python loop over qs.order) with no
+//     single C delegation target and no Ap1 verdict yet.
+//
+// Several symbols C5 flagged as no-Go-equivalent (binomial, GcVector.__or__/
+// __ror__, MMVectorCRT.v2) carry NO entry here because they are absent from
+// python.yaml itself — the walker never surfaces them, so they are not in the
+// ledger's live denominator and need no classification. C5's claimed misses
+// Cocode.syndromes_llist, P3_is_collinear, and P3_point_set_type are verified
+// covered by go.yaml py: keys, so they too carry no entry (G2 audit / C3
+// agree; the C5 absence claims were false). The standalone Abstract* base
+// classes are in dropClasses, so the walker's flattening puts their methods on
+// the concrete leaves and the standalone abstract entries never reach the
+// denominator; only Xsp2_Co1's inherited copies surface (its class is skipped,
+// not dropped — see the "abstract" rows below).
+//
+// assertPySurfaceFresh fails if a key no longer names a live public symbol,
+// or if upstream later covers it through a py: key.
+var pyOutOfScope = map[string]pyDrop{
+	// Xsp2_Co1 inherited AbstractMMGroupWord group-word methods (M3 finding 1
+	// / decision 3): MM carries these as py: keys, but foldPython skips the
+	// Xsp2_Co1 class loop (literal-name collapse guard), so they surface
+	// uncovered. The "interface later" deferral (Q-a) classifies them.
+	"Xsp2_Co1.__eq__":       {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	"Xsp2_Co1.__invert__":   {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	"Xsp2_Co1.__mul__":      {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	"Xsp2_Co1.__pow__":      {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	"Xsp2_Co1.__repr__":     {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	"Xsp2_Co1.__rmul__":     {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	"Xsp2_Co1.__rtruediv__": {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	"Xsp2_Co1.__truediv__":  {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	"Xsp2_Co1.as_tuples":    {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	"Xsp2_Co1.copy":         {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	"Xsp2_Co1.raw_str":      {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	"Xsp2_Co1.reduce":       {class: "abstract", evidence: "inherited AbstractMMGroupWord op; interface-later deferral (Q-a)"},
+	// Non-abstract Xsp2_Co1 remainder Ap1 has not ruled on yet: an own mixed
+	// method (Python loop over qs.order from clifford12) with no single C
+	// delegation target. Flagged, not silently dropped (M3 decision 3).
+	"Xsp2_Co1.order": {class: "flagged", evidence: "own mixed method (Python loop over qs.order); no single C target, pending Ap1 verdict"},
+	// Basis-string renderers: pure-Python diagnostic helpers that format/print
+	// a fixed Golay/cocode basis as a string (structures/{cocode,gcode,ploop}
+	// classmethods str_basis/show_basis). Cocode.show_basis and the module-
+	// level str_basis are covered through other py: keys; these residual
+	// receivers are not, and the rendering has no Go API counterpart.
+	"Cocode.str_basis": {class: "peripheral", evidence: "pure-Python basis-string renderer; diagnostic, no Go API surface"},
+	"GCode.str_basis":  {class: "peripheral", evidence: "pure-Python basis-string renderer; diagnostic, no Go API surface"},
+	"GCode.show_basis": {class: "peripheral", evidence: "pure-Python basis printer (prints str_basis); diagnostic, no Go API surface"},
+	"PLoop.str_basis":  {class: "peripheral", evidence: "pure-Python basis-string renderer; diagnostic, no Go API surface"},
+	"PLoop.show_basis": {class: "peripheral", evidence: "pure-Python basis printer (prints str_basis); diagnostic, no Go API surface"},
+	// BabyAxis classmethod overrides: return baby-monster sample-axis
+	// dictionaries from the tests/axes data tables (get_baby_sample_axes); the
+	// Axis-class versions are covered, these baby overrides are test-tree
+	// sample data with no current Go counterpart.
+	"BabyAxis.representatives": {class: "peripheral", evidence: "pure-Python baby-monster sample-axis table override; test-tree data, no Go API surface"},
+	"BabyAxis.orbit_sizes":     {class: "peripheral", evidence: "pure-Python baby-monster orbit-size table override; test-tree data, no Go API surface"},
+}
+
+// pyDrop is one row of pyOutOfScope: the single classification and the
+// evidence justifying that a public runtime Python symbol is deliberately
+// uncovered.
+type pyDrop struct {
+	class    string // "abstract", "peripheral", or "flagged"
+	evidence string
 }
 
 // goFuncLess orders entries within a package for deterministic output:
@@ -3623,18 +4563,29 @@ func goFuncLess(a, b goFunc) bool {
 }
 
 // pyToCAlias maps a Cython wrapper's Python-visible name to the C symbol
-// it wraps when the two differ by a dropped prefix. The gen_xi_* table
-// builders are exposed under their unprefixed names (make_table,
-// invert_table, split_table) by mmgroup.dev.generators, so packageOf on
-// the bare Python name would route them to a fresh Python-only entry
-// (MakeTable, ...) instead of correlating onto the C entry (XiMakeTable,
-// ...). Consulting this alias in goSiteForModuleFn makes mergePython fold
-// them onto the C function, granting that entry py: provenance and
-// removing the spurious Python-only duplicate (A2).
+// it wraps when routing the bare Python name through packageOf would not
+// land on (and correlate with) the C entry. Two cases need it:
+//
+//   - Dropped prefix: the gen_xi_* table builders are exposed under their
+//     unprefixed names (make_table, invert_table, split_table) by
+//     mmgroup.dev.generators, so packageOf on the bare Python name routes
+//     them to a fresh Python-only entry (MakeTable, ...) instead of the C
+//     entry (XiMakeTable, ...).
+//   - renameOverrides correction: when a C symbol's Go name is overridden
+//     for spelling (mat24_check_endianess → CheckEndianness), the bare
+//     Python name (check_endianess) still computes the misspelled
+//     CheckEndianess via goName, so it fails to correlate and emits a
+//     spurious Python-only duplicate carrying the misspelling. The alias
+//     routes it through the C symbol so the same override applies.
+//
+// Consulting this alias in goSiteForModuleFn makes mergePython fold these
+// onto the C function, granting that entry py: provenance and removing the
+// spurious Python-only duplicate (A2).
 var pyToCAlias = map[string]string{
-	"make_table":   "gen_xi_make_table",
-	"invert_table": "gen_xi_invert_table",
-	"split_table":  "gen_xi_split_table",
+	"make_table":      "gen_xi_make_table",
+	"invert_table":    "gen_xi_invert_table",
+	"split_table":     "gen_xi_split_table",
+	"check_endianess": "mat24_check_endianess",
 }
 
 // goSiteForModuleFn determines the target package and Go name for a
@@ -3737,6 +4688,9 @@ func goFuncForMethod(class, recv string, m pyMethod) (goFunc, bool) {
 	}
 
 	name := goName(m.Name)
+	if override, ok := pyRenameOverrides[class+"."+m.Name]; ok {
+		name = override
+	}
 	switch m.Kind {
 	case "staticmethod", "classmethod":
 		// No receiver state → package-level free function (PYMETH §3/§4).
@@ -3759,6 +4713,40 @@ func goFuncForMethod(class, recv string, m pyMethod) (goFunc, bool) {
 			Dispatch: dispatch,
 		}, true
 	}
+}
+
+// pyRenameOverrides maps a Python "Class.method" provenance key to the Go
+// method name it must use, bypassing the computed goName(m.Name). It is the
+// Python-side counterpart of renameOverrides (which keys C symbols), used
+// where the mechanical name stutters against the receiver type and the
+// shipped cgt implementation already uses the idiomatic destuttered name.
+//
+// Axis.axis_type / Axis.axis_type_info would yield Axis.AxisType /
+// Axis.AxisTypeInfo (a.AxisType() stutters); the shipped surface is
+// func (a *Axis) Type() string in cgt/monster.go, so the plan names these
+// Type / TypeInfo. BabyAxis.axis_type and MMVector.axis_type are left to
+// goName: BabyAxis.AxisType does not stutter against BabyAxis, and
+// MMVector.AxisType is implemented under exactly that name (mm_op_eval.go).
+//
+// assertPyRenamesFresh (the dropClasses precedent) verifies every key still
+// names a live class method in python.yaml, so a stale key cannot rot
+// silently after upstream renames or removes the method.
+var pyRenameOverrides = map[string]string{
+	"Axis.axis_type":      "Type",
+	"Axis.axis_type_info": "TypeInfo",
+
+	// G_x0 / N_x0 / Q_x0 subgroup subscripts. goName splits chi_G_x0 into
+	// chi/g/x0 and upper-cases each first letter (ChiGX0), but the shipped
+	// surface treats x0 as a single subscript token and writes ChiGx0. Pin
+	// these five individually rather than via segmentOverrides: x0 is not
+	// rendered uniformly across the spec (MM_to_Q_x0 -> MMToQX0 keeps X0),
+	// so a blanket x0 segment rule would regress the matching entries.
+	"MM.chi_G_x0":          "ChiGx0",
+	"MM.in_G_x0":           "InGx0",
+	"MM.in_N_x0":           "InNx0",
+	"MM.in_Q_x0":           "InQx0",
+	"Axis.reduce_G_x0":     "ReduceGx0",
+	"BabyAxis.reduce_G_x0": "ReduceGx0",
 }
 
 // goDispatchOf translates a method's Python dispatch ladder to the Go

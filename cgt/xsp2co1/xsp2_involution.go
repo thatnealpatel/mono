@@ -1,6 +1,8 @@
 package xsp2co1
 
 import (
+	"errors"
+
 	"patel.codes/cgt/generator"
 	"patel.codes/cgt/leech"
 	"patel.codes/cgt/mat24"
@@ -636,15 +638,37 @@ func (w Word) Atoms() []uint32 {
 // ConjugateInvolution panics if g is not an
 // involution.
 func (g *Xsp2Co1) ConjugateInvolution() (int, Word) {
+	it, w, err := g.ConjugateInvolutionErr()
+	if err != nil {
+		panic(ErrNotInvolution)
+	}
+	return it, w
+}
+
+// ErrNotInvolutionErr is the error value returned by
+// ConjugateInvolutionErr when its receiver is not an
+// involution. It carries the same message as the
+// ErrNotInvolution panic value; the flat cgt trial
+// loop tests against it to fail a trial closed.
+var ErrNotInvolutionErr = errors.New(ErrNotInvolution)
+
+// ConjugateInvolutionErr is the error-returning form
+// of ConjugateInvolution. It returns ErrNotInvolutionErr
+// (rather than panicking) when g is not an involution,
+// mirroring the negative return of the C
+// xsp2co1_elem_conjugate_involution. The flat cgt
+// trial loops use it to treat a non-involution as an
+// expected per-trial miss instead of recovering a panic.
+func (g *Xsp2Co1) ConjugateInvolutionErr() (int, Word, error) {
 	var a [15]uint32
 	res := xsp2co1ElemConjugateInvolution(g.data[:], a[:])
 	if res < 0 {
-		panic(ErrNotInvolution)
+		return 0, Word{}, ErrNotInvolutionErr
 	}
 	length := int(res & 0xff)
 	out := make([]uint32, length)
 	copy(out, a[:length])
-	return int(res >> 8), Word{atoms: out}
+	return int(res >> 8), Word{atoms: out}, nil
 }
 
 /*************************************************************************
@@ -736,16 +760,13 @@ func xsp2co1ElemInvolutionClass(elem []uint64) int32 {
 }
 
 // tracesSmallOK is xsp2co1TracesSmall returning
-// false on the overflow error path instead of
-// panicking, for the involution classifier.
-func tracesSmallOK(elem []uint64, ptrace []int32) (ok bool) {
-	defer func() {
-		if recover() != nil {
-			ok = false
-		}
-	}()
-	xsp2co1TracesSmall(elem, ptrace)
-	return true
+// false on the failure path instead of surfacing an
+// error, for the involution classifier. A false
+// result mirrors the C callers that treat the
+// negative xsp2co1_traces_small return as an
+// unclassifiable element.
+func tracesSmallOK(elem []uint64, ptrace []int32) bool {
+	return xsp2co1TracesSmall(elem, ptrace) == nil
 }
 
 // chi98280Keys / chi98280Data are the precomputed
@@ -779,8 +800,13 @@ func trace98280Fast(elem []uint64) (int32, bool) {
 // xsp2co1TracesFast computes the characters
 // rho_24, rho_576, rho_4096, rho_98280 of elem
 // into ptrace, using the fast table for the hard
-// rho_98280 cases.
+// rho_98280 cases. It panics if the small-trace
+// computation fails: its only caller, ChiGx0,
+// supplies a valid G_x0 element, so a failure here
+// signals a genuine internal-invariant bug.
 func xsp2co1TracesFast(elem []uint64, ptrace []int32) {
-	xsp2co1TracesSmall(elem, ptrace)
+	if err := xsp2co1TracesSmall(elem, ptrace); err != nil {
+		panic(err.Error())
+	}
 	ptrace[3] = xsp2co1Trace98280(elem, trace98280Fast)
 }

@@ -19,10 +19,10 @@ func TestParseLiveGoYAML(t *testing.T) {
 		t.Fatal("no packages parsed")
 	}
 
-	// mm is the largest package and the canonical receiver home.
-	mm := pkgByName(t, s, "mm")
-	if len(mm.Funcs) == 0 {
-		t.Fatal("mm package has no funcs")
+	// monster is the largest package and the canonical receiver home.
+	monster := pkgByName(t, s, "monster")
+	if len(monster.Funcs) == 0 {
+		t.Fatal("monster package has no funcs")
 	}
 
 	// NewMMFromTag exercises typed params with defaults and a note.

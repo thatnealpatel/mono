@@ -1,6 +1,10 @@
 package qstate12
 
-import "patel.codes/cgt/swar"
+import (
+	"errors"
+
+	"patel.codes/cgt/swar"
+)
 
 // Additional qstate12-layer helpers used by the
 // G_{x0} (xsp2co1) layer but not part of the core
@@ -13,7 +17,8 @@ const QsMaxRows = qsMaxRows
 
 // QsMonomialColumnMatrix sets s to a monomial
 // column matrix of nqb qubits defined by pa, as
-// qstate12_monomial_column_matrix.
+// qstate12_monomial_column_matrix. It panics if the
+// resulting state is too large for the buffer.
 func QsMonomialColumnMatrix(s *QState12, nqb int, pa []uint64) {
 	factor := int64(((pa[0] >> uint(nqb)) & 1) << 2)
 	s.SetNrows(nqb + 1)
@@ -91,12 +96,34 @@ func QsMonomialMatrixRowOp(s *QState12, pa []uint32) int {
 
 // QsMatTraceFactor reduces s, requires it to be
 // square, and returns the trace as an encoded
-// factor (qstate12_mat_trace_factor).
+// factor (qstate12_mat_trace_factor). It panics if s
+// is not square.
 func QsMatTraceFactor(s *QState12) int64 {
+	f, err := QsMatTraceFactorErr(s)
+	if err != nil {
+		panic(err.Error())
+	}
+	return f
+}
+
+// ErrTraceNotSquare reports that a quadratic state
+// trace was requested on a non-square matrix,
+// mirroring the C error ERR_QSTATE12_SHAPE_OP.
+var ErrTraceNotSquare = errors.New("cgt: trace of non-square matrix")
+
+// ErrTraceIntern reports an internal inconsistency
+// while computing a trace, mirroring the C error
+// ERR_QSTATE12_INTERN_PAR.
+var ErrTraceIntern = errors.New("cgt: trace internal error")
+
+// QsMatTraceFactorErr is the error-returning form of
+// QsMatTraceFactor: ErrTraceNotSquare when s is not
+// square, ErrTraceIntern on an internal inconsistency.
+func QsMatTraceFactorErr(s *QState12) (int64, error) {
 	nrows := s.Shape1()
 	QsReduce(s)
 	if 2*nrows != s.Ncols() {
-		panic("cgt: trace of non-square matrix")
+		return 0, ErrTraceNotSquare
 	}
 	q := s.Copy()
 	for i := 0; i < nrows; i++ {
@@ -106,18 +133,30 @@ func QsMatTraceFactor(s *QState12) int64 {
 	QsSumCols(q, 0, nrows)
 	QsReduce(q)
 	if q.Ncols() != 0 {
-		panic("cgt: trace internal error")
+		return 0, ErrTraceIntern
 	}
 	if q.Nrows() != 0 {
-		return int64(uint64(q.Factor()) & FactorMask)
+		return int64(uint64(q.Factor()) & FactorMask), nil
 	}
-	return 8
+	return 8, nil
 }
 
 // QsMatItrace returns the integer trace of the
-// square state s (qstate12_mat_itrace).
+// square state s (qstate12_mat_itrace). It panics if
+// s is not square or the trace is not an integer.
 func QsMatItrace(s *QState12) int64 {
 	return FactorToInt32(QsMatTraceFactor(s))
+}
+
+// QsMatItraceErr is the error-returning form of
+// QsMatItrace, propagating the failures of
+// QsMatTraceFactorErr and FactorToInt32Err.
+func QsMatItraceErr(s *QState12) (int64, error) {
+	f, err := QsMatTraceFactorErr(s)
+	if err != nil {
+		return 0, err
+	}
+	return FactorToInt32Err(f)
 }
 
 // QsToSymplecticRow returns row n of the

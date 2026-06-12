@@ -1,23 +1,23 @@
-// Command gen derives the precomputed cgt tables
-// from first principles (the Golay code basis and
-// the per-modulus SWAR layout) and writes them as
-// package cgt source. Each generator self-verifies
-// its output against the checked-in golden values
-// before emitting.
+// Command gen derives the precomputed monster-package
+// tables from first principles (the Golay code basis
+// and the per-modulus SWAR layout) and writes them as
+// Go source (package monster, or package mat24 for the
+// mat24 table). Each generator self-verifies its output
+// against the checked-in golden values before emitting.
 //
 // Usage:
 //
-//	go run -C _gen . -out ../mat24_gen.go
-//	go run -C _gen . -out ../mm_op_p_gen.go
-//	go run -C _gen . -out ../monster_order_gen.go
+//	go run -C _gen . -out ../mat24/mat24_gen.go
+//	go run -C _gen . -out ../monster/mm_op_p_gen.go
+//	go run -C _gen . -out ../monster/monster_order_gen.go
 //
 // The xi operation tables (formerly mm_op_xi_gen.go)
-// are no longer emitted here: package cgt builds them
-// at init from generator.XiOpXiShort, and the
+// are no longer emitted here: the monster package builds
+// them at init from generator.XiOpXiShort, and the
 // independent first-principles derivation that used
 // to verify the emitted file now lives as a
 // regression cross-check in
-// cgt/mm_op_xi_regress_test.go.
+// cgt/monster/mm_op_xi_regress_test.go.
 //
 // -out names both the generator to run (selected by
 // the file's basename) and the path to write. The
@@ -25,8 +25,8 @@
 // in the same directory as the output, so that
 // directory is taken from -out. The //go:generate
 // directives in generate.go invoke this command from
-// _gen with -out pointing one level up into the cgt
-// package directory.
+// _gen with -out pointing into the sibling package
+// directory the table belongs to.
 package main
 
 import (

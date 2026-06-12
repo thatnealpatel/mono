@@ -220,7 +220,8 @@ func qsParity(v uint64) uint64 {
 
 // QsCheck enforces consistency of s: it copies
 // Q[0,i] to Q[i,0], clears Q[0,0], masks junk
-// bits, and panics if Q is not symmetric.
+// bits, and panics if Q is not symmetric or s has an
+// inconsistent (oversized) shape.
 func QsCheck(s *QState12) {
 	if s.nrows+s.ncols > qsMaxCols || s.nrows > qsMaxRows || s.shape1 > s.ncols {
 		panic("cgt: inconsistent quadratic state")
@@ -692,7 +693,8 @@ func qsExtend(s *QState12, j, nqb int) {
 }
 
 // QsSumCols sums up nqb qubits at position j,
-// decrementing ncols by nqb.
+// decrementing ncols by nqb. It panics if the qubit
+// range j..j+nqb exceeds the number of columns.
 func QsSumCols(s *QState12, j, nqb int) {
 	if nqb+j > s.ncols {
 		panic("cgt: qubit index out of range")
@@ -755,7 +757,8 @@ func QsGateNot(s *QState12, v uint64) {
 }
 
 // QsGateCtrlNot applies a controlled not gate:
-// qs1(x) = qs(x ^ <vc,x>*v).
+// qs1(x) = qs(x ^ <vc,x>*v). It panics if vc and v
+// overlap (an invalid control/target pair).
 func QsGateCtrlNot(s *QState12, vc, v uint64) {
 	m := s.data
 	v &= (uint64(1) << uint(s.ncols)) - 1
@@ -811,7 +814,8 @@ func QsGateCtrlPhi(s *QState12, v1, v2 uint64) {
 }
 
 // QsGateH applies Hadamard gates to all qubits j
-// with bit j of v set.
+// with bit j of v set. It panics if the resulting
+// state would overflow the quadratic state buffer.
 func QsGateH(s *QState12, v uint64) {
 	if s.nrows == 0 {
 		return
@@ -886,20 +890,39 @@ func factorToComplex(factor int64) complex128 {
 // integer. It panics if the factor is not an
 // integer.
 func FactorToInt32(factor int64) int64 {
+	pi, err := FactorToInt32Err(factor)
+	if err != nil {
+		panic(err.Error())
+	}
+	return pi
+}
+
+// ErrFactorNotInteger reports that a scalar factor
+// does not encode an integer.
+var ErrFactorNotInteger = errors.New("cgt: scalar factor is not an integer")
+
+// ErrFactorOverflow reports that a scalar factor
+// overflows the integer range.
+var ErrFactorOverflow = errors.New("cgt: scalar factor overflow")
+
+// FactorToInt32Err is the error-returning form of
+// FactorToInt32. It returns ErrFactorNotInteger or
+// ErrFactorOverflow instead of panicking.
+func FactorToInt32Err(factor int64) (int64, error) {
 	if factor&8 != 0 {
-		return 0
+		return 0, nil
 	}
 	if factor < 0 || factor&0x13 != 0 {
-		panic("cgt: scalar factor is not an integer")
+		return 0, ErrFactorNotInteger
 	}
 	if factor >= (62 << 4) {
-		panic("cgt: scalar factor overflow")
+		return 0, ErrFactorOverflow
 	}
 	pi := int64(1) << uint(factor>>5)
 	if factor&4 != 0 {
 		pi = -pi
 	}
-	return pi
+	return pi, nil
 }
 
 /*************************************************************************
@@ -1144,9 +1167,16 @@ func qsToSigns(s *QState12) []uint64 {
 }
 
 // qsCompareSigns reports whether the signs of a
-// real state s match bmap.
+// real state s match bmap. It returns false when s
+// is not real or its signs differ from bmap (the
+// C qstate12_compare_signs zero return). It does not
+// guard internal-invariant failures: callers bound
+// the state size before reaching here (FromSigns via
+// scanAffine's n check, CompareSigns via a validated
+// *QState), so an internal panic from qsSupportInit
+// or subbatchLength signals a genuine bug rather than
+// an expected miss.
 func qsCompareSigns(s *QState12, bmap []uint64) bool {
-	defer func() { recover() }()
 	sup := qsSupportInit(s)
 	if sup.factor&0x3 != 0 || sup.cWeight != sup.weight {
 		return false
@@ -1567,7 +1597,8 @@ func qsConjugate(s *QState12) {
 	s.factor = int64((((uint64(s.factor) & FactorMask) ^ 7) + 1) & FactorMask)
 }
 
-// QsMatmul returns the matrix product s1 @ s2.
+// QsMatmul returns the matrix product s1 @ s2. It
+// panics if the shapes of s1 and s2 do not conform.
 func QsMatmul(s1, s2 *QState12) *QState12 {
 	nqb := s1.shape1
 	cols := s2.shape1
@@ -1643,15 +1674,34 @@ func qsPauliMatrix(s *QState12, nqb int, v uint64) {
 // Pauli vector of s. It panics if s is not in
 // the Pauli group.
 func QsPauliVector(s *QState12) (int, uint64) {
+	nqb, w, err := QsPauliVectorErr(s)
+	if err != nil {
+		panic("cgt: matrix is not in the Pauli group")
+	}
+	return nqb, w
+}
+
+// ErrNotPauliGroup reports that a quadratic state is
+// not an element of the Pauli group, mirroring the C
+// error code ERR_QSTATE12_PAULI_GROUP returned by
+// qstate12_pauli_vector.
+var ErrNotPauliGroup = errors.New("cgt: matrix is not in the Pauli group")
+
+// QsPauliVectorErr returns nqb and the encoded Pauli
+// vector of s, or ErrNotPauliGroup if s is not in the
+// Pauli group. It is the error-returning form of
+// QsPauliVector, faithful to the C return code of
+// qstate12_pauli_vector.
+func QsPauliVectorErr(s *QState12) (int, uint64, error) {
 	QsReduce(s)
 	nqb := s.shape1
 	m := s.data
 	mask := (uint64(1) + (uint64(1) << uint(nqb))) << uint(nqb-1)
 	if s.ncols != nqb<<1 || s.nrows != nqb+1 {
-		panic("cgt: matrix is not in the Pauli group")
+		return 0, 0, ErrNotPauliGroup
 	}
 	if uint32(s.factor)&(^uint32(0xe)) != 0 {
-		panic("cgt: matrix is not in the Pauli group")
+		return 0, 0, ErrNotPauliGroup
 	}
 	var w uint64
 	for i := 0; i < nqb; i++ {
@@ -1660,14 +1710,14 @@ func QsPauliVector(s *QState12) (int, uint64) {
 	}
 	chk := (((uint64(1) << uint(s.nrows)) - 1) << uint(s.ncols)) - 1
 	if w&chk != 0 {
-		panic("cgt: matrix is not in the Pauli group")
+		return 0, 0, ErrNotPauliGroup
 	}
 	colMask := (uint64(1) << uint(nqb)) - 1
 	w = bitRev(nqb, m[0]>>uint(s.ncols+1))
 	w |= (m[0] & colMask) << uint(nqb)
 	w |= ((uint64(s.factor>>2) & 1) ^ qsParity(w&m[0]&colMask)) << uint(s.ncols)
 	w |= (uint64(s.factor>>1) & 1) << uint(s.ncols+1)
-	return nqb, w
+	return nqb, w, nil
 }
 
 // qsPauliVectorMul returns the product v1*v2 of
@@ -2324,7 +2374,8 @@ func (q *QState) H() *QState {
 }
 
 // RotBits rotates qubits start..start+nrot-1 by
-// rot in place.
+// rot in place. It panics if the qubit range exceeds
+// the number of columns.
 func (q *QState) RotBits(rot, nrot, start int) *QState {
 	s := q.toQS12()
 	if nrot+start > s.ncols {
@@ -2339,7 +2390,9 @@ func (q *QState) RotBits(rot, nrot, start int) *QState {
 }
 
 // XchBits exchanges qubit j with qubit j+sh for
-// each bit j of mask, in place.
+// each bit j of mask, in place. It panics if an
+// exchanged qubit index exceeds the number of
+// columns.
 func (q *QState) XchBits(sh int, mask uint64) *QState {
 	s := q.toQS12()
 	if mask != 0 {
@@ -2499,7 +2552,10 @@ func (q *QState) Inv() *QState {
 }
 
 // Power returns the e-th power of q. Power(0) is
-// the unit matrix, Power(-1) is the inverse.
+// the unit matrix, Power(-1) is the inverse. It
+// panics if q is not square (a shape mismatch) when
+// a non-negative power other than via repeated
+// multiplication is taken.
 func (q *QState) Power(e int) *QState {
 	if e > 1 {
 		mask := 1 << uint(bits.Len(uint(e))-2)
@@ -2527,9 +2583,12 @@ func (q *QState) Power(e int) *QState {
 }
 
 // Order returns the smallest positive e <=
-// maxOrder with q**e the unit matrix. It panics
-// if q is not invertible or has infinite order.
-func (q *QState) Order(maxOrder int) int {
+// maxOrder with q**e the unit matrix. It returns an
+// error if no such order is found within maxOrder
+// (the baby-step/giant-step search exhausted its
+// bound). It panics if q is not invertible or has
+// infinite order.
+func (q *QState) Order(maxOrder int) (int, error) {
 	nqb := q.rows
 	if q.LbRank() != nqb || nqb != q.cols {
 		panic("cgt: matrix is not invertible")
@@ -2543,7 +2602,7 @@ func (q *QState) Order(maxOrder int) int {
 	m := q.Copy()
 	for i := 1; i < n; i++ {
 		if m.Equal(unit) {
-			return i
+			return i, nil
 		}
 		d[m.key()] = i
 		m = m.MatMul(q)
@@ -2552,11 +2611,11 @@ func (q *QState) Order(maxOrder int) int {
 	acc := m.Copy()
 	for i := 1; i < n; i++ {
 		if j, ok := d[acc.key()]; ok {
-			return i*n + j
+			return i*n + j, nil
 		}
 		acc = acc.MatMul(m)
 	}
-	panic("cgt: order of matrix not found")
+	return 0, errors.New("cgt: order of matrix not found")
 }
 
 // key returns a reduced-form fingerprint of q
@@ -2584,7 +2643,8 @@ func (q *QState) MatMul(other *QState) *QState {
 }
 
 // Mul returns the elementwise product of q and
-// other, which must have the same shape.
+// other, which must have the same shape. It panics
+// if q and other do not have the same shape.
 func (q *QState) Mul(other *QState) *QState {
 	sa := q.toQS12()
 	sb := other.toQS12()

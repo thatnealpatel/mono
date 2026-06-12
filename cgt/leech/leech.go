@@ -180,8 +180,8 @@ func Leech2To3Short(x uint32) uint64 {
 	case 3:
 		return 0
 	default: // case 0 or 6 only
-		cList := mat24.CocodeToBitList(uint32(v2), 0)
-		if len(cList) != 2 {
+		n, cList := mat24.CocodeToBitListArr(uint32(v2), 0)
+		if n != 2 {
 			return 0
 		}
 		return (uint64(1) << cList[0]) + (uint64(1) << (uint64(cList[1]) + 24 - 4*w))

@@ -124,7 +124,8 @@ func Xsp2Co1Identity() *Xsp2Co1 {
 }
 
 // Xsp2FromXsp returns the element of Q_{x0} given
-// by x in Leech lattice encoding.
+// by x in Leech lattice encoding. It panics if x is
+// not a valid Q_{x0} (Leech-lattice) encoding.
 func Xsp2FromXsp(x uint32) *Xsp2Co1 {
 	g := &Xsp2Co1{}
 	if err := xsp2co1ElemXspecial(g.data[:], x); err != nil {
@@ -606,12 +607,10 @@ func xsp2co1XspecialVector(elem []uint64) int32 {
 // mirrors the C error return of
 // qstate12_pauli_vector.
 func qsPauliVectorSafe(s *qstate12.QState12) (v uint64, ok bool) {
-	defer func() {
-		if recover() != nil {
-			v, ok = 0, false
-		}
-	}()
-	_, v = qstate12.QsPauliVector(s)
+	_, v, err := qstate12.QsPauliVectorErr(s)
+	if err != nil {
+		return 0, false
+	}
 	return v, true
 }
 
@@ -1060,6 +1059,7 @@ func xsp2co1ElemSubtype(elem []uint64) int32 {
 
 // Subtype returns 16*type + subtype as a packed
 // value. Python .subtype unpacks to (type, subtype).
+// It panics if g does not have a valid G_x0 subtype.
 func (g *Xsp2Co1) Subtype() uint32 {
 	res := xsp2co1ElemSubtype(g.data[:])
 	if res&0x40 != 0x40 {
@@ -1382,16 +1382,25 @@ func xsp2co1Trace98280(elem []uint64, fFast func([]uint64) (int32, bool)) int32 
 }
 
 // trace4096 computes the character of rho_4096 of
-// elem (defined up to sign).
-func trace4096(elem []uint64) int32 {
+// elem (defined up to sign). It returns an error on
+// the scalar-factor failures of QsMatItraceErr,
+// mirroring the C negative return of trace_4096.
+func trace4096(elem []uint64) (int32, error) {
 	qs := xsp2co1ElemToQsI(elem)
 	qs1 := qs.Copy()
-	return int32(qstate12.QsMatItrace(qs1))
+	t, err := qstate12.QsMatItraceErr(qs1)
+	if err != nil {
+		return 0, err
+	}
+	return int32(t), nil
 }
 
 // tracesVerySmall computes the characters of
-// rho_24 and rho_576 into ptrace[0], ptrace[1].
-func tracesVerySmall(elem []uint64, ptrace []int32) {
+// rho_24 and rho_576 into ptrace[0], ptrace[1]. It
+// returns ErrScalarOverflow when an accumulator is
+// not divisible by its scale, mirroring the C
+// ERR_QSTATE12_SCALAR_OVFL return of traces_very_small.
+func tracesVerySmall(elem []uint64, ptrace []int32) error {
 	var a [576]int8
 	xsp2co1ElemToLeechOp(elem, a[:])
 	acc := 0
@@ -1399,7 +1408,7 @@ func tracesVerySmall(elem []uint64, ptrace []int32) {
 		acc += int(a[25*i])
 	}
 	if acc&7 != 0 {
-		panic("cgt: scalar factor overflow")
+		return ErrScalarOverflow
 	}
 	ptrace[0] = int32(acc >> 3)
 	acc = 0
@@ -1409,27 +1418,43 @@ func tracesVerySmall(elem []uint64, ptrace []int32) {
 		}
 	}
 	if acc&63 != 0 {
-		panic("cgt: scalar factor overflow")
+		return ErrScalarOverflow
 	}
 	ptrace[1] = int32(acc >> 6)
 	if (ptrace[0]+ptrace[1])&1 != 0 {
-		panic("cgt: scalar factor overflow")
+		return ErrScalarOverflow
 	}
+	return nil
 }
+
+// ErrScalarOverflow reports that a scalar factor in a
+// trace accumulator is not an integer multiple of its
+// scale, mirroring the C error ERR_QSTATE12_SCALAR_OVFL.
+var ErrScalarOverflow = errors.New("cgt: scalar factor overflow")
 
 // xsp2co1TracesSmall computes characters of
 // rho_24, rho_576, rho_4096 into ptrace[0..2],
-// normalizing the (24, 4096) sign.
-func xsp2co1TracesSmall(elem []uint64, ptrace []int32) {
+// normalizing the (24, 4096) sign. It returns an
+// error on the failure paths of tracesVerySmall and
+// trace4096, mirroring the C return of
+// xsp2co1_traces_small.
+func xsp2co1TracesSmall(elem []uint64, ptrace []int32) error {
 	ptrace[3] = -0x2000000
-	tracesVerySmall(elem, ptrace)
-	ptrace[2] = trace4096(elem)
+	if err := tracesVerySmall(elem, ptrace); err != nil {
+		return err
+	}
+	t, err := trace4096(elem)
+	if err != nil {
+		return err
+	}
+	ptrace[2] = t
 	if ptrace[0] < 0 {
 		ptrace[0] = -ptrace[0]
 		ptrace[2] = -ptrace[2]
 	} else if ptrace[0] == 0 && ptrace[2] < 0 {
 		ptrace[2] = -ptrace[2]
 	}
+	return nil
 }
 
 // ChiGx0 returns (chi_M, chi_299, chi_24,

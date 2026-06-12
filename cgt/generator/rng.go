@@ -56,7 +56,8 @@ func (r *Rng) seedNo(seedNo uint64) {
 // NewRng returns a generator seeded from system
 // entropy via crypto/rand. This replaces the
 // MD5/OS-specific master-seed path in the C, which is
-// not ported.
+// not ported. It panics if the system entropy source
+// (crypto/rand) is unavailable.
 func NewRng() *Rng {
 	var b [32]byte
 	if _, err := cryptorand.Read(b[:]); err != nil {

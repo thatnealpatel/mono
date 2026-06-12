@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	oraclepkg "patel.codes/cgt/internal/oracle"
 )
 
 // ufindOracle runs a Python script against the mmgroup
@@ -14,7 +16,7 @@ import (
 func ufindOracle(t *testing.T, body string) []byte {
 	t.Helper()
 	script := "import json, numpy as np\nfrom mmgroup import generators\n" + body
-	out, err := pyCmd(script).CombinedOutput()
+	out, err := oraclepkg.Cmd(script).CombinedOutput()
 	if err != nil {
 		t.Fatalf("ufind oracle failed: %v\n%s", err, out)
 	}

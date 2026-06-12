@@ -973,7 +973,10 @@ func TestOrder(t *testing.T) {
 	}
 	for _, m := range cases {
 		n, _ := m.Shape()
-		order := m.Order(1 << 20)
+		order, err := m.Order(1 << 20)
+		if err != nil {
+			t.Fatalf("order: %v", err)
+		}
 		if order <= 0 {
 			t.Fatalf("order: expected positive, got %d", order)
 		}
@@ -984,7 +987,10 @@ func TestOrder(t *testing.T) {
 	// Exercise the giant-step branch: maxOrder=4
 	// forces baby-table size < true order (8).
 	gs := UnitMatrix(2).GateH(0x1).GateCtrlNot(0x1, 0x2)
-	order := gs.Order(4)
+	order, err := gs.Order(4)
+	if err != nil {
+		t.Fatalf("giant-step: %v", err)
+	}
 	if order != 8 {
 		t.Fatalf("giant-step: want order 8, got %d", order)
 	}
