@@ -1,0 +1,8 @@
+This is a highly unstable purego port
+of Martin Seysen's mmgroup library:
+
+  https://github.com/Martin-Seysen/mmgroup
+
+I am still in the process of verifying
+this library; any use of this library
+should be in strictly unserious contexts.
