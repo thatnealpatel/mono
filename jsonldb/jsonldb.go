@@ -237,6 +237,9 @@ func (s *Store[T]) write(d *db[T]) error {
 }
 
 func (s *Store[T]) rlock() func() {
+	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+		panic("jsonldb: mkdir: " + err.Error())
+	}
 	path := filepath.Join(s.dir, "lockfile")
 	f, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0o644)
 	if err != nil {
@@ -249,6 +252,9 @@ func (s *Store[T]) rlock() func() {
 }
 
 func (s *Store[T]) wlock() func() {
+	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+		panic("jsonldb: mkdir: " + err.Error())
+	}
 	path := filepath.Join(s.dir, "lockfile")
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
 	if err != nil {
