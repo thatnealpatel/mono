@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"patel.codes/cgt/reduce"
 )
 
 func tagCode(c byte) Tag {
@@ -100,6 +102,23 @@ func TestScalprod(t *testing.T) {
 		{7, "[('B',1,2),('C',3,4)]", "[('B',1,2),('Z',10,5)]"},
 		{15, "[('T',100,13),('X',0x444,3)]", "[('T',100,13),('Y',0x12,7)]"},
 		{31, "[('A',0,0),('A',5,5)]", "[('A',0,0),('B',5,6)]"},
+		// B/C-weight regression cases: v1 and v2 share the same
+		// ('B',3,1) and ('C',5,2) off-diagonal coordinates with
+		// distinct factors, so the B/C block is the only nonzero
+		// overlap (the trailing A/T entries are single-sided and
+		// contribute 0). The B/C contribution is (b1*b2 + c1*c2)
+		// mod p = (2*2 + 3*2) mod p = 10 mod p. Internal storage
+		// holds both triangles, so the raw row sum is 20 and the
+		// (p+1)/2 weight halves it back to 10. These exercise the
+		// weight at every supported modulus; the old hardcoded
+		// weight 4 yields 80 mod p, which agrees only at p=7
+		// (80 == 3 == 10 mod 7) and diverges for every other p.
+		{3, "[(2,'B',3,1),(3,'C',5,2),('A',1,1)]", "[(2,'B',3,1),(2,'C',5,2),('T',7,9)]"},   // -> 10 mod 3 = 1
+		{7, "[(2,'B',3,1),(3,'C',5,2),('A',1,1)]", "[(2,'B',3,1),(2,'C',5,2),('T',7,9)]"},   // -> 10 mod 7 = 3
+		{15, "[(2,'B',3,1),(3,'C',5,2),('A',1,1)]", "[(2,'B',3,1),(2,'C',5,2),('T',7,9)]"},  // -> 10 mod 15 = 10
+		{31, "[(2,'B',3,1),(3,'C',5,2),('A',1,1)]", "[(2,'B',3,1),(2,'C',5,2),('T',7,9)]"},  // -> 10 mod 31 = 10
+		{127, "[(2,'B',3,1),(3,'C',5,2),('A',1,1)]", "[(2,'B',3,1),(2,'C',5,2),('T',7,9)]"}, // -> 10 mod 127 = 10
+		{255, "[(2,'B',3,1),(3,'C',5,2),('A',1,1)]", "[(2,'B',3,1),(2,'C',5,2),('T',7,9)]"}, // -> 10 mod 255 = 10
 	}
 	for _, c := range cases {
 		expr := fmt.Sprintf("mmgroup.mmv_scalprod(mmgroup.MMVector(%d,%s),mmgroup.MMVector(%d,%s))", c.p, c.v1, c.p, c.v2)
@@ -494,4 +513,138 @@ func TestMMVectorCountShort(t *testing.T) {
 			}
 		}
 	}
+}
+
+// opAllCocodeWords are oracle-pinned regression words for the
+// genOpAllCocode odd-cocode defect (Ow1/Ow2). genOpAllCocode
+// was missing phase 2 of C mat24_op_all_cocode: for odd delta
+// (delta & 0x800) bit 0 of every row's sign byte must be XORed
+// with bit 12 of MAT24_THETA_TABLE[row]. The omission corrupts
+// the tag-X sign of the 1288 rows whose theta bit 12 is set for
+// any odd-delta cocode atom.
+//
+// Each word is a list of raw mmgroup atoms; an atom with tag d
+// (0x1_______) and value & 0x800 set is an odd cocode element
+// and triggers the formerly-defective path.
+//
+// Bug 3 (delta-then-xi divergence) was a TEST bug, not a
+// genOpXi defect. Ow1's spec flagged an eighth pin,
+// [0x30000297, 0x10000c93, 0x60000002] (x_0x297 d_0xc93 xi^2),
+// as diverging from the oracle both before AND after the cocode
+// fix, and the same divergence appeared for even deltas like
+// [0x10000093, 0x60000002]. An intermediate analysis (Xi1)
+// wrongly called this a false positive; external-oracle
+// re-localization (Xi3) traced it to this test, which read the
+// scratch `work` buffer via bytesOf(p, work) instead of the
+// result buffer v. genOpWord ping-pongs v/work and always copies
+// the result back into v after an odd number of swaps; the work
+// buffer only coincidentally holds the answer for odd-swap words.
+// Even-swap words (e.g. d_0x093 * xi^2, an even number of swaps)
+// leave a stale value in work, so reading it diverged from the
+// oracle. The fix reads v.AsBytes() (TestOpWordAllCocodeOracle).
+// The eighth pin and both even-swap reproducers are now pinned
+// below as odd-swap/even-swap regressions, alongside bare-xi
+// controls. See the Ow2 finding.
+var opAllCocodeWords = [][]uint32{
+	{0x10000800},             // d_0x800: minimal odd-delta reproducer
+	{0x10000fff},             // d_0xfff: all cocode bits set
+	{0x10000c93},             // d_0xc93: the original defect's delta
+	{0x10000801},             // d_0x801: odd + bit 0
+	{0x10000001},             // d_0x001: even delta (control, no bug expected)
+	{0x30000001, 0x10000800}, // x_1 * d_0x800: combined tag-X / odd-delta path
+	{0x10000e03, 0x10000fd9, 0x10000941, 0x60000002, 0x30001a97}, // original 5-atom defect word
+	{0x10000093, 0x60000001},             // d_0x093 * xi^1: even-swap test-buffer regression
+	{0x10000093, 0x60000002},             // d_0x093 * xi^2: even-swap
+	{0x30000297, 0x10000c93, 0x60000002}, // x_0x297 * d_0xc93 * xi^2: Ow1's 8th pin, even-swap
+	{0x60000001},                         // xi^1 alone: odd-swap control
+	{0x60000002},                         // xi^2 alone: odd-swap control
+}
+
+// opAllCocodeProbe is the fixed input vector the regression
+// words act on. It touches every tag, and critically carries
+// tag-X mass on rows 17 and 18 (both have MAT24_THETA_TABLE
+// bit 12 set), so the genOpAllCocode phase-2 sign flip is
+// actually exercised. A probe whose only tag-X mass sat on a
+// bit-12-clear row (e.g. row 5) would pass even with the bug.
+const opAllCocodeProbe = "[('A',2,3),('X',17,7),('X',18,4),('X',5,7),('T',9,4),('B',1,2),('Z',10,5),('Y',0x12,3)]"
+
+// TestOpWordAllCocodeOracle pins genOpAllCocode against the
+// mmgroup oracle: for each regression word, OpWord applied to
+// the fixed probe vector at p = 15 must reproduce the oracle
+// action MMVector(15, probe) * MM0(word) byte-for-byte. Before
+// the Ow2 fix the odd-delta words diverged in the tag-X block.
+func TestOpWordAllCocodeOracle(t *testing.T) {
+	t.Parallel()
+	const p = 15
+	for wi, w := range opAllCocodeWords {
+		atoms := u32List(w)
+		expr := fmt.Sprintf("[int(x) for x in (mmgroup.MMVector(%d,%s)*mmgroup.MM0('a',__import__('numpy').array(%s,dtype='uint32'))).as_bytes()]",
+			p, opAllCocodeProbe, atoms)
+		want := oracleInts(t, expr)
+		v := NewVector(p, parseTuples(t, opAllCocodeProbe))
+		work := make([]uint64, len(v.Data()))
+		if err := OpWord(p, v.Data(), w, len(w), 1, work); err != nil {
+			t.Fatalf("OpWord(word %d=%v): %v", wi, w, err)
+		}
+		assertBytes(t, fmt.Sprintf("OpWordAllCocode[%d]", wi), p, v.AsBytes(), want)
+	}
+}
+
+// TestOpWordReduceAgrees is the action-faithfulness regression
+// from Ow1: a faithful action must map equal monster elements
+// to equal vectors. For each odd-delta regression word w,
+// OpWord(w) and OpWord(ReduceWord(w)) must agree on a fixed
+// probe at p = 15. The genOpAllCocode defect broke exactly this
+// (OpWord(w) != OpWord(ReduceWord(w)) for the same element).
+func TestOpWordReduceAgrees(t *testing.T) {
+	t.Parallel()
+	const p = 15
+	probe := RandVectorSeed(p, 1000)
+	for wi, w := range opAllCocodeWords {
+		wr, n := reduce.ReduceWord(w)
+		if n < 0 {
+			t.Fatalf("ReduceWord(word %d=%v) failed: n=%d", wi, w, n)
+		}
+		got := applyWord(t, probe, p, w)
+		gotR := applyWord(t, probe, p, wr)
+		if !got.Equal(gotR) {
+			t.Fatalf("OpWord disagrees with OpWord(ReduceWord) on word %d\n  w =%v\n  wr=%v", wi, w, wr)
+		}
+	}
+}
+
+// TestOpWordCocodeHomomorphism checks the homomorphism property
+// of the OpWord action on the regression words: applying the
+// whole word in one OpWord call equals applying its atoms
+// sequentially, one OpWord call per atom. The action is a group
+// homomorphism, so the two must produce identical canonical
+// vectors. (Each atom is applied as its own complete OpWord, so
+// the word iterator's per-subword theta context is preserved.)
+func TestOpWordCocodeHomomorphism(t *testing.T) {
+	t.Parallel()
+	const p = 15
+	probe := RandVectorSeed(p, 2000)
+	for wi, w := range opAllCocodeWords {
+		whole := applyWord(t, probe, p, w)
+		seq := probe.Copy()
+		for _, atom := range w {
+			seq = applyWord(t, seq, p, []uint32{atom})
+		}
+		if !whole.Equal(seq) {
+			t.Fatalf("OpWord not homomorphic on word %d\n  w=%v", wi, w)
+		}
+	}
+}
+
+// applyWord returns a copy of v acted on by the word g at
+// modulus p via a single OpWord call. Comparison of the result
+// must go through MMVector.Equal/AsBytes, never raw Data().
+func applyWord(t *testing.T, v *MMVector, p int, g []uint32) *MMVector {
+	t.Helper()
+	out := v.Copy()
+	work := make([]uint64, len(out.Data()))
+	if err := OpWord(p, out.Data(), g, len(g), 1, work); err != nil {
+		t.Fatalf("OpWord(%v): %v", g, err)
+	}
+	return out
 }

@@ -1003,28 +1003,31 @@ func genPerm64Walk(perm *[6]uint8) [64]int {
 // genOpAllCocode returns, for each of 2048 rows, the
 // 3-bit sign pattern (bit k => negate in tag X/Z/Y or
 // A) for the cocode automorphism x_delta. C
-// mat24_op_all_cocode. Row r sign bit k is the parity
-// of delta & cocode-image determined by the basis; we
-// reuse the existing mat24 machinery via genCocodeSign.
+// mat24_op_all_cocode is two-phase:
+//
+//   - Phase 1: the scalar-product sign s = parity of
+//     delta & r & 0x7ff is broadcast into all three sign
+//     bits of every row (tags X, Z, Y, and the diagonal
+//     of tag A share this parity).
+//   - Phase 2: when delta is odd (delta & 0x800), bit 0
+//     (the tag-X bit) of every row's sign byte is XORed
+//     with bit 12 of MAT24_THETA_TABLE[r], the Parker-
+//     loop theta sign.
+//
+// Omitting phase 2 corrupts the tag-X sign of every
+// odd-theta row for odd delta.
 func genOpAllCocode(delta uint32) []uint8 {
 	out := make([]uint8, 2048)
 	for r := uint32(0); r < 2048; r++ {
-		out[r] = uint8(genCocodeSign(delta, r))
+		s := mat24.Parity12(delta & r & 0x7ff)
+		out[r] = uint8(s | (s << 1) | (s << 2))
+	}
+	if delta&0x800 != 0 {
+		for r := uint32(0); r < 2048; r++ {
+			out[r] ^= uint8((mat24.ThetaTable(r) >> 12) & 1)
+		}
 	}
 	return out
-}
-
-// genCocodeSign returns the 3-bit sign pattern for row
-// r under cocode element delta: bit b is the parity of
-// the scalar product of delta with the Golay/cocode
-// data of row r, as used by tags X, Z, Y (and A).
-func genCocodeSign(delta, r uint32) uint32 {
-	// For tags X/Z/Y the relevant sign is the parity
-	// of delta & (Golay code word r). Tag A uses the
-	// same parity on its diagonal. All three tag bits
-	// share this parity in the delta-only operation.
-	s := mat24.Parity12(delta & r & 0x7ff)
-	return s | (s << 1) | (s << 2)
 }
 
 // genOpXY applies y_f * x_e * x_eps to src, storing

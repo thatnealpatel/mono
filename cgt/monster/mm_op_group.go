@@ -132,7 +132,8 @@ func Scalprod(v1, v2 *MMVector) int {
 	b := v2.data
 	res := scalprodRows(p, a, b, ofsWords(p, mmAuxOfsT), 2*759)
 	res += scalprodRows(p, a, b, ofsWords(p, mmAuxOfsA), 24)
-	res += 4 * scalprodRows(p, a, b, ofsWords(p, mmAuxOfsB), 48)
+	// B/C block weight is (p+1)/2 (C mm_op_scalprod.ske: %{int:(P+1)>>1}).
+	res += ((p + 1) >> 1) * scalprodRows(p, a, b, ofsWords(p, mmAuxOfsB), 48)
 	res += scalprodRows(p, a, b, ofsWords(p, mmAuxOfsX), 6144)
 	return res % p
 }
