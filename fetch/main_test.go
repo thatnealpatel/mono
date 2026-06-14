@@ -49,6 +49,25 @@ func TestArxivDir(t *testing.T) {
 	}
 }
 
+func TestIsPDFURL(t *testing.T) {
+	tests := []struct {
+		url  string
+		want bool
+	}{
+		{"https://example.com/foo/thesis.pdf", true},
+		{"https://example.com/foo/thesis.PDF", true},
+		{"https://dl.acm.org/doi/pdf/10.1145/3618260.3649656", true},
+		{"https://dl.acm.org/doi/epdf/10.1145/3618260.3649656", true},
+		{"https://example.com/foo/doc", false},
+		{"https://arxiv.org/abs/2402.01011", false},
+	}
+	for _, tt := range tests {
+		if got := isPDFURL(tt.url); got != tt.want {
+			t.Errorf("isPDFURL(%q) = %v, want %v", tt.url, got, tt.want)
+		}
+	}
+}
+
 func TestPdfDir(t *testing.T) {
 	tests := []struct {
 		url  string
@@ -60,6 +79,9 @@ func TestPdfDir(t *testing.T) {
 		{"https://example.com/foo/thesis.pdf#page=3", "thesis"},
 		{"https://example.com/foo/.pdf", "paper"},
 		{"https://example.com/foo/doc", "doc"},
+		{"https://dl.acm.org/doi/pdf/10.1145/3618260.3649656", "doi-10-1145-3618260-3649656"},
+		{"https://dl.acm.org/doi/epdf/10.1145/3618260.3649656", "doi-10-1145-3618260-3649656"},
+		{"https://dl.acm.org/doi/pdf/10.1145/3618260.3649656?download=true", "doi-10-1145-3618260-3649656"},
 	}
 	for _, tt := range tests {
 		if got := pdfDir(tt.url); got != tt.want {
@@ -368,6 +390,35 @@ func TestFetchPDF_SiblingDoesNotMask(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "paper.txt")); err != nil {
 		t.Fatal("paper.txt not created in notes subdir")
+	}
+}
+
+func TestFetchPDF_DOI(t *testing.T) {
+	pdfData := loadTestPDF(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write(pdfData)
+	}))
+	defer srv.Close()
+	outdir := setup(t, srv)
+
+	url := srv.URL + "/doi/pdf/10.1145/3618260.3649656"
+	dir, status, err := fetchPDF(url, outdir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != "fetched" {
+		t.Fatalf("status = %q, want fetched", status)
+	}
+	if filepath.Base(dir) != "doi-10-1145-3618260-3649656" {
+		t.Fatalf("dir base = %q, want doi-10-1145-3618260-3649656", filepath.Base(dir))
+	}
+	txt, err := os.ReadFile(filepath.Join(dir, "paper.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(txt, []byte("Hello World")) {
+		t.Fatalf("pdftotext output = %q, want it to contain 'Hello World'", txt)
 	}
 }
 

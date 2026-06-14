@@ -33,6 +33,7 @@ Fetch and postprocess a reference document.
 Supported Cases:
   arXiv   Download .tex source from arXiv (accepts URLs or bare IDs)
   PDF     Download and convert to text via pdftotext
+  DOI     Publisher PDF URLs (e.g. dl.acm.org/doi/pdf/10.xxxx/...)
 `
 
 func run(args []string) error {
@@ -53,7 +54,7 @@ func run(args []string) error {
 		}
 		return printResult(url, dir, status)
 	}
-	if strings.HasSuffix(strings.ToLower(url), ".pdf") {
+	if isPDFURL(url) {
 		dir, status, err := fetchPDF(url, outdir)
 		if err != nil {
 			return err
@@ -61,29 +62,6 @@ func run(args []string) error {
 		return printResult(url, dir, status)
 	}
 
-	resp, err := httpClient.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	ct := resp.Header.Get("Content-Type")
-	if strings.Contains(ct, "application/pdf") {
-		dir := filepath.Join(outdir, pdfDir(url))
-		if hasFiles(dir) {
-			return printResult(url, dir, "cached")
-		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		if err := pdfToText(body, dir); err != nil {
-			return err
-		}
-		return printResult(url, dir, "fetched")
-	}
 	return fmt.Errorf("unknown URL format: %s", url)
 }
 
@@ -277,7 +255,23 @@ func handleGzip(body []byte, outdir string) error {
 	return nil
 }
 
+func isPDFURL(rawURL string) bool {
+	lower := strings.ToLower(rawURL)
+	if strings.HasSuffix(lower, ".pdf") {
+		return true
+	}
+	for _, seg := range []string{"/doi/pdf/", "/doi/epdf/"} {
+		if strings.Contains(lower, seg) {
+			return true
+		}
+	}
+	return false
+}
+
 func pdfDir(rawURL string) string {
+	if doi := parseDOI(rawURL); doi != "" {
+		return "doi-" + strings.NewReplacer("/", "-", ".", "-").Replace(doi)
+	}
 	s := rawURL
 	if i := strings.LastIndexByte(s, '/'); i >= 0 {
 		s = s[i+1:]
@@ -293,6 +287,24 @@ func pdfDir(rawURL string) string {
 		s = "paper"
 	}
 	return s
+}
+
+func parseDOI(rawURL string) string {
+	for _, seg := range []string{"/doi/pdf/", "/doi/epdf/", "/doi/"} {
+		if i := strings.Index(rawURL, seg); i >= 0 {
+			doi := rawURL[i+len(seg):]
+			if j := strings.IndexByte(doi, '?'); j >= 0 {
+				doi = doi[:j]
+			}
+			if j := strings.IndexByte(doi, '#'); j >= 0 {
+				doi = doi[:j]
+			}
+			if strings.HasPrefix(doi, "10.") && strings.ContainsRune(doi, '/') {
+				return doi
+			}
+		}
+	}
+	return ""
 }
 
 func fetchPDF(url, outdir string) (dir, status string, err error) {
