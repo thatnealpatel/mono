@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/dustin/go-wikiparse"
@@ -536,6 +537,13 @@ func wikiSearch(query string) error {
 	}
 	results := idx.Search(query)
 
+	maxResults := 100
+	if s := os.Getenv("WIKI_MAX_RESULTS"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil {
+			maxResults = n
+		}
+	}
+
 	type match struct {
 		Title string  `json:"title"`
 		Score float64 `json:"score"`
@@ -544,11 +552,16 @@ func wikiSearch(query string) error {
 	for i, r := range results {
 		matches[i] = match{Title: titles[r.Index], Score: r.Score}
 	}
+	total := len(matches)
+	if total > maxResults {
+		fmt.Fprintf(os.Stderr, "Use WIKI_MAX_RESULTS=%d to see truncated results\n", total)
+		matches = matches[:maxResults]
+	}
 	out := struct {
 		Query   string  `json:"query"`
 		Results int     `json:"results"`
 		Matches []match `json:"matches"`
-	}{query, len(matches), matches}
+	}{query, total, matches}
 	enc := json.NewEncoder(os.Stdout)
 	return enc.Encode(out)
 }
