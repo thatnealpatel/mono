@@ -18,6 +18,7 @@ import (
 
 var httpClient = http.DefaultClient
 var arxivBaseURL = "https://arxiv.org/e-print/"
+var unpaywallBaseURL = "https://api.unpaywall.org/v2/"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -32,8 +33,8 @@ Fetch and postprocess a reference document.
 
 Supported Cases:
   arXiv   Download .tex source from arXiv (accepts URLs or bare IDs)
-  PDF     Download and convert to text via pdftotext
-  DOI     Publisher PDF URLs (e.g. dl.acm.org/doi/pdf/10.xxxx/...)
+  DOI     Resolve via Unpaywall (doi.org URLs or bare 10.xxxx/... DOIs)
+  PDF     Download and convert to text via pdftotext (direct PDF URLs)
 `
 
 func run(args []string) error {
@@ -49,6 +50,13 @@ func run(args []string) error {
 
 	if id, ok := parseArXivID(url); ok {
 		dir, status, err := fetchArXiv(id, outdir)
+		if err != nil {
+			return err
+		}
+		return printResult(url, dir, status)
+	}
+	if doi, ok := parseDOIURL(url); ok {
+		dir, status, err := fetchDOI(doi, outdir)
 		if err != nil {
 			return err
 		}
@@ -267,6 +275,81 @@ func handleGzip(body []byte, outdir string) error {
 	return nil
 }
 
+func parseDOIURL(s string) (string, bool) {
+	for _, prefix := range []string{
+		"https://doi.org/",
+		"http://doi.org/",
+		"https://dx.doi.org/",
+		"http://dx.doi.org/",
+	} {
+		if after, ok := strings.CutPrefix(s, prefix); ok {
+			if strings.HasPrefix(after, "10.") {
+				return after, true
+			}
+		}
+	}
+	if strings.HasPrefix(s, "10.") && strings.ContainsRune(s, '/') {
+		return s, true
+	}
+	return "", false
+}
+
+func doiDir(doi string) string {
+	return "doi-" + strings.NewReplacer("/", "-", ".", "-").Replace(doi)
+}
+
+func fetchDOI(doi, outdir string) (string, string, error) {
+	outdir = filepath.Join(outdir, doiDir(doi))
+	overwrite := hasFiles(outdir)
+	if overwrite {
+		fmt.Fprintf(os.Stderr, "fetch: warning: overwriting %s\n", outdir)
+	}
+
+	apiURL := unpaywallBaseURL + doi + "?email=neal@patel.codes"
+	resp, err := httpClient.Get(apiURL)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("unpaywall: HTTP %d for %s", resp.StatusCode, doi)
+	}
+
+	var uw struct {
+		BestOALocation *struct {
+			URLForPDF string `json:"url_for_pdf"`
+		} `json:"best_oa_location"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&uw); err != nil {
+		return "", "", err
+	}
+	if uw.BestOALocation == nil || uw.BestOALocation.URLForPDF == "" {
+		return "", "", fmt.Errorf("no open-access PDF for DOI %s", doi)
+	}
+
+	pdfResp, err := httpClient.Get(uw.BestOALocation.URLForPDF)
+	if err != nil {
+		return "", "", err
+	}
+	defer pdfResp.Body.Close()
+	if pdfResp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("PDF: HTTP %d for %s", pdfResp.StatusCode, uw.BestOALocation.URLForPDF)
+	}
+	body, err := io.ReadAll(pdfResp.Body)
+	if err != nil {
+		return "", "", err
+	}
+
+	status := "fetched"
+	if overwrite {
+		status = "overwritten"
+	}
+	if err := pdfToText(body, outdir); err != nil {
+		return "", "", err
+	}
+	return outdir, status, nil
+}
+
 func isPDFURL(rawURL string) bool {
 	lower := strings.ToLower(rawURL)
 	if strings.HasSuffix(lower, ".pdf") {
@@ -282,7 +365,7 @@ func isPDFURL(rawURL string) bool {
 
 func pdfDir(rawURL string) string {
 	if doi := parseDOI(rawURL); doi != "" {
-		return "doi-" + strings.NewReplacer("/", "-", ".", "-").Replace(doi)
+		return doiDir(doi)
 	}
 	s := rawURL
 	if i := strings.LastIndexByte(s, '/'); i >= 0 {

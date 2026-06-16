@@ -4,10 +4,12 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -15,6 +17,7 @@ func setup(t *testing.T, srv *httptest.Server) string {
 	t.Helper()
 	httpClient = srv.Client()
 	arxivBaseURL = srv.URL + "/e-print/"
+	unpaywallBaseURL = srv.URL + "/v2/"
 	return t.TempDir()
 }
 
@@ -156,6 +159,95 @@ func TestParseArXivID(t *testing.T) {
 		if ok != tt.ok || id != tt.id {
 			t.Errorf("parseArXivID(%q): got (%q, %v), want (%q, %v)", tt.in, id, ok, tt.id, tt.ok)
 		}
+	}
+}
+
+func TestParseDOIURL(t *testing.T) {
+	tests := []struct {
+		in  string
+		doi string
+		ok  bool
+	}{
+		{"https://doi.org/10.1515/gcc-2012-0006", "10.1515/gcc-2012-0006", true},
+		{"http://doi.org/10.1515/gcc-2012-0006", "10.1515/gcc-2012-0006", true},
+		{"https://dx.doi.org/10.1515/gcc-2012-0006", "10.1515/gcc-2012-0006", true},
+		{"10.1515/gcc-2012-0006", "10.1515/gcc-2012-0006", true},
+		{"https://doi.org/not-a-doi", "", false},
+		{"https://example.com/paper.pdf", "", false},
+	}
+	for _, tt := range tests {
+		doi, ok := parseDOIURL(tt.in)
+		if ok != tt.ok || doi != tt.doi {
+			t.Errorf("parseDOIURL(%q): got (%q, %v), want (%q, %v)", tt.in, doi, ok, tt.doi, tt.ok)
+		}
+	}
+}
+
+func TestDoiDir(t *testing.T) {
+	tests := []struct {
+		doi  string
+		want string
+	}{
+		{"10.1515/gcc-2012-0006", "doi-10-1515-gcc-2012-0006"},
+		{"10.1145/3618260.3649656", "doi-10-1145-3618260-3649656"},
+	}
+	for _, tt := range tests {
+		if got := doiDir(tt.doi); got != tt.want {
+			t.Errorf("doiDir(%q): got %q, want %q", tt.doi, got, tt.want)
+		}
+	}
+}
+
+func TestFetchDOI(t *testing.T) {
+	pdfData := loadTestPDF(t)
+	var srvURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v2/") {
+			json.NewEncoder(w).Encode(map[string]any{
+				"best_oa_location": map[string]any{
+					"url_for_pdf": srvURL + "/paper.pdf",
+				},
+			})
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write(pdfData)
+	}))
+	defer srv.Close()
+	srvURL = srv.URL
+	outdir := setup(t, srv)
+
+	dir, status, err := fetchDOI("10.1515/gcc-2012-0006", outdir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := status, "fetched"; got != want {
+		t.Fatalf("got status %q, want %q", got, want)
+	}
+	if got, want := filepath.Base(dir), "doi-10-1515-gcc-2012-0006"; got != want {
+		t.Fatalf("got dir base %q, want %q", got, want)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "paper.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(got, []byte("Hello World")) {
+		t.Fatalf("got pdftotext output %q, want it to contain \"Hello World\"", got)
+	}
+}
+
+func TestFetchDOINoOA(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"best_oa_location": nil,
+		})
+	}))
+	defer srv.Close()
+	setup(t, srv)
+
+	_, _, err := fetchDOI("10.1515/gcc-2012-0006", t.TempDir())
+	if err == nil {
+		t.Fatal("got nil error, want error for no OA PDF")
 	}
 }
 
