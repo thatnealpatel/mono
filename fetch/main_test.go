@@ -18,19 +18,19 @@ func setup(t *testing.T, srv *httptest.Server) string {
 	return t.TempDir()
 }
 
-func TestParseArgs_RequiresO(t *testing.T) {
+func TestParseArgsRequiresO(t *testing.T) {
 	if _, _, err := parseArgs([]string{"http://x"}); err == nil {
-		t.Fatal("expected error for missing -o")
+		t.Fatal("got nil error, want error for missing -o")
 	}
 	if _, _, err := parseArgs([]string{"http://x", "-o"}); err == nil {
-		t.Fatal("expected error for -o without dir")
+		t.Fatal("got nil error, want error for -o without dir")
 	}
 	url, dir, err := parseArgs([]string{"http://x", "-o", "/tmp/out"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if url != "http://x" || dir != "/tmp/out" {
-		t.Fatalf("got url=%q dir=%q", url, dir)
+		t.Fatalf("got url=%q dir=%q, want url=%q dir=%q", url, dir, "http://x", "/tmp/out")
 	}
 }
 
@@ -40,11 +40,14 @@ func TestArxivDir(t *testing.T) {
 		want string
 	}{
 		{"2402.01011", "arXiv-2402-01011"},
+		{"2402.01011v2", "arXiv-2402-01011-v2"},
+		{"2402.01011v13", "arXiv-2402-01011-v13"},
 		{"hep-th/9905111", "arXiv-hep-th-9905111"},
+		{"hep-th/9905111v2", "arXiv-hep-th-9905111-v2"},
 	}
 	for _, tt := range tests {
 		if got := arxivDir(tt.id); got != tt.want {
-			t.Errorf("arxivDir(%q) = %q, want %q", tt.id, got, tt.want)
+			t.Errorf("arxivDir(%q): got %q, want %q", tt.id, got, tt.want)
 		}
 	}
 }
@@ -63,7 +66,7 @@ func TestIsPDFURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		if got := isPDFURL(tt.url); got != tt.want {
-			t.Errorf("isPDFURL(%q) = %v, want %v", tt.url, got, tt.want)
+			t.Errorf("isPDFURL(%q): got %v, want %v", tt.url, got, tt.want)
 		}
 	}
 }
@@ -85,7 +88,26 @@ func TestPdfDir(t *testing.T) {
 	}
 	for _, tt := range tests {
 		if got := pdfDir(tt.url); got != tt.want {
-			t.Errorf("pdfDir(%q) = %q, want %q", tt.url, got, tt.want)
+			t.Errorf("pdfDir(%q): got %q, want %q", tt.url, got, tt.want)
+		}
+	}
+}
+
+func TestStripVersion(t *testing.T) {
+	tests := []struct {
+		in        string
+		bare, ver string
+	}{
+		{"2402.01011", "2402.01011", ""},
+		{"2402.01011v2", "2402.01011", "v2"},
+		{"2402.01011v13", "2402.01011", "v13"},
+		{"hep-th/9905111", "hep-th/9905111", ""},
+		{"hep-th/9905111v2", "hep-th/9905111", "v2"},
+	}
+	for _, tt := range tests {
+		bare, ver := stripVersion(tt.in)
+		if bare != tt.bare || ver != tt.ver {
+			t.Errorf("stripVersion(%q): got (%q, %q), want (%q, %q)", tt.in, bare, ver, tt.bare, tt.ver)
 		}
 	}
 }
@@ -95,39 +117,44 @@ func TestNormalizeArXivID(t *testing.T) {
 		in, want string
 	}{
 		{"2402.01011", "2402.01011"},
-		{"2402.01011v2", "2402.01011"},
-		{"2402.01011v13", "2402.01011"},
+		{"2402.01011v2", "2402.01011v2"},
+		{"2402.01011v13", "2402.01011v13"},
 		{"2402.01011.pdf", "2402.01011"},
-		{"2402.01011v2.pdf", "2402.01011"},
-		{"solv-int/9905111v2", "solv-int/9905111"},
+		{"2402.01011v2.pdf", "2402.01011v2"},
+		{"solv-int/9905111v2", "solv-int/9905111v2"},
 		{"solv-int/9905111", "solv-int/9905111"},
 	}
 	for _, tt := range tests {
 		if got := normalizeArXivID(tt.in); got != tt.want {
-			t.Errorf("normalizeArXivID(%q) = %q, want %q", tt.in, got, tt.want)
+			t.Errorf("normalizeArXivID(%q): got %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }
 
 func TestParseArXivID(t *testing.T) {
 	tests := []struct {
-		in   string
-		id   string
-		ok   bool
+		in string
+		id string
+		ok bool
 	}{
 		{"2402.01011", "2402.01011", true},
+		{"2402.01011v2", "2402.01011v2", true},
 		{"arXiv:2402.01011", "2402.01011", true},
+		{"arXiv:2402.01011v3", "2402.01011v3", true},
 		{"https://arxiv.org/abs/2402.01011", "2402.01011", true},
-		{"https://arxiv.org/abs/2402.01011v3", "2402.01011", true},
+		{"https://arxiv.org/abs/2402.01011v3", "2402.01011v3", true},
 		{"https://arxiv.org/pdf/2402.01011.pdf", "2402.01011", true},
+		{"https://arxiv.org/pdf/2402.01011v2.pdf", "2402.01011v2", true},
 		{"hep-th/9905111", "hep-th/9905111", true},
+		{"hep-th/9905111v2", "hep-th/9905111v2", true},
+		{"cs/0703145v4", "cs/0703145v4", true},
 		{"https://example.com/paper.pdf", "", false},
 		{"not-an-id", "", false},
 	}
 	for _, tt := range tests {
 		id, ok := parseArXivID(tt.in)
 		if ok != tt.ok || id != tt.id {
-			t.Errorf("parseArXivID(%q) = (%q, %v), want (%q, %v)", tt.in, id, ok, tt.id, tt.ok)
+			t.Errorf("parseArXivID(%q): got (%q, %v), want (%q, %v)", tt.in, id, ok, tt.id, tt.ok)
 		}
 	}
 }
@@ -159,7 +186,7 @@ func makeTarGz(files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-func TestFetchArXiv_PlainTex(t *testing.T) {
+func TestFetchArXivPlainTex(t *testing.T) {
 	body := []byte(`\documentclass{article}`)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write(body)
@@ -171,23 +198,22 @@ func TestFetchArXiv_PlainTex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != "fetched" {
-		t.Fatalf("status = %q, want fetched", status)
+	if got, want := status, "fetched"; got != want {
+		t.Fatalf("got status %q, want %q", got, want)
 	}
-	wantDir := filepath.Join(outdir, "arXiv-2402-01011")
-	if dir != wantDir {
-		t.Fatalf("dir = %q, want %q", dir, wantDir)
+	if got, want := dir, filepath.Join(outdir, "arXiv-2402-01011"); got != want {
+		t.Fatalf("got dir %q, want %q", got, want)
 	}
 	got, err := os.ReadFile(filepath.Join(dir, "paper.tex"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, body) {
-		t.Fatalf("content mismatch")
+		t.Fatalf("got content %q, want %q", got, body)
 	}
 }
 
-func TestFetchArXiv_GzipSingleTex(t *testing.T) {
+func TestFetchArXivGzipSingleTex(t *testing.T) {
 	content := `\documentclass{article}\begin{document}Hello\end{document}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write(makeGzipTex(content))
@@ -195,27 +221,27 @@ func TestFetchArXiv_GzipSingleTex(t *testing.T) {
 	defer srv.Close()
 	outdir := setup(t, srv)
 
-	dir, status, err := fetchArXiv("2402.01011", outdir)
+	_, status, err := fetchArXiv("2402.01011", outdir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != "fetched" {
-		t.Fatalf("status = %q, want fetched", status)
+	if got, want := status, "fetched"; got != want {
+		t.Fatalf("got status %q, want %q", got, want)
 	}
-	got, err := os.ReadFile(filepath.Join(dir, "paper.tex"))
+	got, err := os.ReadFile(filepath.Join(outdir, "arXiv-2402-01011", "paper.tex"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != content {
-		t.Fatalf("got %q, want %q", got, content)
+	if got, want := string(got), content; got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 
-func TestFetchArXiv_TarGz(t *testing.T) {
+func TestFetchArXivTarGz(t *testing.T) {
 	files := map[string]string{
-		"main.tex":    `\input{appendix}`,
+		"main.tex":     `\input{appendix}`,
 		"appendix.tex": `\section{Appendix}`,
-		"figure.png":  "not-tex",
+		"figure.png":   "not-tex",
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write(makeTarGz(files))
@@ -227,48 +253,55 @@ func TestFetchArXiv_TarGz(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != "fetched" {
-		t.Fatalf("status = %q, want fetched", status)
+	if got, want := status, "fetched"; got != want {
+		t.Fatalf("got status %q, want %q", got, want)
 	}
 	for _, name := range []string{"main.tex", "appendix.tex"} {
 		got, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
-			t.Fatalf("missing %s: %v", name, err)
+			t.Fatalf("%s: got error %v, want file to exist", name, err)
 		}
-		if string(got) != files[name] {
-			t.Fatalf("%s: got %q, want %q", name, got, files[name])
+		if got, want := string(got), files[name]; got != want {
+			t.Fatalf("%s: got %q, want %q", name, got, want)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, "figure.png")); err == nil {
-		t.Fatal("non-.tex file figure.png should not be extracted")
+		t.Fatal("got figure.png extracted, want non-.tex files excluded")
 	}
 }
 
-func TestFetchArXiv_Cached(t *testing.T) {
+func TestFetchArXivOverwrite(t *testing.T) {
+	body := []byte(`\documentclass{new}`)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("server should not be hit on cached fetch")
+		w.Write(body)
 	}))
 	defer srv.Close()
 	outdir := setup(t, srv)
 
 	paperDir := filepath.Join(outdir, "arXiv-2402-01011")
 	os.MkdirAll(paperDir, 0o755)
-	os.WriteFile(filepath.Join(paperDir, "paper.tex"), []byte("cached"), 0o644)
+	os.WriteFile(filepath.Join(paperDir, "paper.tex"), []byte("old"), 0o644)
 
 	dir, status, err := fetchArXiv("2402.01011", outdir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != "cached" {
-		t.Fatalf("status = %q, want cached", status)
+	if got, want := status, "overwritten"; got != want {
+		t.Fatalf("got status %q, want %q", got, want)
 	}
-	if dir != paperDir {
-		t.Fatalf("dir = %q, want %q", dir, paperDir)
+	if got, want := dir, paperDir; got != want {
+		t.Fatalf("got dir %q, want %q", got, want)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "paper.tex"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, body) {
+		t.Fatalf("got content %q, want %q", got, body)
 	}
 }
 
-// Regression: sibling paper in -o dir must not mask an unfetched paper.
-func TestFetchArXiv_SiblingDoesNotMask(t *testing.T) {
+func TestFetchArXivSiblingDoesNotMask(t *testing.T) {
 	body := []byte(`\documentclass{article}`)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write(body)
@@ -276,7 +309,6 @@ func TestFetchArXiv_SiblingDoesNotMask(t *testing.T) {
 	defer srv.Close()
 	outdir := setup(t, srv)
 
-	// Pre-populate a sibling paper.
 	siblingDir := filepath.Join(outdir, "arXiv-1406-5145")
 	os.MkdirAll(siblingDir, 0o755)
 	os.WriteFile(filepath.Join(siblingDir, "paper.tex"), []byte("sibling"), 0o644)
@@ -285,15 +317,74 @@ func TestFetchArXiv_SiblingDoesNotMask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != "fetched" {
-		t.Fatalf("status = %q, want fetched (sibling should not mask)", status)
+	if got, want := status, "fetched"; got != want {
+		t.Fatalf("got status %q, want %q", got, want)
 	}
-	wantDir := filepath.Join(outdir, "arXiv-2402-01011")
-	if dir != wantDir {
-		t.Fatalf("dir = %q, want %q", dir, wantDir)
+	if got, want := dir, filepath.Join(outdir, "arXiv-2402-01011"); got != want {
+		t.Fatalf("got dir %q, want %q", got, want)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "paper.tex")); err != nil {
-		t.Fatal("paper.tex not created")
+}
+
+func TestFetchArXivVersionsCoexist(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`\documentclass{` + r.URL.Path + `}`))
+	}))
+	defer srv.Close()
+	outdir := setup(t, srv)
+
+	dir1, _, err := fetchArXiv("2402.01011", outdir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir2, _, err := fetchArXiv("2402.01011v2", outdir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dir1 == dir2 {
+		t.Fatalf("got same dir for unversioned and v2: %s", dir1)
+	}
+	if got, want := filepath.Base(dir1), "arXiv-2402-01011"; got != want {
+		t.Fatalf("unversioned: got dir %q, want %q", got, want)
+	}
+	if got, want := filepath.Base(dir2), "arXiv-2402-01011-v2"; got != want {
+		t.Fatalf("v2: got dir %q, want %q", got, want)
+	}
+}
+
+func TestFetchArXivPDFResponse(t *testing.T) {
+	pdfData := loadTestPDF(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(pdfData)
+	}))
+	defer srv.Close()
+	outdir := setup(t, srv)
+
+	_, status, err := fetchArXiv("2402.01011", outdir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := status, "fetched"; got != want {
+		t.Fatalf("got status %q, want %q", got, want)
+	}
+	got, err := os.ReadFile(filepath.Join(outdir, "arXiv-2402-01011", "paper.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(got, []byte("Hello World")) {
+		t.Fatalf("got pdftotext output %q, want it to contain \"Hello World\"", got)
+	}
+}
+
+func TestFetchArXivHTTP404(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	outdir := setup(t, srv)
+
+	_, _, err := fetchArXiv("9999.99999", outdir)
+	if err == nil {
+		t.Fatal("got nil error, want error on 404")
 	}
 }
 
@@ -306,7 +397,7 @@ func loadTestPDF(t *testing.T) []byte {
 	return data
 }
 
-func TestFetchPDF_EndToEnd(t *testing.T) {
+func TestFetchPDFEndToEnd(t *testing.T) {
 	pdfData := loadTestPDF(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
@@ -320,23 +411,22 @@ func TestFetchPDF_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != "fetched" {
-		t.Fatalf("status = %q, want fetched", status)
+	if got, want := status, "fetched"; got != want {
+		t.Fatalf("got status %q, want %q", got, want)
 	}
-	if filepath.Base(dir) != "thesis" {
-		t.Fatalf("dir base = %q, want thesis", filepath.Base(dir))
+	if got, want := filepath.Base(dir), "thesis"; got != want {
+		t.Fatalf("got dir base %q, want %q", got, want)
 	}
-	txt, err := os.ReadFile(filepath.Join(dir, "paper.txt"))
+	got, err := os.ReadFile(filepath.Join(dir, "paper.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(txt, []byte("Hello World")) {
-		t.Fatalf("pdftotext output = %q, want it to contain 'Hello World'", txt)
+	if !bytes.Contains(got, []byte("Hello World")) {
+		t.Fatalf("got pdftotext output %q, want it to contain \"Hello World\"", got)
 	}
 }
 
-// Regression: two different PDFs to the same -o dir get distinct subdirs.
-func TestFetchPDF_SubdirPerPaper(t *testing.T) {
+func TestFetchPDFSubdirPerPaper(t *testing.T) {
 	pdfData := loadTestPDF(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
@@ -353,19 +443,24 @@ func TestFetchPDF_SubdirPerPaper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status1 != "fetched" || status2 != "fetched" {
-		t.Fatalf("statuses = %q, %q; want fetched, fetched", status1, status2)
+	if got, want := status1, "fetched"; got != want {
+		t.Fatalf("thesis: got status %q, want %q", got, want)
+	}
+	if got, want := status2, "fetched"; got != want {
+		t.Fatalf("notes: got status %q, want %q", got, want)
 	}
 	if dir1 == dir2 {
-		t.Fatalf("two different PDFs resolved to same dir: %s", dir1)
+		t.Fatalf("got same dir for two different PDFs: %s", dir1)
 	}
-	if filepath.Base(dir1) != "thesis" || filepath.Base(dir2) != "notes" {
-		t.Fatalf("dirs = %q, %q; want thesis, notes bases", dir1, dir2)
+	if got, want := filepath.Base(dir1), "thesis"; got != want {
+		t.Fatalf("got dir1 base %q, want %q", got, want)
+	}
+	if got, want := filepath.Base(dir2), "notes"; got != want {
+		t.Fatalf("got dir2 base %q, want %q", got, want)
 	}
 }
 
-// Regression: sibling PDF in -o dir must not mask a different PDF.
-func TestFetchPDF_SiblingDoesNotMask(t *testing.T) {
+func TestFetchPDFSiblingDoesNotMask(t *testing.T) {
 	pdfData := loadTestPDF(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
@@ -382,18 +477,15 @@ func TestFetchPDF_SiblingDoesNotMask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != "fetched" {
-		t.Fatalf("status = %q, want fetched (sibling should not mask)", status)
+	if got, want := status, "fetched"; got != want {
+		t.Fatalf("got status %q, want %q", got, want)
 	}
-	if filepath.Base(dir) != "notes" {
-		t.Fatalf("dir base = %q, want notes", filepath.Base(dir))
-	}
-	if _, err := os.Stat(filepath.Join(dir, "paper.txt")); err != nil {
-		t.Fatal("paper.txt not created in notes subdir")
+	if got, want := filepath.Base(dir), "notes"; got != want {
+		t.Fatalf("got dir base %q, want %q", got, want)
 	}
 }
 
-func TestFetchPDF_DOI(t *testing.T) {
+func TestFetchPDFDOI(t *testing.T) {
 	pdfData := loadTestPDF(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
@@ -407,94 +499,64 @@ func TestFetchPDF_DOI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != "fetched" {
-		t.Fatalf("status = %q, want fetched", status)
+	if got, want := status, "fetched"; got != want {
+		t.Fatalf("got status %q, want %q", got, want)
 	}
-	if filepath.Base(dir) != "doi-10-1145-3618260-3649656" {
-		t.Fatalf("dir base = %q, want doi-10-1145-3618260-3649656", filepath.Base(dir))
+	if got, want := filepath.Base(dir), "doi-10-1145-3618260-3649656"; got != want {
+		t.Fatalf("got dir base %q, want %q", got, want)
 	}
-	txt, err := os.ReadFile(filepath.Join(dir, "paper.txt"))
+	got, err := os.ReadFile(filepath.Join(dir, "paper.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(txt, []byte("Hello World")) {
-		t.Fatalf("pdftotext output = %q, want it to contain 'Hello World'", txt)
+	if !bytes.Contains(got, []byte("Hello World")) {
+		t.Fatalf("got pdftotext output %q, want it to contain \"Hello World\"", got)
 	}
 }
 
-func TestFetchPDF_Cached(t *testing.T) {
+func TestFetchPDFOverwrite(t *testing.T) {
+	pdfData := loadTestPDF(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("server should not be hit on cached fetch")
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write(pdfData)
 	}))
 	defer srv.Close()
 	outdir := setup(t, srv)
 
 	paperDir := filepath.Join(outdir, "thesis")
 	os.MkdirAll(paperDir, 0o755)
-	os.WriteFile(filepath.Join(paperDir, "paper.txt"), []byte("cached"), 0o644)
+	os.WriteFile(filepath.Join(paperDir, "paper.txt"), []byte("old"), 0o644)
 
 	dir, status, err := fetchPDF(srv.URL+"/papers/thesis.pdf", outdir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != "cached" {
-		t.Fatalf("status = %q, want cached", status)
+	if got, want := status, "overwritten"; got != want {
+		t.Fatalf("got status %q, want %q", got, want)
 	}
-	if dir != paperDir {
-		t.Fatalf("dir = %q, want %q", dir, paperDir)
+	if got, want := dir, paperDir; got != want {
+		t.Fatalf("got dir %q, want %q", got, want)
 	}
-}
-
-// arXiv sometimes returns PDF instead of TeX source.
-func TestFetchArXiv_PDFResponse(t *testing.T) {
-	pdfData := loadTestPDF(t)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(pdfData)
-	}))
-	defer srv.Close()
-	outdir := setup(t, srv)
-
-	dir, status, err := fetchArXiv("2402.01011", outdir)
+	got, err := os.ReadFile(filepath.Join(dir, "paper.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status != "fetched" {
-		t.Fatalf("status = %q, want fetched", status)
-	}
-	txt, err := os.ReadFile(filepath.Join(dir, "paper.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Contains(txt, []byte("Hello World")) {
-		t.Fatalf("pdftotext output = %q, want it to contain 'Hello World'", txt)
+	if !bytes.Contains(got, []byte("Hello World")) {
+		t.Fatalf("got pdftotext output %q, want it to contain \"Hello World\"", got)
 	}
 }
 
-func TestFetchArXiv_HTTP404(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
-	outdir := setup(t, srv)
-
-	_, _, err := fetchArXiv("9999.99999", outdir)
-	if err == nil {
-		t.Fatal("expected error on 404")
-	}
-}
-
-func TestHandleGzip_TarTraversalBlocked(t *testing.T) {
+func TestHandleGzipTarTraversalBlocked(t *testing.T) {
 	files := map[string]string{
 		"../../../etc/passwd.tex": "malicious",
 	}
 	dir := t.TempDir()
-	err := handleGzip(makeTarGz(files), dir)
-	if err == nil {
-		t.Fatal("expected error for path traversal")
+	if err := handleGzip(makeTarGz(files), dir); err == nil {
+		t.Fatal("got nil error, want error for path traversal")
 	}
 }
 
-func TestHandleGzip_NoTexFiles(t *testing.T) {
+func TestHandleGzipNoTexFiles(t *testing.T) {
 	files := map[string]string{
 		"readme.md": "no tex here",
 	}
@@ -503,6 +565,6 @@ func TestHandleGzip_NoTexFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".fetched")); err != nil {
-		t.Fatal("expected .fetched sentinel for tar with no .tex files")
+		t.Fatal("got no .fetched sentinel, want .fetched for tar with no .tex files")
 	}
 }

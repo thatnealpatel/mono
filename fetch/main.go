@@ -81,15 +81,13 @@ type result struct {
 
 func printResult(url, dir, status string) error {
 	r := result{URL: url, Dir: dir, Status: status}
-	if status == "fetched" {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			return err
-		}
-		for _, e := range entries {
-			if !e.IsDir() {
-				r.Files = append(r.Files, e.Name())
-			}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			r.Files = append(r.Files, e.Name())
 		}
 	}
 	return json.NewEncoder(os.Stdout).Encode(r)
@@ -118,12 +116,13 @@ func parseArXivID(s string) (string, bool) {
 		id = after
 	}
 
-	// New-style: YYMM.NNNNN
-	if len(id) >= 9 && id[4] == '.' && isDigits(id[:4]) && isDigits(id[5:]) {
+	bare, _ := stripVersion(id)
+	// New-style: YYMM.NNNNN[vN]
+	if len(bare) >= 9 && bare[4] == '.' && isDigits(bare[:4]) && isDigits(bare[5:]) {
 		return id, true
 	}
-	// Old-style: subject/NNNNNNN (alpha prefix, 7 digits)
-	if i := strings.IndexByte(id, '/'); i > 0 && i < len(id)-1 && isAlpha(id[:i]) && len(id[i+1:]) == 7 && isDigits(id[i+1:]) {
+	// Old-style: subject/NNNNNNN[vN] (alpha prefix, 7 digits)
+	if i := strings.IndexByte(bare, '/'); i > 0 && i < len(bare)-1 && isAlpha(bare[:i]) && len(bare[i+1:]) == 7 && isDigits(bare[i+1:]) {
 		return id, true
 	}
 	return "", false
@@ -138,22 +137,30 @@ func isAlpha(s string) bool {
 }
 
 func normalizeArXivID(id string) string {
-	id = strings.TrimSuffix(id, ".pdf")
-	// Strip version suffix (e.g. v2, v13)
+	return strings.TrimSuffix(id, ".pdf")
+}
+
+func stripVersion(id string) (bare, version string) {
 	if i := strings.LastIndex(id, "v"); i > 0 && isDigits(id[i+1:]) {
-		id = id[:i]
+		return id[:i], id[i:]
 	}
-	return id
+	return id, ""
 }
 
 func arxivDir(id string) string {
-	return "arXiv-" + strings.NewReplacer(".", "-", "/", "-").Replace(id)
+	bare, ver := stripVersion(id)
+	name := "arXiv-" + strings.NewReplacer(".", "-", "/", "-").Replace(bare)
+	if ver != "" {
+		name += "-" + ver
+	}
+	return name
 }
 
-func fetchArXiv(id, outdir string) (dir, status string, err error) {
+func fetchArXiv(id, outdir string) (string, string, error) {
 	outdir = filepath.Join(outdir, arxivDir(id))
-	if hasFiles(outdir) {
-		return outdir, "cached", nil
+	overwrite := hasFiles(outdir)
+	if overwrite {
+		fmt.Fprintf(os.Stderr, "fetch: warning: overwriting %s\n", outdir)
 	}
 
 	resp, err := httpClient.Get(arxivBaseURL + id)
@@ -170,17 +177,22 @@ func fetchArXiv(id, outdir string) (dir, status string, err error) {
 		return "", "", err
 	}
 
+	status := "fetched"
+	if overwrite {
+		status = "overwritten"
+	}
+
 	if bytes.HasPrefix(body, []byte{0x1f, 0x8b}) {
 		if err := handleGzip(body, outdir); err != nil {
 			return "", "", err
 		}
-		return outdir, "fetched", nil
+		return outdir, status, nil
 	}
 	if bytes.HasPrefix(body, []byte("%PDF")) {
 		if err := pdfToText(body, outdir); err != nil {
 			return "", "", err
 		}
-		return outdir, "fetched", nil
+		return outdir, status, nil
 	}
 	if err := os.MkdirAll(outdir, 0o755); err != nil {
 		return "", "", err
@@ -188,7 +200,7 @@ func fetchArXiv(id, outdir string) (dir, status string, err error) {
 	if err := os.WriteFile(filepath.Join(outdir, "paper.tex"), body, 0o644); err != nil {
 		return "", "", err
 	}
-	return outdir, "fetched", nil
+	return outdir, status, nil
 }
 
 func handleGzip(body []byte, outdir string) error {
@@ -307,10 +319,11 @@ func parseDOI(rawURL string) string {
 	return ""
 }
 
-func fetchPDF(url, outdir string) (dir, status string, err error) {
+func fetchPDF(url, outdir string) (string, string, error) {
 	outdir = filepath.Join(outdir, pdfDir(url))
-	if hasFiles(outdir) {
-		return outdir, "cached", nil
+	overwrite := hasFiles(outdir)
+	if overwrite {
+		fmt.Fprintf(os.Stderr, "fetch: warning: overwriting %s\n", outdir)
 	}
 
 	resp, err := httpClient.Get(url)
@@ -325,10 +338,14 @@ func fetchPDF(url, outdir string) (dir, status string, err error) {
 	if err != nil {
 		return "", "", err
 	}
+	status := "fetched"
+	if overwrite {
+		status = "overwritten"
+	}
 	if err := pdfToText(body, outdir); err != nil {
 		return "", "", err
 	}
-	return outdir, "fetched", nil
+	return outdir, status, nil
 }
 
 func pdfToText(body []byte, outdir string) error {
