@@ -20,6 +20,17 @@ var httpClient = http.DefaultClient
 var arxivBaseURL = "https://arxiv.org/e-print/"
 var unpaywallBaseURL = "https://api.unpaywall.org/v2/"
 
+const userAgent = "patel.codes/fetch"
+
+func httpGet(url string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	return httpClient.Do(req)
+}
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "fetch: %v\n", err)
@@ -171,7 +182,7 @@ func fetchArXiv(id, outdir string) (string, string, error) {
 		fmt.Fprintf(os.Stderr, "fetch: warning: overwriting %s\n", outdir)
 	}
 
-	resp, err := httpClient.Get(arxivBaseURL + id)
+	resp, err := httpGet(arxivBaseURL + id)
 	if err != nil {
 		return "", "", err
 	}
@@ -306,7 +317,7 @@ func fetchDOI(doi, outdir string) (string, string, error) {
 	}
 
 	apiURL := unpaywallBaseURL + doi + "?email=neal@patel.codes"
-	resp, err := httpClient.Get(apiURL)
+	resp, err := httpGet(apiURL)
 	if err != nil {
 		return "", "", err
 	}
@@ -327,7 +338,7 @@ func fetchDOI(doi, outdir string) (string, string, error) {
 		return "", "", fmt.Errorf("no open-access PDF for DOI %s", doi)
 	}
 
-	pdfResp, err := httpClient.Get(uw.BestOALocation.URLForPDF)
+	pdfResp, err := httpGet(uw.BestOALocation.URLForPDF)
 	if err != nil {
 		return "", "", err
 	}
@@ -409,7 +420,7 @@ func fetchPDF(url, outdir string) (string, string, error) {
 		fmt.Fprintf(os.Stderr, "fetch: warning: overwriting %s\n", outdir)
 	}
 
-	resp, err := httpClient.Get(url)
+	resp, err := httpGet(url)
 	if err != nil {
 		return "", "", err
 	}
