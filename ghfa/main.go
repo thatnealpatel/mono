@@ -35,6 +35,15 @@ func run(args []string) error {
 		fmt.Fprint(os.Stdout, usage)
 		return nil
 	}
+	// "search issues" doesn't need owner/repo.
+	if len(args) >= 2 && args[0] == "search" && args[1] == "issues" {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		return cmdSearchIssues(ctx, args[2:])
+	}
+	if !strings.Contains(args[0], "/") {
+		return fmt.Errorf("first argument must be <owner/repo>, got %q\n\n%s", args[0], usage)
+	}
 	upstream = args[0]
 	rest := args[1:]
 	if len(rest) == 0 {
@@ -76,13 +85,11 @@ issue:
   issue close <num> [-r completed|"not planned"] [-dupeof N]
   issue reopen <num> [-c <comment>]   reopen an issue
   issue comment <num> [-body|-file]   post a comment
-  issue search <query>                search issues
+label:
+  label list                          list repository labels
 
 search:
   search issues <query>               search issues (raw query, no repo scope)
-
-label:
-  label list                          list repository labels
 `
 
 var commands = []command{
@@ -92,7 +99,6 @@ var commands = []command{
 	{"issue close", cmdIssueClose},
 	{"issue reopen", cmdIssueReopen},
 	{"issue comment", cmdIssueComment},
-	{"issue search", cmdIssueSearch},
 	{"search issues", cmdSearchIssues},
 	{"label list", cmdLabelList},
 }

@@ -9,25 +9,9 @@ import (
 	"strings"
 )
 
-func injectQuery(r, q string) string {
-	parts := []string{"repo:" + r}
-	if !strings.Contains(q, "is:") {
-		parts = append(parts, "is:issue")
-	}
-	parts = append(parts, q)
-	return strings.Join(parts, " ")
-}
-
-func cmdIssueSearch(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("usage: ghfa <owner/repo> issue search <query>")
-	}
-	return searchIssues(ctx, injectQuery(upstream, strings.Join(args, " ")))
-}
-
 func cmdSearchIssues(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ghfa <owner/repo> search issues <query>")
+		return fmt.Errorf("usage: ghfa search issues <query>")
 	}
 	return searchIssues(ctx, strings.Join(args, " "))
 }
