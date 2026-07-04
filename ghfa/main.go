@@ -52,6 +52,12 @@ func run(args []string) error {
 	}
 	resource := rest[0]
 	rest = rest[1:]
+	// "push" is a standalone command with no verb.
+	if resource == "push" {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		return cmdPush(ctx, rest)
+	}
 	if len(rest) == 0 {
 		return fmt.Errorf("usage: ghfa <owner/repo> %s <verb> [args]", resource)
 	}
@@ -87,6 +93,14 @@ issue:
   issue comment <num> [-body|-file]   post a comment
 label:
   label list                          list repository labels
+repo:
+  repo fork                           fork the repository
+  repo clone [-dir <path>]            download repo tarball and init locally
+  repo sync [-branch <name>]          sync fork from upstream (default: main)
+pr:
+  pr create -title -head -base [-body|-file]  create a cross-repo PR
+push:
+  push -ref <branch>                  push local commits to remote via proxy
 
 search:
   search issues <query>               search issues (raw query, no repo scope)
@@ -101,6 +115,10 @@ var commands = []command{
 	{"issue comment", cmdIssueComment},
 	{"search issues", cmdSearchIssues},
 	{"label list", cmdLabelList},
+	{"repo fork", cmdRepoFork},
+	{"repo clone", cmdRepoClone},
+	{"repo sync", cmdRepoSync},
+	{"pr create", cmdPRCreate},
 }
 
 type command struct {
