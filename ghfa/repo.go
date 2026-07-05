@@ -1,19 +1,13 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -28,7 +22,7 @@ type repository struct {
 // cmdRepoFork forks the repository.
 // Usage: ghfa <owner/repo> repo fork
 func cmdRepoFork(ctx context.Context, args []string) error {
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "forks")
+	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "forks")
 	if err != nil {
 		return err
 	}
@@ -46,132 +40,40 @@ func cmdRepoFork(ctx context.Context, args []string) error {
 	return printJSON(repo)
 }
 
-// cmdRepoClone downloads a tarball and initializes a local git repo.
-// Usage: ghfa <owner/repo> repo clone [-dir <path>]
+// gitURL builds the smart HTTP clone URL from the proxy base.
+func gitURL(repo string) (string, error) {
+	return url.JoinPath(proxyBase, "git", repo+".git")
+}
+
+// cmdRepoClone clones a repo through the proxy's smart HTTP surface.
+// Usage: ghfa repo clone <repo> [<dir>]
 func cmdRepoClone(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("repo clone", flag.ContinueOnError)
-	dir := fs.String("dir", "", "target directory (default: repo name)")
-	if err := fs.Parse(args); err != nil {
-		return err
+	if len(args) < 1 {
+		return fmt.Errorf("usage: ghfa repo clone <owner/repo> [<dir>]")
+	}
+	repo := args[0]
+	parts := strings.SplitN(repo, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return fmt.Errorf("ghfa: invalid repo %q, want owner/repo", repo)
 	}
 
-	// Default dir to the repo name (second segment of owner/repo).
-	target := *dir
-	if target == "" {
-		parts := strings.SplitN(upstream, "/", 2)
-		if len(parts) != 2 {
-			return fmt.Errorf("invalid upstream %q", upstream)
-		}
-		target = parts[1]
+	target := parts[1]
+	if len(args) >= 2 {
+		target = args[1]
 	}
 
-	// Trailing slash stands for the default branch ref segment.
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "tarball/")
+	cloneURL, err := gitURL(repo)
 	if err != nil {
 		return err
 	}
-	resp, _, status, err := do(ctx, http.MethodGet, rawURL, nil)
+	cmd := exec.CommandContext(ctx, "git", "clone", cloneURL, target)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return err
-	}
-	if status != http.StatusOK {
-		return statusError(status, resp)
-	}
-
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		return err
-	}
-	if err := extractTarGz(resp, target); err != nil {
-		return fmt.Errorf("ghfa: extract tarball: %w", err)
-	}
-	if err := gitInit(ctx, target); err != nil {
-		return fmt.Errorf("ghfa: git init: %w", err)
+		return fmt.Errorf("git clone: %w\n%s", err, out)
 	}
 	return printJSON(struct {
 		Dir string `json:"dir"`
 	}{Dir: target})
-}
-
-// extractTarGz extracts a gzipped tarball into dir,
-// stripping the top-level directory GitHub includes.
-func extractTarGz(data []byte, dir string) error {
-	gr, err := gzip.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return err
-	}
-	defer gr.Close()
-	tr := tar.NewReader(gr)
-
-	// GitHub tarballs have a top-level prefix like "owner-repo-sha/".
-	// We strip the first path component.
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		// Strip the first path component.
-		name := hdr.Name
-		idx := strings.IndexByte(name, '/')
-		if idx < 0 {
-			continue
-		}
-		rel := name[idx+1:]
-		if rel == "" {
-			continue
-		}
-		target := filepath.Join(dir, rel)
-		if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(dir)+string(os.PathSeparator)) {
-			return fmt.Errorf("tar entry escapes target: %s", name)
-		}
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0o755|0o644)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
-				return err
-			}
-			if err := f.Close(); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// gitInit runs git init, add, commit in the target directory.
-func gitInit(ctx context.Context, dir string) error {
-	for _, argv := range [][]string{
-		{"git", "init"},
-		{"git", "add", "."},
-		{"git", "commit", "-m", "initial"},
-	} {
-		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=ghfa",
-			"GIT_AUTHOR_EMAIL=ghfa@localhost",
-			"GIT_COMMITTER_NAME=ghfa",
-			"GIT_COMMITTER_EMAIL=ghfa@localhost",
-		)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("%s: %w\n%s", strings.Join(argv, " "), err, out)
-		}
-	}
-	return nil
 }
 
 // mergeUpstreamResult is the response from POST merge-upstream.
@@ -189,7 +91,7 @@ func cmdRepoSync(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "merge-upstream")
+	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "merge-upstream")
 	if err != nil {
 		return err
 	}

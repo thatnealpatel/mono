@@ -35,11 +35,16 @@ func run(args []string) error {
 		fmt.Fprint(os.Stdout, usage)
 		return nil
 	}
-	// "search issues" doesn't need owner/repo.
+	// Commands that take positional <repo>, not the global owner/repo prefix.
 	if len(args) >= 2 && args[0] == "search" && args[1] == "issues" {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		return cmdSearchIssues(ctx, args[2:])
+	}
+	if len(args) >= 2 && args[0] == "repo" && args[1] == "clone" {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+		return cmdRepoClone(ctx, args[2:])
 	}
 	if !strings.Contains(args[0], "/") {
 		return fmt.Errorf("first argument must be <owner/repo>, got %q\n\n%s", args[0], usage)
@@ -52,12 +57,6 @@ func run(args []string) error {
 	}
 	resource := rest[0]
 	rest = rest[1:]
-	// "push" is a standalone command with no verb.
-	if resource == "push" {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		return cmdPush(ctx, rest)
-	}
 	if len(rest) == 0 {
 		return fmt.Errorf("usage: ghfa <owner/repo> %s <verb> [args]", resource)
 	}
@@ -95,13 +94,10 @@ label:
   label list                          list repository labels
 repo:
   repo fork                           fork the repository
-  repo clone [-dir <path>]            download repo tarball and init locally
+  repo clone <owner/repo> [<dir>]     clone via proxy smart HTTP
   repo sync [-branch <name>]          sync fork from upstream (default: main)
 pr:
   pr create -title -head -base [-body|-file]  create a cross-repo PR
-push:
-  push -ref <branch>                  push local commits to remote via proxy
-
 search:
   search issues <query>               search issues (raw query, no repo scope)
 `
@@ -116,7 +112,6 @@ var commands = []command{
 	{"search issues", cmdSearchIssues},
 	{"label list", cmdLabelList},
 	{"repo fork", cmdRepoFork},
-	{"repo clone", cmdRepoClone},
 	{"repo sync", cmdRepoSync},
 	{"pr create", cmdPRCreate},
 }

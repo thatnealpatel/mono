@@ -1,13 +1,13 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/cgi"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,7 +18,7 @@ func TestCmdRepoFork(t *testing.T) {
 		if got, want := r.Method, http.MethodPost; got != want {
 			t.Errorf("method = %q, want %q", got, want)
 		}
-		if got, want := r.URL.Path, "/repos/owner/repo/forks"; got != want {
+		if got, want := r.URL.Path, "/gh/repos/owner/repo/forks"; got != want {
 			t.Errorf("path = %q, want %q", got, want)
 		}
 		var body struct{}
@@ -54,7 +54,7 @@ func TestCmdRepoSync(t *testing.T) {
 		if got, want := r.Method, http.MethodPost; got != want {
 			t.Errorf("method = %q, want %q", got, want)
 		}
-		if got, want := r.URL.Path, "/repos/owner/repo/merge-upstream"; got != want {
+		if got, want := r.URL.Path, "/gh/repos/owner/repo/merge-upstream"; got != want {
 			t.Errorf("path = %q, want %q", got, want)
 		}
 		var body struct {
@@ -108,85 +108,151 @@ func TestCmdRepoSyncHTTPError(t *testing.T) {
 	}
 }
 
-func makeTarGz(t *testing.T, files map[string]string) []byte {
+func TestGitURL(t *testing.T) {
+	oldBase := proxyBase
+	t.Cleanup(func() { proxyBase = oldBase })
+
+	for _, tc := range []struct {
+		name, base, repo, want string
+	}{
+		{"Simple", "http://host:9001", "owner/repo", "http://host:9001/git/owner/repo.git"},
+		{"TrailingSlash", "http://host:9001", "org/lib", "http://host:9001/git/org/lib.git"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			proxyBase = tc.base
+			got, err := gitURL(tc.repo)
+			if err != nil {
+				t.Fatalf("gitURL: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// initBareRepo creates a bare git repo with one commit, suitable for
+// serving over smart HTTP via git-http-backend.
+func initBareRepo(t *testing.T) string {
 	t.Helper()
-	var buf bytes.Buffer
-	gw := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gw)
-	// Add a top-level directory entry (GitHub convention).
-	if err := tw.WriteHeader(&tar.Header{
-		Name:     "owner-repo-abc123/",
-		Typeflag: tar.TypeDir,
-		Mode:     0o755,
-	}); err != nil {
-		t.Fatalf("write dir header: %v", err)
-	}
-	for name, content := range files {
-		if err := tw.WriteHeader(&tar.Header{
-			Name:     "owner-repo-abc123/" + name,
-			Size:     int64(len(content)),
-			Mode:     0o644,
-			Typeflag: tar.TypeReg,
-		}); err != nil {
-			t.Fatalf("write header: %v", err)
-		}
-		if _, err := tw.Write([]byte(content)); err != nil {
-			t.Fatalf("write content: %v", err)
+	dir := t.TempDir()
+	bare := filepath.Join(dir, "test.git")
+
+	work := filepath.Join(dir, "work")
+	for _, argv := range [][]string{
+		{"git", "init", work},
+		{"git", "-C", work, "commit", "--allow-empty", "-m", "initial"},
+		{"git", "clone", "--bare", work, bare},
+		{"git", "-C", bare, "update-server-info"},
+	} {
+		cmd := exec.Command(argv[0], argv[1:]...)
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=test",
+			"GIT_AUTHOR_EMAIL=test@test",
+			"GIT_COMMITTER_NAME=test",
+			"GIT_COMMITTER_EMAIL=test@test",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s: %v\n%s", strings.Join(argv, " "), err, out)
 		}
 	}
-	if err := tw.Close(); err != nil {
-		t.Fatalf("close tar: %v", err)
+	// Enable http.receivepack for smart HTTP.
+	cmd := exec.Command("git", "-C", bare, "config", "http.receivepack", "true")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git config: %v\n%s", err, out)
 	}
-	if err := gw.Close(); err != nil {
-		t.Fatalf("close gzip: %v", err)
+	return bare
+}
+
+// gitHTTPServer returns an httptest.Server serving smart HTTP for bare
+// repos under root. Repos are accessed at /git/<name>/... mirroring the
+// proxy path shape that Px1 will serve.
+func gitHTTPServer(t *testing.T, root string) *httptest.Server {
+	t.Helper()
+	backend, err := exec.LookPath("git-http-backend")
+	if err != nil {
+		// Fall back to the git exec-path location.
+		out, lookErr := exec.Command("git", "--exec-path").Output()
+		if lookErr != nil {
+			t.Skipf("git-http-backend not found: %v", err)
+		}
+		backend = filepath.Join(strings.TrimSpace(string(out)), "git-http-backend")
+		if _, statErr := os.Stat(backend); statErr != nil {
+			t.Skipf("git-http-backend not found at %s", backend)
+		}
 	}
-	return buf.Bytes()
+	handler := &cgi.Handler{
+		Path: backend,
+		Env: []string{
+			"GIT_PROJECT_ROOT=" + root,
+			"GIT_HTTP_EXPORT_ALL=1",
+		},
+	}
+	// Strip /git/ prefix so git-http-backend sees repo-relative paths.
+	mux := http.NewServeMux()
+	mux.Handle("/git/", http.StripPrefix("/git", handler))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 func TestCmdRepoClone(t *testing.T) {
-	tarball := makeTarGz(t, map[string]string{
-		"README.md": "# hello",
-		"main.go":   "package main",
-	})
+	bare := initBareRepo(t)
+	root := filepath.Dir(bare)
+	srv := gitHTTPServer(t, root)
 
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got, want := r.Method, http.MethodGet; got != want {
-			t.Errorf("method = %q, want %q", got, want)
-		}
-		if got, want := r.URL.Path, "/repos/owner/repo/tarball/"; got != want {
-			t.Errorf("path = %q, want %q", got, want)
-		}
-		w.Write(tarball)
-	}))
+	oldProxy := proxyBase
+	t.Cleanup(func() { proxyBase = oldProxy })
+	proxyBase = srv.URL
 
-	dir := filepath.Join(t.TempDir(), "repo")
-	if err := cmdRepoClone(context.Background(), []string{"-dir", dir}); err != nil {
-		t.Fatal(err)
+	// Repo name matches bare dir name (test.git -> test).
+	// Clone URL: <srv>/git/owner/test.git
+	// We name the bare dir to match the owner/repo.git pattern.
+	ownerDir := filepath.Join(root, "owner")
+	if err := os.MkdirAll(ownerDir, 0o755); err != nil {
+		t.Fatalf("mkdir owner: %v", err)
+	}
+	if err := os.Rename(bare, filepath.Join(ownerDir, "repo.git")); err != nil {
+		t.Fatalf("rename bare: %v", err)
 	}
 
-	// Verify files were extracted.
-	data, err := os.ReadFile(filepath.Join(dir, "README.md"))
-	if err != nil {
-		t.Fatalf("read README.md: %v", err)
+	dir := filepath.Join(t.TempDir(), "cloned")
+	if err := cmdRepoClone(context.Background(), []string{"owner/repo", dir}); err != nil {
+		t.Fatalf("cmdRepoClone: %v", err)
 	}
-	if got, want := string(data), "# hello"; got != want {
-		t.Errorf("README.md = %q, want %q", got, want)
-	}
-
-	// Verify git repo was initialized.
+	// Verify .git exists (real clone).
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
-		t.Fatalf(".git directory missing: %v", err)
+		t.Fatalf(".git missing: %v", err)
+	}
+	// Verify origin remote points through the proxy.
+	out, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output()
+	if err != nil {
+		t.Fatalf("git remote get-url: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); !strings.HasPrefix(got, srv.URL) {
+		t.Errorf("origin = %q, want prefix %q", got, srv.URL)
 	}
 }
 
 func TestCmdRepoCloneDefaultDir(t *testing.T) {
-	tarball := makeTarGz(t, map[string]string{"x.txt": "x"})
+	bare := initBareRepo(t)
+	root := filepath.Dir(bare)
+	srv := gitHTTPServer(t, root)
 
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(tarball)
-	}))
+	oldProxy := proxyBase
+	t.Cleanup(func() { proxyBase = oldProxy })
+	proxyBase = srv.URL
 
-	// Run from a temp directory so the default "repo" dir lands there.
+	ownerDir := filepath.Join(root, "org")
+	if err := os.MkdirAll(ownerDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Rename(bare, filepath.Join(ownerDir, "lib.git")); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+
+	// Run from a temp directory so the default dir lands there.
 	orig, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -197,76 +263,23 @@ func TestCmdRepoCloneDefaultDir(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chdir(orig) })
 
-	if err := cmdRepoClone(context.Background(), nil); err != nil {
-		t.Fatal(err)
+	if err := cmdRepoClone(context.Background(), []string{"org/lib"}); err != nil {
+		t.Fatalf("cmdRepoClone: %v", err)
 	}
-
-	if _, err := os.Stat(filepath.Join(tmp, "repo", "x.txt")); err != nil {
-		t.Fatalf("default dir file missing: %v", err)
-	}
-}
-
-func TestCmdRepoCloneHTTPError(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"message":"Not Found"}`))
-	}))
-
-	err := cmdRepoClone(context.Background(), []string{"-dir", t.TempDir()})
-	if err == nil {
-		t.Fatal("want error, got nil")
-	}
-	if !strings.Contains(err.Error(), "404") {
-		t.Errorf("error = %q, want it to contain 404", err)
+	if _, err := os.Stat(filepath.Join(tmp, "lib", ".git")); err != nil {
+		t.Fatalf("default dir .git missing: %v", err)
 	}
 }
 
-func TestExtractTarGzStripsPrefix(t *testing.T) {
-	tarball := makeTarGz(t, map[string]string{
-		"sub/deep.txt": "nested",
-	})
-	dir := t.TempDir()
-	if err := extractTarGz(tarball, dir); err != nil {
-		t.Fatalf("extractTarGz: %v", err)
-	}
-	data, err := os.ReadFile(filepath.Join(dir, "sub", "deep.txt"))
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if got, want := string(data), "nested"; got != want {
-		t.Errorf("content = %q, want %q", got, want)
-	}
-}
-
-func TestExtractTarGzPathTraversal(t *testing.T) {
-	// Craft a tarball with a path-traversal entry.
-	var buf bytes.Buffer
-	gw := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gw)
-	if err := tw.WriteHeader(&tar.Header{
-		Name:     "owner-repo-abc123/../../../etc/passwd",
-		Size:     5,
-		Mode:     0o644,
-		Typeflag: tar.TypeReg,
-	}); err != nil {
-		t.Fatalf("write header: %v", err)
-	}
-	if _, err := tw.Write([]byte("owned")); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatalf("close tar: %v", err)
-	}
-	if err := gw.Close(); err != nil {
-		t.Fatalf("close gzip: %v", err)
-	}
-
-	dir := t.TempDir()
-	err := extractTarGz(buf.Bytes(), dir)
-	if err == nil {
-		t.Fatal("want error for path traversal, got nil")
-	}
-	if !strings.Contains(err.Error(), "escapes target") {
-		t.Errorf("error = %q, want it to contain 'escapes target'", err)
+func TestCmdRepoCloneInvalidRepo(t *testing.T) {
+	for _, repo := range []string{"noslash", "/leading", "trailing/", ""} {
+		args := []string{repo}
+		if repo == "" {
+			args = nil // triggers len(args) < 1
+		}
+		err := cmdRepoClone(context.Background(), args)
+		if err == nil {
+			t.Errorf("cmdRepoClone(%q): want error, got nil", repo)
+		}
 	}
 }

@@ -12,8 +12,8 @@ func TestCmdLabelList(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %q, want GET", r.Method)
 		}
-		if r.URL.Path != "/repos/owner/repo/labels" {
-			t.Errorf("path = %q, want /repos/owner/repo/labels", r.URL.Path)
+		if r.URL.Path != "/gh/repos/owner/repo/labels" {
+			t.Errorf("path = %q, want /gh/repos/owner/repo/labels", r.URL.Path)
 		}
 		w.Write([]byte(`[{"name":"bug","color":"d73a4a","description":"Something isn't working"},{"name":"feature","color":"a2eeef","description":"New feature"}]`))
 	}))
@@ -29,12 +29,12 @@ func TestCmdLabelListPaginated(t *testing.T) {
 	mux := http.NewServeMux()
 	srv.Config.Handler = mux
 
-	mux.HandleFunc("/repos/owner/repo/labels", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/gh/repos/owner/repo/labels", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("page") {
 		case "2":
 			w.Write([]byte(`[{"name":"feature","color":"a2eeef","description":""}]`))
 		default:
-			w.Header().Set("Link", `<`+apiBase+`/repos/owner/repo/labels?page=2>; rel="next"`)
+			w.Header().Set("Link", `<`+proxyBase+`/gh/repos/owner/repo/labels?page=2>; rel="next"`)
 			w.Write([]byte(`[{"name":"bug","color":"d73a4a","description":""}]`))
 		}
 	})

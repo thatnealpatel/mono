@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	apiBase  string
-	upstream string
+	proxyBase string // scheme + authority, no trailing slash
+	upstream  string
 )
 
 func initClient() error {
@@ -21,7 +21,7 @@ func initClient() error {
 	if proxy == "" {
 		return fmt.Errorf("GHFA_PROXY is required; ghfa refuses to make requests without a proxy")
 	}
-	apiBase = strings.TrimRight(proxy, "/")
+	proxyBase = strings.TrimRight(proxy, "/")
 	return nil
 }
 

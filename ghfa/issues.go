@@ -37,7 +37,7 @@ type issueView struct {
 }
 
 func getIssue(ctx context.Context, number int) (*issue, error) {
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "issues", strconv.Itoa(number))
+	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number))
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func getIssue(ctx context.Context, number int) (*issue, error) {
 }
 
 func listComments(ctx context.Context, number int) ([]comment, error) {
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "issues", strconv.Itoa(number), "comments")
+	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number), "comments")
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func cmdIssueCreate(ctx context.Context, args []string) error {
 			}
 		}
 	}
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "issues")
+	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues")
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func cmdIssueEdit(ctx context.Context, args []string) error {
 	if patch.Title == nil && patch.Body == nil {
 		return fmt.Errorf("at least one of -title or -body is required")
 	}
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "issues", strconv.Itoa(number))
+	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number))
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func cmdIssueClose(ctx context.Context, args []string) error {
 		patch = issuePatch{State: &s, StateReason: &r}
 	}
 
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "issues", strconv.Itoa(number))
+	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number))
 	if err != nil {
 		return err
 	}
@@ -236,7 +236,7 @@ func cmdIssueClose(ctx context.Context, args []string) error {
 	}
 
 	if *dupeof > 0 {
-		commentURL, err := url.JoinPath(apiBase, "repos", upstream, "issues", strconv.Itoa(number), "comments")
+		commentURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number), "comments")
 		if err != nil {
 			return err
 		}
@@ -275,7 +275,7 @@ func cmdIssueReopen(ctx context.Context, args []string) error {
 	}
 	s, r := "open", "reopened"
 	patch := issuePatch{State: &s, StateReason: &r}
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "issues", strconv.Itoa(number))
+	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number))
 	if err != nil {
 		return err
 	}
@@ -291,7 +291,7 @@ func cmdIssueReopen(ctx context.Context, args []string) error {
 		return fmt.Errorf("ghfa: decode: %w", err)
 	}
 	if *comment != "" {
-		commentURL, err := url.JoinPath(apiBase, "repos", upstream, "issues", strconv.Itoa(number), "comments")
+		commentURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number), "comments")
 		if err != nil {
 			return err
 		}
@@ -331,7 +331,7 @@ func cmdIssueComment(ctx context.Context, args []string) error {
 		}
 		body = string(md)
 	}
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "issues", strconv.Itoa(number), "comments")
+	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number), "comments")
 	if err != nil {
 		return err
 	}

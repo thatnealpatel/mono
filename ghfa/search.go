@@ -21,7 +21,11 @@ func searchIssues(ctx context.Context, query string) error {
 	params.Set("q", query)
 	params.Set("per_page", "100")
 
-	rawURL := apiBase + "/search/issues?" + params.Encode()
+	base, err := url.JoinPath(proxyBase, "gh", "search", "issues")
+	if err != nil {
+		return err
+	}
+	rawURL := base + "?" + params.Encode()
 	result := &searchResult{Items: []issue{}}
 	for first := true; rawURL != ""; first = false {
 		resp, header, status, err := do(ctx, http.MethodGet, rawURL, nil)

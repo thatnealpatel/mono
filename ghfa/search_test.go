@@ -30,12 +30,12 @@ func TestSearchIssuesPaginated(t *testing.T) {
 	mux := http.NewServeMux()
 	srv.Config.Handler = mux
 
-	mux.HandleFunc("/search/issues", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/gh/search/issues", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("page") {
 		case "2":
 			w.Write([]byte(`{"total_count":99,"incomplete_results":true,"items":[{"number":2}]}`))
 		default:
-			w.Header().Set("Link", `<`+apiBase+`/search/issues?page=2>; rel="next"`)
+			w.Header().Set("Link", `<`+proxyBase+`/gh/search/issues?page=2>; rel="next"`)
 			w.Write([]byte(`{"total_count":2,"incomplete_results":false,"items":[{"number":1}]}`))
 		}
 	})

@@ -14,12 +14,12 @@ func setupTest(t *testing.T, handler http.Handler) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	oldBase, oldUpstream := apiBase, upstream
+	oldBase, oldUpstream := proxyBase, upstream
 	t.Cleanup(func() {
-		apiBase = oldBase
+		proxyBase = oldBase
 		upstream = oldUpstream
 	})
-	apiBase = srv.URL
+	proxyBase = srv.URL
 	upstream = "owner/repo"
 	return srv
 }
@@ -37,7 +37,7 @@ func TestDoSetsHeaders(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
-	_, _, _, err := do(context.Background(), http.MethodGet, apiBase+"/test", nil)
+	_, _, _, err := do(context.Background(), http.MethodGet, proxyBase+"/test", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestDoSetsContentType(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
-	_, _, _, err := do(context.Background(), http.MethodPost, apiBase+"/test", map[string]string{"k": "v"})
+	_, _, _, err := do(context.Background(), http.MethodPost, proxyBase+"/test", map[string]string{"k": "v"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestDoNoContentTypeOnNilBody(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
-	_, _, _, err := do(context.Background(), http.MethodGet, apiBase+"/test", nil)
+	_, _, _, err := do(context.Background(), http.MethodGet, proxyBase+"/test", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 func cmdLabelList(ctx context.Context, args []string) error {
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "labels")
+	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "labels")
 	if err != nil {
 		return err
 	}

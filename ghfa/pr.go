@@ -65,7 +65,7 @@ func cmdPRCreate(ctx context.Context, args []string) error {
 		Base:  baseBranch,
 	}
 
-	rawURL, err := url.JoinPath(apiBase, "repos", upstream, "pulls")
+	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "pulls")
 	if err != nil {
 		return err
 	}

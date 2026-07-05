@@ -15,7 +15,7 @@ func TestCmdPRCreate(t *testing.T) {
 		if got, want := r.Method, http.MethodPost; got != want {
 			t.Errorf("method = %q, want %q", got, want)
 		}
-		if got, want := r.URL.Path, "/repos/owner/repo/pulls"; got != want {
+		if got, want := r.URL.Path, "/gh/repos/owner/repo/pulls"; got != want {
 			t.Errorf("path = %q, want %q", got, want)
 		}
 		var body struct {

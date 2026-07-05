@@ -95,12 +95,12 @@ func TestListCommentsPaginated(t *testing.T) {
 	mux := http.NewServeMux()
 	srv.Config.Handler = mux
 
-	mux.HandleFunc("/repos/owner/repo/issues/7/comments", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/gh/repos/owner/repo/issues/7/comments", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("page") == "2" {
 			w.Write([]byte(`[{"user":{"login":"b","id":2},"created_at":"t2","updated_at":"t2","body":"second"}]`))
 			return
 		}
-		w.Header().Set("Link", `<`+apiBase+`/repos/owner/repo/issues/7/comments?page=2>; rel="next"`)
+		w.Header().Set("Link", `<`+proxyBase+`/gh/repos/owner/repo/issues/7/comments?page=2>; rel="next"`)
 		w.Write([]byte(`[{"user":{"login":"a","id":1},"created_at":"t1","updated_at":"t1","body":"first"}]`))
 	})
 
@@ -147,8 +147,8 @@ func TestCmdCreate(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %q, want POST", r.Method)
 		}
-		if r.URL.Path != "/repos/owner/repo/issues" {
-			t.Errorf("path = %q, want /repos/owner/repo/issues", r.URL.Path)
+		if r.URL.Path != "/gh/repos/owner/repo/issues" {
+			t.Errorf("path = %q, want /gh/repos/owner/repo/issues", r.URL.Path)
 		}
 		var req issueRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -292,8 +292,8 @@ func TestCmdEdit(t *testing.T) {
 		if r.Method != http.MethodPatch {
 			t.Errorf("method = %q, want PATCH", r.Method)
 		}
-		if r.URL.Path != "/repos/owner/repo/issues/7" {
-			t.Errorf("path = %q, want /repos/owner/repo/issues/7", r.URL.Path)
+		if r.URL.Path != "/gh/repos/owner/repo/issues/7" {
+			t.Errorf("path = %q, want /gh/repos/owner/repo/issues/7", r.URL.Path)
 		}
 		var m map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
@@ -434,7 +434,7 @@ func TestCmdCloseDupeof(t *testing.T) {
 	mux := http.NewServeMux()
 	srv.Config.Handler = mux
 
-	mux.HandleFunc("/repos/owner/repo/issues/7", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/gh/repos/owner/repo/issues/7", func(w http.ResponseWriter, r *http.Request) {
 		var m map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -447,7 +447,7 @@ func TestCmdCloseDupeof(t *testing.T) {
 		}
 		w.Write([]byte(`{"number":7,"html_url":"h","state":"closed"}`))
 	})
-	mux.HandleFunc("/repos/owner/repo/issues/7/comments", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/gh/repos/owner/repo/issues/7/comments", func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.Method, http.MethodPost; got != want {
 			t.Errorf("method = %q, want %q", got, want)
 		}
@@ -573,10 +573,10 @@ func TestCmdReopenWithComment(t *testing.T) {
 	mux := http.NewServeMux()
 	srv.Config.Handler = mux
 
-	mux.HandleFunc("/repos/owner/repo/issues/7", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/gh/repos/owner/repo/issues/7", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"number":7,"html_url":"h","state":"open"}`))
 	})
-	mux.HandleFunc("/repos/owner/repo/issues/7/comments", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/gh/repos/owner/repo/issues/7/comments", func(w http.ResponseWriter, r *http.Request) {
 		var req commentRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -628,8 +628,8 @@ func TestCmdComment(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %q, want POST", r.Method)
 		}
-		if r.URL.Path != "/repos/owner/repo/issues/7/comments" {
-			t.Errorf("path = %q, want /repos/owner/repo/issues/7/comments", r.URL.Path)
+		if r.URL.Path != "/gh/repos/owner/repo/issues/7/comments" {
+			t.Errorf("path = %q, want /gh/repos/owner/repo/issues/7/comments", r.URL.Path)
 		}
 		var req commentRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
