@@ -31,10 +31,13 @@ type user struct {
 }
 
 type comment struct {
-	User      *user  `json:"user"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
-	Body      string `json:"body"`
+	ID              *int    `json:"id,omitempty"`
+	User            *user   `json:"user"`
+	CreatedAt       string  `json:"created_at"`
+	UpdatedAt       string  `json:"updated_at"`
+	Body            string  `json:"body"`
+	IsMinimized     *bool   `json:"is_minimized,omitempty"`
+	MinimizedReason *string `json:"minimized_reason,omitempty"`
 }
 
 type searchResult struct {

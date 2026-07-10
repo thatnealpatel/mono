@@ -12,7 +12,7 @@ import (
 
 func TestCmdView(t *testing.T) {
 	const issueJSON = `{"number":7,"title":"boom","state":"open","labels":[],"locked":false,"assignees":[],"milestone":null,"comments":0,"created_at":"2026-07-01T00:00:00Z","updated_at":"2026-07-01T00:00:00Z","closed_at":null,"assignee":null,"body":"the body","closed_by":null}`
-	const commentsJSON = `[{"user":{"login":"neal","id":1},"created_at":"2026-07-01T01:00:00Z","updated_at":"2026-07-01T01:00:00Z","body":"first"}]`
+	const commentsJSON = `[{"id":42,"user":{"login":"neal","id":1},"created_at":"2026-07-01T01:00:00Z","updated_at":"2026-07-01T01:00:00Z","body":"first","is_minimized":false,"minimized_reason":""}]`
 
 	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -117,7 +117,7 @@ func TestListCommentsPaginated(t *testing.T) {
 }
 
 func TestListCommentsTrimsFields(t *testing.T) {
-	const raw = `[{"id":1,"node_id":"c1","html_url":"h","issue_url":"iu","user":{"login":"neal","id":1,"node_id":"u1"},"created_at":"t","updated_at":"t","author_association":"OWNER","body":"hi","reactions":{"total_count":0}}]`
+	const raw = `[{"id":1,"node_id":"c1","html_url":"h","issue_url":"iu","user":{"login":"neal","id":1,"node_id":"u1"},"created_at":"t","updated_at":"t","author_association":"OWNER","body":"hi","is_minimized":true,"minimized_reason":"outdated","reactions":{"total_count":0}}]`
 	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(raw))
 	}))
@@ -135,7 +135,7 @@ func TestListCommentsTrimsFields(t *testing.T) {
 			t.Errorf("re-marshaled comments contain trimmed field %s: %s", dropped, out)
 		}
 	}
-	for _, kept := range []string{`"login":"neal"`, `"body":"hi"`} {
+	for _, kept := range []string{`"login":"neal"`, `"body":"hi"`, `"id":1`, `"is_minimized":true`, `"minimized_reason":"outdated"`} {
 		if !strings.Contains(string(out), kept) {
 			t.Errorf("re-marshaled comments missing kept field %s: %s", kept, out)
 		}
