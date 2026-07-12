@@ -46,23 +46,19 @@ func gitURL(repo string) (string, error) {
 }
 
 // cmdRepoClone clones a repo through the proxy's smart HTTP surface.
-// Usage: ghfa repo clone <repo> [<dir>]
+// Usage: ghfa <owner/repo> repo clone [<dir>]
 func cmdRepoClone(ctx context.Context, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: ghfa repo clone <owner/repo> [<dir>]")
-	}
-	repo := args[0]
-	parts := strings.SplitN(repo, "/", 2)
+	parts := strings.SplitN(upstream, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return fmt.Errorf("ghfa: invalid repo %q, want owner/repo", repo)
+		return fmt.Errorf("ghfa: invalid repo %q, want owner/repo", upstream)
 	}
 
 	target := parts[1]
-	if len(args) >= 2 {
-		target = args[1]
+	if len(args) >= 1 {
+		target = args[0]
 	}
 
-	cloneURL, err := gitURL(repo)
+	cloneURL, err := gitURL(upstream)
 	if err != nil {
 		return err
 	}

@@ -41,11 +41,6 @@ func run(args []string) error {
 		defer cancel()
 		return cmdSearchIssues(ctx, args[2:])
 	}
-	if len(args) >= 2 && args[0] == "repo" && args[1] == "clone" {
-		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-		defer cancel()
-		return cmdRepoClone(ctx, args[2:])
-	}
 	if !strings.Contains(args[0], "/") {
 		return fmt.Errorf("first argument must be <owner/repo>, got %q\n\n%s", args[0], usage)
 	}
@@ -65,7 +60,11 @@ func run(args []string) error {
 	key := resource + " " + verb
 	for _, cmd := range commands {
 		if cmd.name == key {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			timeout := cmd.timeout
+			if timeout == 0 {
+				timeout = 30 * time.Second
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 			return cmd.run(ctx, rest)
 		}
@@ -94,7 +93,7 @@ label:
   label list                          list repository labels
 repo:
   repo fork                           fork the repository
-  repo clone <owner/repo> [<dir>]     clone via proxy smart HTTP
+  repo clone [<dir>]                  clone via proxy smart HTTP
   repo sync [-branch <name>]          sync fork from upstream (default: main)
 pr:
   pr create -title -head -base [-body|-file]  create a cross-repo PR
@@ -103,20 +102,22 @@ search:
 `
 
 var commands = []command{
-	{"issue view", cmdIssueView},
-	{"issue create", cmdIssueCreate},
-	{"issue edit", cmdIssueEdit},
-	{"issue close", cmdIssueClose},
-	{"issue reopen", cmdIssueReopen},
-	{"issue comment", cmdIssueComment},
-	{"search issues", cmdSearchIssues},
-	{"label list", cmdLabelList},
-	{"repo fork", cmdRepoFork},
-	{"repo sync", cmdRepoSync},
-	{"pr create", cmdPRCreate},
+	{"issue view", cmdIssueView, 0},
+	{"issue create", cmdIssueCreate, 0},
+	{"issue edit", cmdIssueEdit, 0},
+	{"issue close", cmdIssueClose, 0},
+	{"issue reopen", cmdIssueReopen, 0},
+	{"issue comment", cmdIssueComment, 0},
+	{"search issues", cmdSearchIssues, 0},
+	{"label list", cmdLabelList, 0},
+	{"repo fork", cmdRepoFork, 0},
+	{"repo clone", cmdRepoClone, 120 * time.Second},
+	{"repo sync", cmdRepoSync, 0},
+	{"pr create", cmdPRCreate, 0},
 }
 
 type command struct {
-	name string
-	run  func(ctx context.Context, args []string) error
+	name    string
+	run     func(ctx context.Context, args []string) error
+	timeout time.Duration
 }

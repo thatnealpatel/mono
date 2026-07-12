@@ -218,7 +218,10 @@ func TestCmdRepoClone(t *testing.T) {
 	}
 
 	dir := filepath.Join(t.TempDir(), "cloned")
-	if err := cmdRepoClone(context.Background(), []string{"owner/repo", dir}); err != nil {
+	oldUpstream := upstream
+	upstream = "owner/repo"
+	t.Cleanup(func() { upstream = oldUpstream })
+	if err := cmdRepoClone(context.Background(), []string{dir}); err != nil {
 		t.Fatalf("cmdRepoClone: %v", err)
 	}
 	// Verify .git exists (real clone).
@@ -252,6 +255,10 @@ func TestCmdRepoCloneDefaultDir(t *testing.T) {
 		t.Fatalf("rename: %v", err)
 	}
 
+	oldUpstream := upstream
+	upstream = "org/lib"
+	t.Cleanup(func() { upstream = oldUpstream })
+
 	// Run from a temp directory so the default dir lands there.
 	orig, err := os.Getwd()
 	if err != nil {
@@ -263,7 +270,7 @@ func TestCmdRepoCloneDefaultDir(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chdir(orig) })
 
-	if err := cmdRepoClone(context.Background(), []string{"org/lib"}); err != nil {
+	if err := cmdRepoClone(context.Background(), nil); err != nil {
 		t.Fatalf("cmdRepoClone: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(tmp, "lib", ".git")); err != nil {
@@ -272,12 +279,12 @@ func TestCmdRepoCloneDefaultDir(t *testing.T) {
 }
 
 func TestCmdRepoCloneInvalidRepo(t *testing.T) {
+	oldUpstream := upstream
+	t.Cleanup(func() { upstream = oldUpstream })
+
 	for _, repo := range []string{"noslash", "/leading", "trailing/", ""} {
-		args := []string{repo}
-		if repo == "" {
-			args = nil // triggers len(args) < 1
-		}
-		err := cmdRepoClone(context.Background(), args)
+		upstream = repo
+		err := cmdRepoClone(context.Background(), nil)
 		if err == nil {
 			t.Errorf("cmdRepoClone(%q): want error, got nil", repo)
 		}
