@@ -1,0 +1,11 @@
+{
+  "version": 7,
+  "module": "Other.Module",
+  "directImports": [],
+  "decls": {
+    "Plausible.Testable": [[0, 10]]
+  },
+  "references": {
+    "{\"c\":{\"m\":\"Foreign.Module\",\"n\":\"Plausible.Testable\"}}": {"definition": [[0, 20]]}
+  }
+}

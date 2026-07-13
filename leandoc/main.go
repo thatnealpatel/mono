@@ -190,7 +190,25 @@ func buildIndex() error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "indexed %d declarations\n", len(decls))
+	names, err := walkIleanNames(src)
+	if err != nil {
+		return err
+	}
+
+	namesPath := filepath.Join(cache, "names.gob")
+	f, err = os.Create(namesPath)
+	if err != nil {
+		return err
+	}
+	if err := gob.NewEncoder(f).Encode(names); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "indexed %d declarations, %d compiled names\n", len(decls), len(names))
 	return nil
 }
 

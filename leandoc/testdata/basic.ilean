@@ -1,0 +1,13 @@
+{
+  "version": 7,
+  "module": "Plausible.Testable",
+  "directImports": [],
+  "decls": {
+    "Plausible.Testable": [[0, 100]],
+    "Plausible.Testable.run": [[0, 200]]
+  },
+  "references": {
+    "{\"c\":{\"m\":\"Init.Core\",\"n\":\"Sum\"}}": {"definition": [[0, 50]]},
+    "{\"c\":{\"m\":\"Init.Classical\",\"n\":\"Classical.em\"}}": {"usages": [[0, 80]]}
+  }
+}

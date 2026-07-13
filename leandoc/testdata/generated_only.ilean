@@ -1,0 +1,12 @@
+{
+  "version": 7,
+  "module": "Mathlib.Data.Fintype.BigOperators",
+  "directImports": [],
+  "decls": {
+    "Fin.prod_univ_eq_prod_range": [[0, 226]]
+  },
+  "references": {
+    "{\"c\":{\"m\":\"Mathlib.Data.Fintype.BigOperators\",\"n\":\"Fin.sum_univ_eq_sum_range\"}}": {"definition": [[0, 230]]},
+    "{\"c\":{\"m\":\"Mathlib.Topology.Algebra.InfiniteSum\",\"n\":\"Summable.tsum_eq_zero_add\"}}": {"usages": [[0, 300]]}
+  }
+}
