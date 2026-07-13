@@ -82,6 +82,38 @@ func srcDir() (string, error) {
 	return filepath.Join(dotLake, "packages"), nil
 }
 
+func mangleToolchain(raw string) string {
+	s := strings.ReplaceAll(raw, "/", "--")
+	return strings.ReplaceAll(s, ":", "---")
+}
+
+// toolchainDir derives the elan toolchain root from the
+// `lean-toolchain` file adjacent to the `.lake` directory.
+func toolchainDir() (string, error) {
+	dotLake := os.Getenv("LEANDOC_DOT_LAKE")
+	if dotLake == "" {
+		return "", fmt.Errorf("LEANDOC_DOT_LAKE is not set")
+	}
+	tcPath := filepath.Join(filepath.Dir(dotLake), "lean-toolchain")
+	data, err := os.ReadFile(tcPath)
+	if err != nil {
+		return "", fmt.Errorf("read lean-toolchain: %w", err)
+	}
+	raw := strings.TrimSpace(string(data))
+	if raw == "" {
+		return "", fmt.Errorf("lean-toolchain is empty")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(home, ".elan", "toolchains", mangleToolchain(raw))
+	if _, err := os.Stat(dir); err != nil {
+		return "", fmt.Errorf("toolchain dir: %w", err)
+	}
+	return dir, nil
+}
+
 func cacheDir() (string, error) {
 	dir := os.Getenv("LEANDOC_CACHE_DIR")
 	if dir == "" {
@@ -103,6 +135,8 @@ func ensureIndex() error {
 	bm25Path := filepath.Join(cache, "bm25.gob")
 	info, err := os.Stat(bm25Path)
 	if err == nil {
+		cacheMod := info.ModTime()
+
 		src, err := srcDir()
 		if err != nil {
 			return err
@@ -111,22 +145,40 @@ func ensureIndex() error {
 		if err != nil {
 			return err
 		}
-		if info.ModTime().After(srcInfo.ModTime()) {
-			return nil
+		if !cacheMod.After(srcInfo.ModTime()) {
+			return buildIndex()
 		}
+
+		tcDir, err := toolchainDir()
+		if err != nil {
+			return err
+		}
+		tcSrcInfo, err := os.Stat(filepath.Join(tcDir, "src", "lean"))
+		if err != nil {
+			return err
+		}
+		if !cacheMod.After(tcSrcInfo.ModTime()) {
+			return buildIndex()
+		}
+
+		dotLake := os.Getenv("LEANDOC_DOT_LAKE")
+		tcFilePath := filepath.Join(filepath.Dir(dotLake), "lean-toolchain")
+		tcFileInfo, err := os.Stat(tcFilePath)
+		if err != nil {
+			return err
+		}
+		if !cacheMod.After(tcFileInfo.ModTime()) {
+			return buildIndex()
+		}
+
+		return nil
 	}
 
 	return buildIndex()
 }
 
-func buildIndex() error {
-	src, err := srcDir()
-	if err != nil {
-		return err
-	}
-
-	var decls []Declaration
-	err = filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+func walkLeanSources(root string, relBase string, decls []Declaration) ([]Declaration, error) {
+	return decls, filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -137,7 +189,7 @@ func buildIndex() error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(src, path)
+		rel, err := filepath.Rel(relBase, path)
 		if err != nil {
 			rel = path
 		}
@@ -145,8 +197,30 @@ func buildIndex() error {
 		decls = append(decls, fileDecls...)
 		return nil
 	})
+}
+
+func buildIndex() error {
+	src, err := srcDir()
 	if err != nil {
 		return err
+	}
+
+	var decls []Declaration
+	decls, err = walkLeanSources(src, src, decls)
+	if err != nil {
+		return err
+	}
+
+	tcDir, err := toolchainDir()
+	if err != nil {
+		return err
+	}
+	tcSrc := filepath.Join(tcDir, "src", "lean")
+	for _, sub := range []string{"Init", "Std"} {
+		decls, err = walkLeanSources(filepath.Join(tcSrc, sub), tcSrc, decls)
+		if err != nil {
+			return err
+		}
 	}
 
 	docs := make([]string, len(decls))
@@ -193,6 +267,17 @@ func buildIndex() error {
 	names, err := walkIleanNames(src)
 	if err != nil {
 		return err
+	}
+
+	tcLib := filepath.Join(tcDir, "lib", "lean")
+	tcNames, err := walkIleanNames(tcLib)
+	if err != nil {
+		return err
+	}
+	for name, mod := range tcNames {
+		if _, ok := names[name]; !ok {
+			names[name] = mod
+		}
 	}
 
 	namesPath := filepath.Join(cache, "names.gob")
