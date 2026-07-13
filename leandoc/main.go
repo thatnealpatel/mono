@@ -222,6 +222,77 @@ type SearchResult struct {
 	Score     float64 `json:"score,omitempty"`
 }
 
+type Envelope struct {
+	Mode       string         `json:"mode"`
+	Matches    []SearchResult `json:"matches"`
+	Candidates []string       `json:"candidates,omitempty"`
+}
+
+func isIdentQuery(q string) bool {
+	return !strings.ContainsAny(q, " \t\n\r")
+}
+
+func buildNameIndex(decls []Declaration) map[string][]int {
+	idx := make(map[string][]int)
+	for i := range decls {
+		idx[decls[i].Name] = append(idx[decls[i].Name], i)
+	}
+	return idx
+}
+
+// finalComponent returns the last dot-separated segment of a qualified name.
+func finalComponent(name string) string {
+	if i := strings.LastIndexByte(name, '.'); i >= 0 {
+		return name[i+1:]
+	}
+	return name
+}
+
+func moduleToFile(mod string) string {
+	return strings.ReplaceAll(mod, ".", "/") + ".lean"
+}
+
+func findCandidates(query string, decls []Declaration, compiledNames map[string]string) []string {
+	target := strings.ToLower(finalComponent(query))
+	seen := make(map[string]bool)
+	var out []string
+	for i := range decls {
+		if strings.EqualFold(finalComponent(decls[i].Name), target) {
+			if !seen[decls[i].Name] {
+				seen[decls[i].Name] = true
+				out = append(out, decls[i].Name)
+			}
+		}
+		if len(out) >= 10 {
+			return out
+		}
+	}
+	for name := range compiledNames {
+		if len(out) >= 10 {
+			break
+		}
+		if strings.EqualFold(finalComponent(name), target) && !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func loadCompiledNames(cache string) (map[string]string, error) {
+	namesPath := filepath.Join(cache, "names.gob")
+	f, err := os.Open(namesPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var names map[string]string
+	if err := gob.NewDecoder(f).Decode(&names); err != nil {
+		return nil, err
+	}
+	return names, nil
+}
+
 func search(query string, verbose bool) error {
 	cache, err := cacheDir()
 	if err != nil {
@@ -242,6 +313,10 @@ func search(query string, verbose bool) error {
 	}
 	f.Close()
 
+	if isIdentQuery(query) {
+		return searchIdent(query, decls, cache)
+	}
+
 	tok := LeanTokenizer{}
 	bm := ranking.NewBM25(&ranking.BM25Params{K1: 1.2, B: 0.75, Tokenizer: tok})
 	f, err = os.Open(bm25Path)
@@ -255,11 +330,10 @@ func search(query string, verbose bool) error {
 	f.Close()
 
 	results := bm.Search(query)
-
-	out := make([]SearchResult, len(results))
+	matches := make([]SearchResult, len(results))
 	for i, r := range results {
 		d := &decls[r.Index]
-		out[i] = SearchResult{
+		matches[i] = SearchResult{
 			Name:      d.Name,
 			Kind:      d.Kind,
 			Signature: d.Signature,
@@ -269,11 +343,52 @@ func search(query string, verbose bool) error {
 			Score:     r.Score,
 		}
 	}
-
 	if !verbose {
-		for i := range out {
-			out[i].Score = 0
+		for i := range matches {
+			matches[i].Score = 0
 		}
 	}
-	return json.NewEncoder(os.Stdout).Encode(out)
+
+	env := Envelope{Mode: "search", Matches: matches}
+	return json.NewEncoder(os.Stdout).Encode(env)
+}
+
+func searchIdent(query string, decls []Declaration, cache string) error {
+	nameIdx := buildNameIndex(decls)
+
+	if indices, ok := nameIdx[query]; ok {
+		matches := make([]SearchResult, len(indices))
+		for i, idx := range indices {
+			d := &decls[idx]
+			matches[i] = SearchResult{
+				Name:      d.Name,
+				Kind:      d.Kind,
+				Signature: d.Signature,
+				Docstring: d.Docstring,
+				File:      d.File,
+				Line:      d.Line,
+			}
+		}
+		env := Envelope{Mode: "exact", Matches: matches}
+		return json.NewEncoder(os.Stdout).Encode(env)
+	}
+
+	compiledNames, err := loadCompiledNames(cache)
+	if err != nil {
+		return err
+	}
+
+	if mod, ok := compiledNames[query]; ok {
+		matches := []SearchResult{{
+			Name: query,
+			Kind: "generated",
+			File: moduleToFile(mod),
+		}}
+		env := Envelope{Mode: "exact", Matches: matches}
+		return json.NewEncoder(os.Stdout).Encode(env)
+	}
+
+	candidates := findCandidates(query, decls, compiledNames)
+	env := Envelope{Mode: "miss", Matches: []SearchResult{}, Candidates: candidates}
+	return json.NewEncoder(os.Stdout).Encode(env)
 }
