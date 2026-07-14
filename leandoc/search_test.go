@@ -258,6 +258,61 @@ func TestSearchIdentMiss(t *testing.T) {
 	}
 }
 
+func TestSearchIdentExactBody(t *testing.T) {
+	root := t.TempDir()
+	dotLake := filepath.Join(root, ".lake")
+	pkgDir := filepath.Join(dotLake, "packages")
+	dataDir := filepath.Join(pkgDir, "Init", "Data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	t.Setenv("LEANDOC_DOT_LAKE", dotLake)
+
+	src := "theorem Nat.add_comm (n m : Nat) : n + m = m + n := by\n  omega\n\n@[simp]\ndef Nat.succ_pred (n : Nat) : n > 0 → n.pred.succ = n := by\n  omega\n"
+	if err := os.WriteFile(filepath.Join(dataDir, "Nat.lean"), []byte(src), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+
+	decls := []Declaration{
+		{Name: "Nat.add_comm", Kind: "theorem", Signature: "theorem Nat.add_comm (n m : Nat) : n + m = m + n", File: "Init/Data/Nat.lean", Line: 1},
+		{Name: "Nat.succ_pred", Kind: "def", Signature: "def Nat.succ_pred (n : Nat) : n > 0 → n.pred.succ = n", File: "Init/Data/Nat.lean", Line: 5},
+	}
+	names := map[string]string{
+		"Nat.generated_thing": "Init.Data.Nat",
+	}
+
+	t.Run("SourceIndexed", func(t *testing.T) {
+		env := runSearchIdent(t, "Nat.add_comm", decls, names)
+		if got, want := env.Mode, "exact"; got != want {
+			t.Fatalf("mode: got %q, want %q", got, want)
+		}
+		if got, want := len(env.Matches), 1; got != want {
+			t.Fatalf("matches: got %d, want %d", got, want)
+		}
+		if got, want := env.Matches[0].Body, "theorem Nat.add_comm (n m : Nat) : n + m = m + n := by\n  omega"; got != want {
+			t.Errorf("body: got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("StopsAtAttribute", func(t *testing.T) {
+		env := runSearchIdent(t, "Nat.add_comm", decls, names)
+		body := env.Matches[0].Body
+		if strings.Contains(body, "@[simp]") {
+			t.Errorf("body leaked past @[simp] boundary: %q", body)
+		}
+	})
+
+	t.Run("GeneratedNoBody", func(t *testing.T) {
+		env := runSearchIdent(t, "Nat.generated_thing", decls, names)
+		if got, want := len(env.Matches), 1; got != want {
+			t.Fatalf("matches: got %d, want %d", got, want)
+		}
+		if got, want := env.Matches[0].Body, ""; got != want {
+			t.Errorf("body: got %q, want %q", got, want)
+		}
+	})
+}
+
 func TestSearchIdentMissNoCandidates(t *testing.T) {
 	decls := []Declaration{
 		{Name: "Foo.bar", Kind: "def"},
