@@ -1,22 +1,19 @@
-// Package main implements a thin client
-// around the teorth/erdosproblems repo
-// for metadata and fetching upstream Erdos
-// problems.
+// Package main implements a dual-mode client for
+// Erdos problem metadata and upstream fetching.
 //
-// The LaTeX endpoint response is tokenzied
-// using golang.org/x/net/html. The problem
-// metadata is tokenized using the default
-// tokenizer in patel.codes/ranking for vector
-// search.
+// When RETRIEVAL_HOST is set, list and search POST
+// the retrieval wire format to $RETRIEVAL_HOST/erdos.
+// Otherwise they use patel.codes/retrieval locally.
 //
-// Similarly to patel.codes/oeis, a 'fetched'
-// tombstone prevents upstream from being hit
-// more than once per day and each problem
-// from itself being queried upstream more
-// than once per day.
+// The fetch command always hits erdosproblems.com
+// directly. The LaTeX endpoint response is tokenized
+// using golang.org/x/net/html, and a 'fetched'
+// tombstone prevents each problem from being queried
+// upstream more than once per day.
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -32,8 +29,7 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
-	"gopkg.in/yaml.v3"
-	"patel.codes/ranking"
+	"patel.codes/retrieval"
 )
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
@@ -50,9 +46,11 @@ func main() {
 		erdosCacheDir = filepath.Join(base, "erdos")
 	}
 
-	if err := ensureRepo(); err != nil {
-		fmt.Fprintf(os.Stderr, "erdos: %v\n", err)
-		os.Exit(1)
+	if os.Getenv("RETRIEVAL_HOST") == "" {
+		if err := ensureRepo(); err != nil {
+			fmt.Fprintf(os.Stderr, "erdos: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	var err error
@@ -102,84 +100,50 @@ const usage = `usage: erdos <command> [args]
   fetch <N>         fetch problem and comments from erdosproblems.com
 `
 
-type Problem struct {
-	Number  string   `yaml:"number"  json:"number"`
-	Prize   string   `yaml:"prize"   json:"prize"`
-	Status  Status   `yaml:"status"  json:"status"`
-	OEIS    []string `yaml:"oeis"    json:"oeis"`
-	Tags    []string `yaml:"tags"    json:"tags"`
-	Comment string   `yaml:"comments" json:"comments,omitempty"`
-	Formal  Formal   `yaml:"formalized" json:"formalized"`
-}
-
-type Status struct {
-	State      string `yaml:"state"       json:"state"`
-	LastUpdate string `yaml:"last_update" json:"last_update"`
-	Note       string `yaml:"note,omitempty" json:"note,omitempty"`
-}
-
-type Formal struct {
-	State      string `yaml:"state"       json:"state"`
-	LastUpdate string `yaml:"last_update" json:"last_update"`
-}
-
-func loadProblems() ([]Problem, error) {
-	data, err := os.ReadFile(filepath.Join(erdosRepoDir, "data", "problems.yaml"))
-	if err != nil {
-		return nil, err
-	}
-	var problems []Problem
-	if err := yaml.Unmarshal(data, &problems); err != nil {
-		return nil, err
-	}
-	return problems, nil
-}
-
 func cmdList() error {
-	problems, err := loadProblems()
+	if host := os.Getenv("RETRIEVAL_HOST"); host != "" {
+		return postRemote(host, "list", "")
+	}
+	store, err := retrieval.NewErdos(erdosRepoDir, 20)
 	if err != nil {
 		return err
 	}
-	out := struct {
-		Results  int       `json:"results"`
-		Problems []Problem `json:"problems"`
-	}{len(problems), problems}
-	return json.NewEncoder(os.Stdout).Encode(out)
+	return json.NewEncoder(os.Stdout).Encode(store.List())
 }
 
 func cmdSearch(query string) error {
-	problems, err := loadProblems()
+	if host := os.Getenv("RETRIEVAL_HOST"); host != "" {
+		return postRemote(host, "search", query)
+	}
+	store, err := retrieval.NewErdos(erdosRepoDir, 20)
 	if err != nil {
 		return err
 	}
+	return json.NewEncoder(os.Stdout).Encode(store.Search(query))
+}
 
-	docs := make([]string, len(problems))
-	for i, p := range problems {
-		docs[i] = p.Comment + " " + strings.Join(p.Tags, " ")
+func postRemote(host, subcommand, query string) error {
+	body, err := json.Marshal(struct {
+		Subcommand string `json:"subcommand"`
+		Query      string `json:"query"`
+	}{subcommand, query})
+	if err != nil {
+		return err
 	}
-
-	idx := ranking.NewBM25(nil)
-	idx.Build(docs)
-	results := idx.Search(query)
-
-	type match struct {
-		Problem
-		Score float64 `json:"score"`
+	resp, err := httpClient.Post(host+"/erdos", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
 	}
-	matches := make([]match, len(results))
-	for i, r := range results {
-		matches[i] = match{problems[r.Index], r.Score}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("retrieval returned %s (body unreadable: %w)", resp.Status, err)
+		}
+		return fmt.Errorf("retrieval returned %s: %s", resp.Status, bytes.TrimSpace(msg))
 	}
-	if len(matches) > 20 {
-		matches = matches[:20]
-	}
-
-	out := struct {
-		Query   string  `json:"query"`
-		Results int     `json:"results"`
-		Matches []match `json:"matches"`
-	}{query, len(matches), matches}
-	return json.NewEncoder(os.Stdout).Encode(out)
+	_, err = io.Copy(os.Stdout, resp.Body)
+	return err
 }
 
 func ensureRepo() error {

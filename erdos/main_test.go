@@ -2,28 +2,33 @@ package main
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"patel.codes/retrieval"
 )
 
 func TestSearchMatchFields(t *testing.T) {
-	p := Problem{
-		Number: "165",
-		Tags:   []string{"combinatorics"},
-		Status: Status{State: "open"},
+	m := retrieval.ErdosMatch{
+		ErdosProblem: retrieval.ErdosProblem{
+			Number: "165",
+			Tags:   []string{"combinatorics"},
+			Status: retrieval.ErdosStatus{State: "open"},
+		},
+		Score: 1.5,
 	}
-	type match struct {
-		Problem
-		Score float64 `json:"score"`
-	}
-	data, err := json.Marshal(match{p, 1.5})
+	data, err := json.Marshal(m)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("marshal: %v", err)
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
-		t.Fatal(err)
+		t.Fatalf("unmarshal: %v", err)
 	}
 	for _, key := range []string{"number", "tags", "score"} {
 		if _, ok := fields[key]; !ok {
@@ -32,6 +37,116 @@ func TestSearchMatchFields(t *testing.T) {
 	}
 	if _, ok := fields["problem"]; ok {
 		t.Error("match has nested problem wrapper")
+	}
+}
+
+func TestRemoteList(t *testing.T) {
+	want := `{"results":1,"problems":[{"number":"42"}]}` + "\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/erdos" {
+			http.NotFound(w, r)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		var req struct {
+			Subcommand string `json:"subcommand"`
+			Query      string `json:"query"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		if got, wantSub := req.Subcommand, "list"; got != wantSub {
+			t.Errorf("subcommand = %q, want %q", got, wantSub)
+		}
+		io.WriteString(w, want)
+	}))
+	defer srv.Close()
+	t.Setenv("RETRIEVAL_HOST", srv.URL)
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+	if err := cmdList(); err != nil {
+		os.Stdout = old
+		t.Fatalf("cmdList: %v", err)
+	}
+	w.Close()
+	os.Stdout = old
+	got, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(got) != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestRemoteSearch(t *testing.T) {
+	want := `{"query":"graphs","results":0,"truncated":false,"matches":[]}` + "\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		var req struct {
+			Subcommand string `json:"subcommand"`
+			Query      string `json:"query"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		if got, wantSub := req.Subcommand, "search"; got != wantSub {
+			t.Errorf("subcommand = %q, want %q", got, wantSub)
+		}
+		if got, wantQ := req.Query, "graphs"; got != wantQ {
+			t.Errorf("query = %q, want %q", got, wantQ)
+		}
+		io.WriteString(w, want)
+	}))
+	defer srv.Close()
+	t.Setenv("RETRIEVAL_HOST", srv.URL)
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stdout = w
+	if err := cmdSearch("graphs"); err != nil {
+		os.Stdout = old
+		t.Fatalf("cmdSearch: %v", err)
+	}
+	w.Close()
+	os.Stdout = old
+	got, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(got) != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestRemoteError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "store unavailable", 503)
+	}))
+	defer srv.Close()
+	t.Setenv("RETRIEVAL_HOST", srv.URL)
+	err := cmdList()
+	if err == nil {
+		t.Fatal("expected error for 503 response")
+	}
+	if got, want := err.Error(), "retrieval returned"; !strings.Contains(got, want) {
+		t.Errorf("error = %q, want substring %q", got, want)
 	}
 }
 

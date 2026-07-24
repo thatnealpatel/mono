@@ -1,10 +1,16 @@
 module patel.codes/erdos
 
-go 1.26.3
+go 1.26.5
 
 require (
-	golang.org/x/net v0.55.0
-	gopkg.in/yaml.v3 v3.0.1
+	golang.org/x/net v0.57.0
+	patel.codes/retrieval v0.0.0-20260724190650-56336331eb8c
 )
 
-require patel.codes/ranking v0.0.0-20260531134839-00144b50d8da
+require (
+	github.com/dustin/go-wikiparse v0.0.0-20250818020950-367bf091230b // indirect
+	github.com/kr/text v0.2.0 // indirect
+	github.com/rogpeppe/go-internal v1.15.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+	patel.codes/ranking v0.0.0-20260714005642-ac3ee760d9fd // indirect
+)
