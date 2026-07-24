@@ -248,17 +248,30 @@ func htmlToText(s string) string {
 	z := html.NewTokenizer(strings.NewReader(s))
 	var b strings.Builder
 	var skip int
+	var inCode bool
 	for {
 		switch z.Next() {
 		case html.ErrorToken:
 			return b.String()
 		case html.StartTagToken:
-			name, _ := z.TagName()
+			name, hasAttr := z.TagName()
 			tag := string(name)
 			if wikiSkipElements[tag] {
 				skip++
 			}
-			if skip == 0 {
+			if wikiCodeElements[tag] && skip == 0 {
+				lang := ""
+				for hasAttr {
+					var k, v []byte
+					k, v, hasAttr = z.TagAttr()
+					if string(k) == "lang" {
+						lang = string(v)
+					}
+				}
+				b.WriteString("\n```" + lang + "\n")
+				inCode = true
+			}
+			if skip == 0 && !inCode {
 				switch tag {
 				case "br", "p", "div", "li", "tr", "dd", "dt":
 					b.WriteByte('\n')
@@ -266,8 +279,13 @@ func htmlToText(s string) string {
 			}
 		case html.EndTagToken:
 			name, _ := z.TagName()
-			if wikiSkipElements[string(name)] && skip > 0 {
+			tag := string(name)
+			if wikiSkipElements[tag] && skip > 0 {
 				skip--
+			}
+			if wikiCodeElements[tag] && inCode {
+				b.WriteString("\n```\n")
+				inCode = false
 			}
 		case html.TextToken:
 			if skip == 0 {
@@ -279,7 +297,11 @@ func htmlToText(s string) string {
 
 var wikiSkipElements = map[string]bool{
 	"ref": true, "gallery": true, "nowiki": true,
-	"score": true, "source": true, "syntaxhighlight": true,
+	"score": true,
+}
+
+var wikiCodeElements = map[string]bool{
+	"source": true, "syntaxhighlight": true,
 }
 
 func (w *Wiki) Links(title string) (WikiLinksResult, error) {

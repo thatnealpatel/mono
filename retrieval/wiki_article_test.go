@@ -163,6 +163,11 @@ func TestWikiClean(t *testing.T) {
 		{"TemplateRemoved", "Keep {{delete me}}", "Keep"},
 		{"InlineMath", "Energy <math>E=mc^2</math> here.", "Energy $E=mc^2$ here."},
 		{"MvarTemplate", "The variable {{mvar|n}} counts.", "The variable $n$ counts."},
+		{"SyntaxHighlight", `Code:<syntaxhighlight lang="verilog">wire a;</syntaxhighlight>done.`, "Code:\n```verilog\nwire a;\n```\ndone."},
+		{"SourceTag", `Code:<source lang="python">x = 1</source>done.`, "Code:\n```python\nx = 1\n```\ndone."},
+		{"SyntaxHighlightNoLang", `Code:<syntaxhighlight>x = 1</syntaxhighlight>done.`, "Code:\n```\nx = 1\n```\ndone."},
+		{"SyntaxHighlightInsideRef", `See<ref>Example: <syntaxhighlight lang="c">int x;</syntaxhighlight></ref> end.`, "See end."},
+		{"OrphanEndTag", `Hello</syntaxhighlight>world`, "Helloworld"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
