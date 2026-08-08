@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -10,28 +11,37 @@ import (
 	"testing"
 )
 
-func TestCmdView(t *testing.T) {
-	const issueJSON = `{"number":7,"title":"boom","state":"open","labels":[],"locked":false,"assignees":[],"milestone":null,"comments":0,"created_at":"2026-07-01T00:00:00Z","updated_at":"2026-07-01T00:00:00Z","closed_at":null,"assignee":null,"body":"the body","closed_by":null}`
-	const commentsJSON = `[{"id":42,"user":{"login":"neal","id":1},"created_at":"2026-07-01T01:00:00Z","updated_at":"2026-07-01T01:00:00Z","body":"first","is_minimized":false,"minimized_reason":""}]`
+type issueViewRecorder struct {
+	t        *testing.T
+	requests int
+}
 
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			t.Errorf("method = %q, want GET", r.Method)
-		}
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/issues/7/comments"):
-			w.Write([]byte(commentsJSON))
-		case strings.HasSuffix(r.URL.Path, "/issues/7"):
-			w.Write([]byte(issueJSON))
-		default:
-			t.Errorf("unexpected path %q", r.URL.Path)
-			http.NotFound(w, r)
-		}
-	}))
+func (rec *issueViewRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	rec.requests++
+	if got, want := r.Method, http.MethodGet; got != want {
+		rec.t.Errorf("method = %q, want %q", got, want)
+	}
+	if got, want := r.URL.Path, "/gh/repos/owner/repo/issues/7"; got != want {
+		rec.t.Errorf("path = %q, want %q", got, want)
+	}
+	w.Write([]byte(`{"issue":{"number":7,"proxy_issue_field":"kept"},"timeline":[{"event":"commented","proxy_event_field":{"nested":true}}]}`))
+}
 
-	err := cmdIssueView(context.Background(), []string{"7"})
-	if err != nil {
-		t.Fatal(err)
+func TestCmdViewPrintsRawEnvelopeWithOneRequest(t *testing.T) {
+	recorder := &issueViewRecorder{t: t}
+	setupTest(t, recorder)
+
+	var out bytes.Buffer
+	if err := cmdIssueViewTo(t.Context(), &out, []string{"7"}); err != nil {
+		t.Fatalf("command: %v", err)
+	}
+	got := out.String()
+	const want = "{\n  \"issue\": {\n    \"number\": 7,\n    \"proxy_issue_field\": \"kept\"\n  },\n  \"timeline\": [\n    {\n      \"event\": \"commented\",\n      \"proxy_event_field\": {\n        \"nested\": true\n      }\n    }\n  ]\n}\n"
+	if got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+	if got, want := recorder.requests, 1; got != want {
+		t.Errorf("requests = %d, want %d", got, want)
 	}
 }
 
@@ -54,90 +64,6 @@ func TestCmdViewBadArgs(t *testing.T) {
 	for _, args := range [][]string{nil, {"a", "b"}, {"abc"}} {
 		if err := cmdIssueView(context.Background(), args); err == nil {
 			t.Errorf("cmdIssueView(%v) = nil, want error", args)
-		}
-	}
-}
-
-func TestCmdViewTrimsFields(t *testing.T) {
-	const raw = `{"url":"u","html_url":"h","id":999,"node_id":"n","number":7,"title":"boom","user":{"login":"x","id":1,"node_id":"u1"},"labels":[{"id":1,"node_id":"l1","url":"u","name":"bug","color":"d73a4a","default":true,"description":"broke"}],"state":"open","locked":false,"assignees":[],"milestone":null,"comments":0,"created_at":"t","updated_at":"t","closed_at":null,"assignee":null,"author_association":"OWNER","body":"b","closed_by":null,"state_reason":null,"reactions":{"total_count":0}}`
-
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/comments"):
-			w.Write([]byte(`[]`))
-		default:
-			w.Write([]byte(raw))
-		}
-	}))
-
-	iss, err := getIssue(context.Background(), 7)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out, err := json.Marshal(iss)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, dropped := range []string{"node_id", "html_url", "state_reason", "author_association", `"url"`, `"default"`} {
-		if strings.Contains(string(out), dropped) {
-			t.Errorf("re-marshaled issue contains trimmed field %s: %s", dropped, out)
-		}
-	}
-	for _, kept := range []string{`"number":7`, `"milestone":null`, `"assignees":[]`} {
-		if !strings.Contains(string(out), kept) {
-			t.Errorf("re-marshaled issue missing kept field %s: %s", kept, out)
-		}
-	}
-}
-
-func TestListCommentsPaginated(t *testing.T) {
-	var srv = setupTest(t, nil)
-	mux := http.NewServeMux()
-	srv.Config.Handler = mux
-
-	mux.HandleFunc("/gh/repos/owner/repo/issues/7/comments", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("page") == "2" {
-			w.Write([]byte(`[{"user":{"login":"b","id":2},"created_at":"t2","updated_at":"t2","body":"second"}]`))
-			return
-		}
-		w.Header().Set("Link", `<`+proxyBase+`/gh/repos/owner/repo/issues/7/comments?page=2>; rel="next"`)
-		w.Write([]byte(`[{"user":{"login":"a","id":1},"created_at":"t1","updated_at":"t1","body":"first"}]`))
-	})
-
-	got, err := listComments(context.Background(), 7)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("got %d comments, want 2", len(got))
-	}
-	if got[0].Body != "first" || got[1].Body != "second" {
-		t.Errorf("comments = %v, want first then second", got)
-	}
-}
-
-func TestListCommentsTrimsFields(t *testing.T) {
-	const raw = `[{"id":1,"node_id":"c1","html_url":"h","issue_url":"iu","user":{"login":"neal","id":1,"node_id":"u1"},"created_at":"t","updated_at":"t","author_association":"OWNER","body":"hi","is_minimized":true,"minimized_reason":"outdated","reactions":{"total_count":0}}]`
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(raw))
-	}))
-
-	got, err := listComments(context.Background(), 7)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out, err := json.Marshal(got)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, dropped := range []string{"node_id", "html_url", "issue_url", "author_association", "reactions"} {
-		if strings.Contains(string(out), dropped) {
-			t.Errorf("re-marshaled comments contain trimmed field %s: %s", dropped, out)
-		}
-	}
-	for _, kept := range []string{`"login":"neal"`, `"body":"hi"`, `"id":1`, `"is_minimized":true`, `"minimized_reason":"outdated"`} {
-		if !strings.Contains(string(out), kept) {
-			t.Errorf("re-marshaled comments missing kept field %s: %s", kept, out)
 		}
 	}
 }

@@ -2,23 +2,6 @@ package main
 
 import "encoding/json"
 
-type issue struct {
-	Number    int              `json:"number"`
-	Title     string           `json:"title"`
-	Labels    []label          `json:"labels"`
-	State     string           `json:"state"`
-	Locked    bool             `json:"locked"`
-	Assignees []user           `json:"assignees"`
-	Milestone *json.RawMessage `json:"milestone"`
-	Comments  int              `json:"comments"`
-	CreatedAt string           `json:"created_at"`
-	UpdatedAt string           `json:"updated_at"`
-	ClosedAt  *string          `json:"closed_at"`
-	Assignee  *user            `json:"assignee"`
-	Body      string           `json:"body"`
-	ClosedBy  *user            `json:"closed_by"`
-}
-
 type label struct {
 	Name        string `json:"name"`
 	Color       string `json:"color"`
@@ -41,9 +24,9 @@ type comment struct {
 }
 
 type searchResult struct {
-	TotalCount        int     `json:"total_count"`
-	IncompleteResults bool    `json:"incomplete_results"`
-	Items             []issue `json:"items"`
+	TotalCount        int               `json:"total_count"`
+	IncompleteResults bool              `json:"incomplete_results"`
+	Items             []json.RawMessage `json:"items"`
 }
 
 type issueRef struct {

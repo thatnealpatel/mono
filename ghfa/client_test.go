@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -109,5 +110,17 @@ func TestNextLink(t *testing.T) {
 func TestPrintJSON(t *testing.T) {
 	if err := printJSON(map[string]int{"n": 1}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+type errorWriter struct{}
+
+func (errorWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failed")
+}
+
+func TestPrintJSONToIgnoresWriteError(t *testing.T) {
+	if err := printJSONTo(errorWriter{}, map[string]int{"n": 1}); err != nil {
+		t.Errorf("printJSONTo error = %v, want nil", err)
 	}
 }

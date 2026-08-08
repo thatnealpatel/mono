@@ -83,7 +83,7 @@ func usageError(name string) error {
 const usage = `usage: ghfa <owner/repo> <resource> <verb> [args]
 
 issue:
-  issue view <num>                    show issue with comments
+  issue view <num>                    show issue with timeline
   issue create -title [-body|-file] [-label]  create an issue
   issue edit <num> [-title] [-body]   edit an issue
   issue close <num> [-r completed|"not planned"] [-dupeof N]
