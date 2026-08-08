@@ -4,19 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 )
 
 func cmdSearchIssues(ctx context.Context, args []string) error {
+	return cmdSearchIssuesTo(ctx, os.Stdout, args)
+}
+
+func cmdSearchIssuesTo(ctx context.Context, out io.Writer, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: ghfa search issues <query>")
 	}
-	return searchIssues(ctx, strings.Join(args, " "))
+	return searchIssues(ctx, out, strings.Join(args, " "))
 }
 
-func searchIssues(ctx context.Context, query string) error {
+func searchIssues(ctx context.Context, out io.Writer, query string) error {
 	params := url.Values{}
 	params.Set("q", query)
 	params.Set("per_page", "100")
@@ -26,7 +32,7 @@ func searchIssues(ctx context.Context, query string) error {
 		return err
 	}
 	rawURL := base + "?" + params.Encode()
-	result := &searchResult{Items: []issue{}}
+	result := &searchResult{Items: []json.RawMessage{}}
 	for first := true; rawURL != ""; first = false {
 		resp, header, status, err := do(ctx, http.MethodGet, rawURL, nil)
 		if err != nil {
@@ -46,5 +52,5 @@ func searchIssues(ctx context.Context, query string) error {
 		result.Items = append(result.Items, page.Items...)
 		rawURL = nextLink(header.Get("Link"))
 	}
-	return printJSON(result)
+	return printJSONTo(out, result)
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +14,10 @@ import (
 )
 
 func cmdIssueView(ctx context.Context, args []string) error {
+	return cmdIssueViewTo(ctx, os.Stdout, args)
+}
+
+func cmdIssueViewTo(ctx context.Context, out io.Writer, args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: ghfa <owner/repo> issue view <num>")
 	}
@@ -20,64 +25,22 @@ func cmdIssueView(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid issue number %q", args[0])
 	}
-	iss, err := getIssue(ctx, number)
-	if err != nil {
-		return err
-	}
-	comments, err := listComments(ctx, number)
-	if err != nil {
-		return err
-	}
-	return printJSON(issueView{Issue: iss, Comments: comments})
-}
-
-type issueView struct {
-	Issue    *issue    `json:"issue"`
-	Comments []comment `json:"comments"`
-}
-
-func getIssue(ctx context.Context, number int) (*issue, error) {
 	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	resp, _, status, err := do(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if status != http.StatusOK {
-		return nil, statusError(status, resp)
+		return statusError(status, resp)
 	}
-	var iss issue
-	if err := json.Unmarshal(resp, &iss); err != nil {
-		return nil, fmt.Errorf("ghfa: decode issue: %w", err)
+	var envelope json.RawMessage
+	if err := json.Unmarshal(resp, &envelope); err != nil {
+		return fmt.Errorf("ghfa: decode issue view: %w", err)
 	}
-	return &iss, nil
-}
-
-func listComments(ctx context.Context, number int) ([]comment, error) {
-	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number), "comments")
-	if err != nil {
-		return nil, err
-	}
-	rawURL += "?per_page=100"
-	var all []comment
-	for rawURL != "" {
-		resp, header, status, err := do(ctx, http.MethodGet, rawURL, nil)
-		if err != nil {
-			return nil, err
-		}
-		if status != http.StatusOK {
-			return nil, statusError(status, resp)
-		}
-		var page []comment
-		if err := json.Unmarshal(resp, &page); err != nil {
-			return nil, fmt.Errorf("ghfa: decode comments: %w", err)
-		}
-		all = append(all, page...)
-		rawURL = nextLink(header.Get("Link"))
-	}
-	return all, nil
+	return printJSONTo(out, envelope)
 }
 
 func cmdIssueCreate(ctx context.Context, args []string) error {

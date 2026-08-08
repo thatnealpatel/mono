@@ -80,10 +80,14 @@ func nextLink(header string) string {
 }
 
 func printJSON(v any) error {
+	return printJSONTo(os.Stdout, v)
+}
+
+func printJSONTo(w io.Writer, v any) error {
 	out, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stdout, string(out))
+	fmt.Fprintln(w, string(out))
 	return nil
 }
