@@ -37,6 +37,10 @@ func TestRenderSupportedCommands(t *testing.T) {
 		{name: "LongArrows", expr: `a \longrightarrow b \longleftarrow c`, want: []string{"<mo>⟶</mo>", "<mo>⟵</mo>"}},
 		{name: "SquiggleArrows", expr: `a \rightsquigarrow b \leftsquigarrow c`, want: []string{"<mo>⇝</mo>", "<mo>⇜</mo>"}},
 		{name: "Mathcal", expr: `\mathcal{F}`, want: []string{"<mi>ℱ</mi>"}},
+		{name: "LongMapsto", expr: `A \longmapsto B`, want: []string{"<mo>⟼</mo>"}},
+		{name: "Ell", expr: `\ell`, want: []string{"<mi>ℓ</mi>"}},
+		{name: "Degree", expr: `\deg f`, want: []string{"<mo>deg</mo>"}},
+		{name: "SquareCup", expr: `A \sqcup B`, want: []string{"<mo>⊔</mo>"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -48,6 +52,30 @@ func TestRenderSupportedCommands(t *testing.T) {
 				if got, ok := strings.Contains(html, want), true; got != ok {
 					t.Errorf("contains %q: got %t, want %t; HTML = %q", want, got, ok, html)
 				}
+			}
+		})
+	}
+}
+
+func TestRenderUnderbrace(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{name: "Bare", expr: `\underbrace{a+b}`, want: `<math><munder accentunder="true"><mrow><mi>a</mi><mo>+</mo><mi>b</mi></mrow><mo stretchy="true">⏟</mo></munder></math>`},
+		{name: "Below", expr: `\underbrace{a+b}_{n}`, want: `<math><munder><munder accentunder="true"><mrow><mi>a</mi><mo>+</mo><mi>b</mi></mrow><mo stretchy="true">⏟</mo></munder><mi>n</mi></munder></math>`},
+		{name: "Above", expr: `\underbrace{a+b}^{m}`, want: `<math><mover><munder accentunder="true"><mrow><mi>a</mi><mo>+</mo><mi>b</mi></mrow><mo stretchy="true">⏟</mo></munder><mi>m</mi></mover></math>`},
+		{name: "BelowAndAbove", expr: `\underbrace{a+b}_{n}^{m}`, want: `<math><munderover><munder accentunder="true"><mrow><mi>a</mi><mo>+</mo><mi>b</mi></mrow><mo stretchy="true">⏟</mo></munder><mi>n</mi><mi>m</mi></munderover></math>`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.expr, false)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if got != test.want {
+				t.Errorf("got %q, want %q", got, test.want)
 			}
 		})
 	}
