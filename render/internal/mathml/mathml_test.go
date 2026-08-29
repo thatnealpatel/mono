@@ -30,6 +30,9 @@ func TestRenderSupportedCommands(t *testing.T) {
 		{name: "MiddleDelimiter", expr: `\left\{x \middle| x > 0\right\}`, want: []string{`<mo fence="true" stretchy="true">|</mo>`}},
 		{name: "NamedMiddleDelimiter", expr: `\left(x \middle\vert y\right)`, want: []string{`<mo fence="true" stretchy="true">|</mo>`}},
 		{name: "VerticalRelation", expr: `x \vert y`, want: []string{"<mo>∣</mo>"}},
+		{name: "LeftAngle", expr: `\langle x`, want: []string{"<mo>⟨</mo>"}},
+		{name: "RightAngle", expr: `x \rangle`, want: []string{"<mo>⟩</mo>"}},
+		{name: "AngleDelimiters", expr: `\left\langle x, y \right\rangle`, want: []string{"<mo>⟨</mo>", "<mo>⟩</mo>"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
