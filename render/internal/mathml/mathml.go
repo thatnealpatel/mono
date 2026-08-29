@@ -49,9 +49,15 @@ func (w *writer) nodes(nodes []latex.Node) {
 	if len(nodes) > 1 {
 		w.raw("<mrow>")
 	}
+	classes := normalizedAtomClasses(nodes)
 	for i, node := range nodes {
 		if _, ok := relationBase(node); ok {
 			w.relationNode(node, relationSpace(nodes, i, -1), relationSpace(nodes, i, 1))
+			continue
+		}
+		if binaryBase(node) {
+			leftSpace, rightSpace := binarySpaces(classes, i)
+			w.binaryNode(node, leftSpace, rightSpace)
 			continue
 		}
 		w.node(node)
@@ -158,7 +164,8 @@ func (w *writer) restoreStyle(style mathStyle) { w.style = style }
 type atomClass uint8
 
 const (
-	atomOrd atomClass = iota
+	atomNone atomClass = iota
+	atomOrd
 	atomOperator
 	atomBinary
 	atomRelation
@@ -197,6 +204,9 @@ func classifyAtom(node latex.Node) atomClass {
 	if _, ok := relationBase(node); ok {
 		return atomRelation
 	}
+	if binaryBase(node) {
+		return atomBinary
+	}
 	switch node := node.(type) {
 	case latex.Sup:
 		return classifyAtom(node.Base)
@@ -223,6 +233,12 @@ func classifyAtom(node latex.Node) atomClass {
 		if commandIsRelation(node.Name) {
 			return atomRelation
 		}
+		if commandIsOperator(node.Name) {
+			return atomOperator
+		}
+		if commandIsBinary(node.Name) {
+			return atomBinary
+		}
 		switch node.Name {
 		case `\langle`, `\lfloor`, `\lceil`, `\bigl`, `\{`:
 			return atomOpen
@@ -245,6 +261,112 @@ func relationBase(node latex.Node) (latex.Command, bool) {
 		return relationBase(node.Base)
 	default:
 		return latex.Command{}, false
+	}
+}
+
+func binaryBase(node latex.Node) bool {
+	switch node := node.(type) {
+	case latex.Command:
+		return node.Name == `\mathbin`
+	case latex.Sup:
+		return binaryBase(node.Base)
+	case latex.Sub:
+		return binaryBase(node.Base)
+	case latex.SubSup:
+		return binaryBase(node.Base)
+	default:
+		return false
+	}
+}
+
+func normalizedAtomClasses(nodes []latex.Node) []atomClass {
+	classes := make([]atomClass, len(nodes))
+	for i, node := range nodes {
+		if !isMathSpace(node) {
+			classes[i] = classifyAtom(node)
+		}
+	}
+	previous := atomNone
+	for i, class := range classes {
+		if class == atomNone {
+			continue
+		}
+		if class == atomBinary && (previous == atomNone || previous == atomOperator || previous == atomBinary ||
+			previous == atomRelation || previous == atomOpen || previous == atomPunctuation) {
+			classes[i] = atomOrd
+		}
+		previous = classes[i]
+	}
+	next := atomNone
+	for i := len(classes) - 1; i >= 0; i-- {
+		class := classes[i]
+		if class == atomNone {
+			continue
+		}
+		if class == atomBinary && (next == atomNone || next == atomRelation || next == atomClose || next == atomPunctuation) {
+			classes[i] = atomOrd
+		}
+		next = classes[i]
+	}
+	return classes
+}
+
+func isMathSpace(node latex.Node) bool {
+	switch node := node.(type) {
+	case latex.Space:
+		return true
+	case latex.Command:
+		return node.Name == `\quad` || node.Name == `\qquad`
+	case latex.Operator:
+		switch string(node) {
+		case `\,`, `\;`, `\:`, `\!`:
+			return true
+		}
+	}
+	return false
+}
+
+func binarySpaces(classes []atomClass, index int) (string, string) {
+	if classes[index] != atomBinary {
+		return "0em", "0em"
+	}
+	return "0.2222em", "0.2222em"
+}
+
+func (w *writer) binaryNode(node latex.Node, leftSpace, rightSpace string) {
+	if w.style >= scriptStyle {
+		leftSpace = "0em"
+		rightSpace = "0em"
+	}
+	if leftSpace != "0em" {
+		w.raw(`<mspace width="` + leftSpace + `"/>`)
+	}
+	w.binaryNucleus(node)
+	if rightSpace != "0em" {
+		w.raw(`<mspace width="` + rightSpace + `"/>`)
+	}
+}
+
+func (w *writer) binaryNucleus(node latex.Node) {
+	switch node := node.(type) {
+	case latex.Command:
+		w.mathbin(node)
+	case latex.Sup:
+		w.raw("<msup>")
+		w.binaryNucleus(node.Base)
+		w.script(node.Script)
+		w.raw("</msup>")
+	case latex.Sub:
+		w.raw("<msub>")
+		w.binaryNucleus(node.Base)
+		w.script(node.Script)
+		w.raw("</msub>")
+	case latex.SubSup:
+		w.raw("<msubsup>")
+		w.binaryNucleus(node.Base)
+		w.script(node.Sub)
+		w.script(node.Sup)
+		w.raw("</msubsup>")
 	}
 }
 
@@ -285,10 +407,28 @@ func (w *writer) relationNucleus(node latex.Node) {
 	}
 }
 
+func commandIsOperator(name string) bool {
+	switch name {
+	case `\sum`, `\prod`, `\int`, `\bigcup`, `\bigsqcup`, `\gcd`, `\log`, `\min`, `\max`, `\deg`, `\dim`, `\operatorname`:
+		return true
+	default:
+		return false
+	}
+}
+
+func commandIsBinary(name string) bool {
+	switch name {
+	case `\pm`, `\mp`, `\times`, `\div`, `\cdot`, `\circ`, `\otimes`, `\rtimes`, `\cup`, `\sqcup`, `\cap`, `\setminus`:
+		return true
+	default:
+		return false
+	}
+}
+
 func commandIsRelation(name string) bool {
 	switch name {
 	case `\leq`, `\le`, `\geq`, `\ge`, `\neq`, `\ne`, `\approx`, `\equiv`, `\cong`,
-		`\in`, `\notin`, `\subset`, `\subseteq`, `\supset`, `\supseteq`, `\smile`, `\mid`,
+		`\in`, `\notin`, `\subset`, `\subseteq`, `\supset`, `\supseteq`, `\smile`, `\mid`, `\vert`,
 		`\not`, `\centernot`, `\uparrow`, `\downarrow`, `\updownarrow`, `\Uparrow`, `\Downarrow`, `\Updownarrow`,
 		`\rightarrow`, `\to`, `\leftarrow`, `\nearrow`, `\searrow`, `\nwarrow`, `\swarrow`,
 		`\longrightarrow`, `\longleftarrow`, `\leftrightarrow`, `\longleftrightarrow`,
@@ -428,10 +568,14 @@ func (w *writer) command(command latex.Command) {
 		w.mathVariant(command.Args, doubleStruck)
 	case `\ell`:
 		w.element("mi", "ℓ")
+	case `\triangle`:
+		w.raw(`<mo lspace="0em" rspace="0em">△</mo>`)
 	case `\bigsqcup`:
 		w.raw(`<mo form="prefix" largeop="true" movablelimits="true">⨆</mo>`)
 	case `\mathrel`:
 		w.mathrel(command, "0em", "0em")
+	case `\mathbin`:
+		w.mathbin(command)
 	case `\mod`, `\bmod`:
 		w.element("mo", "mod")
 		w.arguments(command.Args)
@@ -559,6 +703,18 @@ func negatedOperator(value string) string {
 	}
 }
 
+func (w *writer) mathbin(command latex.Command) {
+	if text, ok := binaryOperatorText(command.Args[0]); ok {
+		w.raw(`<mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">`)
+		w.text(text)
+		w.raw("</mo>")
+		return
+	}
+	w.raw("<mrow>")
+	w.arguments(command.Args)
+	w.raw("</mrow>")
+}
+
 func (w *writer) mathrel(command latex.Command, leftSpace, rightSpace string) {
 	if w.style >= scriptStyle {
 		leftSpace = "0em"
@@ -579,6 +735,20 @@ func (w *writer) mathrel(command latex.Command, leftSpace, rightSpace string) {
 		w.raw(`<mspace width="` + rightSpace + `"/>`)
 	}
 	w.raw("</mrow>")
+}
+
+func binaryOperatorText(nodes []latex.Node) (string, bool) {
+	if len(nodes) != 1 {
+		return "", false
+	}
+	switch node := nodes[0].(type) {
+	case latex.Operator:
+		return delimiterText(string(node)), true
+	case latex.Command:
+		return namedOperator(node.Name)
+	default:
+		return "", false
+	}
 }
 
 func relationText(nodes []latex.Node) (string, bool) {
@@ -886,6 +1056,8 @@ func greek(command string) (string, bool) {
 
 func namedOperator(command string) (string, bool) {
 	switch command {
+	case `\triangle`:
+		return "△", true
 	case `\pm`:
 		return "±", true
 	case `\mp`:
