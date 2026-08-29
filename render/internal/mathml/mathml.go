@@ -182,6 +182,10 @@ func (w *writer) command(command latex.Command) {
 		w.raw(`<mo fence="true" form="` + form + `" stretchy="true" minsize="1.2em" maxsize="1.2em">`)
 		w.delimiterArguments(command.Args)
 		w.raw("</mo>")
+	case `\Big`:
+		w.raw(`<mo fence="true" stretchy="true" lspace="0em" rspace="0em" minsize="1.623em" maxsize="1.623em">`)
+		w.delimiterArguments(command.Args)
+		w.raw("</mo>")
 	case `\middle`:
 		w.raw(`<mo fence="true" stretchy="true">`)
 		w.delimiterArguments(command.Args)
@@ -231,10 +235,12 @@ func (w *writer) command(command latex.Command) {
 		w.mathVariant(command.Args, doubleStruck)
 	case `\ell`:
 		w.element("mi", "ℓ")
+	case `\bigsqcup`:
+		w.raw(`<mo form="prefix" largeop="true" movablelimits="true">⨆</mo>`)
 	case `\mod`, `\bmod`:
 		w.element("mo", "mod")
 		w.arguments(command.Args)
-	case `\gcd`, `\log`, `\min`, `\max`, `\deg`:
+	case `\gcd`, `\log`, `\min`, `\max`, `\deg`, `\dim`:
 		w.element("mo", command.Name[1:])
 		w.arguments(command.Args)
 	case `\pmod`:
@@ -493,14 +499,56 @@ func (w *writer) substack(nodes []latex.Node) {
 
 func special(command string) (string, bool) {
 	switch command {
-	case `\{`:
+	case `\{`, `\lbrace`:
 		return "{", true
-	case `\}`:
+	case `\}`, `\rbrace`:
 		return "}", true
-	case `\|`:
+	case `\lparen`:
+		return "(", true
+	case `\rparen`:
+		return ")", true
+	case `\lbrack`:
+		return "[", true
+	case `\rbrack`:
+		return "]", true
+	case `\|`, `\Vert`, `\lVert`, `\rVert`:
 		return "‖", true
-	case `\vert`:
+	case `\vert`, `\lvert`, `\rvert`:
 		return "|", true
+	case `\langle`, `\lang`:
+		return "⟨", true
+	case `\rangle`, `\rang`:
+		return "⟩", true
+	case `\lt`:
+		return "<", true
+	case `\gt`:
+		return ">", true
+	case `\lgroup`:
+		return "⟮", true
+	case `\rgroup`:
+		return "⟯", true
+	case `\lmoustache`:
+		return "⎰", true
+	case `\rmoustache`:
+		return "⎱", true
+	case `\ulcorner`:
+		return "⌜", true
+	case `\urcorner`:
+		return "⌝", true
+	case `\llcorner`:
+		return "⌞", true
+	case `\lrcorner`:
+		return "⌟", true
+	case `\llbracket`:
+		return "⟦", true
+	case `\rrbracket`:
+		return "⟧", true
+	case `\lBrace`:
+		return "⦃", true
+	case `\rBrace`:
+		return "⦄", true
+	case `\backslash`:
+		return `\`, true
 	case `\,`, `\;`, `\:`:
 		return " ", true
 	case `\!`:
@@ -611,6 +659,8 @@ func namedOperator(command string) (string, bool) {
 		return "≅", true
 	case `\otimes`:
 		return "⊗", true
+	case `\rtimes`:
+		return "⋊", true
 	case `\in`:
 		return "∈", true
 	case `\notin`:
@@ -627,6 +677,8 @@ func namedOperator(command string) (string, bool) {
 		return "∪", true
 	case `\sqcup`:
 		return "⊔", true
+	case `\bigsqcup`:
+		return "⨆", true
 	case `\bigcup`:
 		return "⋃", true
 	case `\cap`:
@@ -691,6 +743,18 @@ func namedOperator(command string) (string, bool) {
 		return "⌈", true
 	case `\rceil`:
 		return "⌉", true
+	case `\uparrow`:
+		return "↑", true
+	case `\downarrow`:
+		return "↓", true
+	case `\updownarrow`:
+		return "↕", true
+	case `\Uparrow`:
+		return "⇑", true
+	case `\Downarrow`:
+		return "⇓", true
+	case `\Updownarrow`:
+		return "⇕", true
 	case `\sum`:
 		return "∑", true
 	case `\prod`:
