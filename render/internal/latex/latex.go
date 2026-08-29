@@ -200,11 +200,13 @@ func (p *parser) parseCommand() (Node, error) {
 	case `\end`:
 		return nil, errors.New(`unexpected \end without \begin`)
 	case `\bigl`, `\bigr`:
-		p.skipSpaces()
-		if p.pos >= len(p.input) {
-			return nil, fmt.Errorf("missing delimiter after %s", name)
+		delimiter, err := p.parseDelimiter(name)
+		if err != nil {
+			return nil, err
 		}
-		return Command{Name: name, Args: [][]Node{{Operator(p.readDelim())}}}, nil
+		return Command{Name: name, Args: [][]Node{{Operator(delimiter)}}}, nil
+	case `\middle`:
+		return nil, errors.New(`unexpected \middle without \left`)
 	}
 
 	nargs, known := commandArgCount(name)
@@ -229,6 +231,14 @@ func (p *parser) parseCommand() (Node, error) {
 		cmd.Args = append(cmd.Args, arg)
 	}
 	return cmd, nil
+}
+
+func (p *parser) parseDelimiter(name string) (string, error) {
+	p.skipSpaces()
+	if p.pos >= len(p.input) {
+		return "", fmt.Errorf("missing delimiter after %s", name)
+	}
+	return p.readDelim(), nil
 }
 
 func (p *parser) parseCommandArg(name string) ([]Node, error) {
@@ -260,7 +270,7 @@ func commandArgCount(name string) (int, bool) {
 		`\bar`, `\vec`, `\dot`, `\ddot`, `\tilde`, `\text`, `\textit`,
 		`\textbf`, `\textmd`, `\textrm`, `\mathrm`, `\mathbf`, `\mathit`,
 		`\operatorname`, `\mathcal`, `\mathbb`, `\mathfrak`, `\mod`, `\pmod`,
-		`\bmod`, `\eqref`, `\label`, `\tag`, `\substack`:
+		`\bmod`, `\eqref`, `\label`, `\tag`, `\substack`, `\not`, `\centernot`:
 		return 1, true
 	default:
 		return 0, false
@@ -283,6 +293,15 @@ func (p *parser) parseDelimited() (Node, error) {
 	open := p.readDelim()
 	var nodes []Node
 	for p.pos < len(p.input) {
+		if p.hasControlWord(`\middle`) {
+			p.pos += len([]rune(`\middle`))
+			delimiter, err := p.parseDelimiter(`\middle`)
+			if err != nil {
+				return nil, err
+			}
+			nodes = append(nodes, Command{Name: `\middle`, Args: [][]Node{{Operator(delimiter)}}})
+			continue
+		}
 		if p.hasControlWord(`\right`) {
 			p.pos += len([]rune(`\right`))
 			p.skipSpaces()

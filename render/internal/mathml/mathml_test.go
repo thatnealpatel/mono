@@ -21,6 +21,15 @@ func TestRenderSupportedCommands(t *testing.T) {
 		{name: "Mathbb", expr: `\mathbb{N} \to \mathbb{Z}`, want: []string{"ℕ", "→", "ℤ"}},
 		{name: "NamedOperator", expr: `\operatorname{Pre}(L)`, want: []string{"<mo>Pre</mo>"}},
 		{name: "BigDelimiter", expr: `\bigl(x\bigr)`, want: []string{`form="prefix"`, `form="postfix"`}},
+		{name: "Congruent", expr: `A \cong B`, want: []string{"<mo>≅</mo>"}},
+		{name: "TensorProduct", expr: `A \otimes B`, want: []string{"<mo>⊗</mo>"}},
+		{name: "Implies", expr: `P \implies Q`, want: []string{"<mo>⟹</mo>"}},
+		{name: "Not", expr: `x \not= y`, want: []string{"<mo>≠</mo>"}},
+		{name: "NotCongruent", expr: `A \not\cong B`, want: []string{"<mo>≇</mo>"}},
+		{name: "CenterNot", expr: `P \centernot\implies Q`, want: []string{"<mo>⟹̸</mo>"}},
+		{name: "MiddleDelimiter", expr: `\left\{x \middle| x > 0\right\}`, want: []string{`<mo fence="true" stretchy="true">|</mo>`}},
+		{name: "NamedMiddleDelimiter", expr: `\left(x \middle\vert y\right)`, want: []string{`<mo fence="true" stretchy="true">|</mo>`}},
+		{name: "VerticalRelation", expr: `x \vert y`, want: []string{"<mo>∣</mo>"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
