@@ -41,6 +41,9 @@ func TestRenderSupportedCommands(t *testing.T) {
 		{name: "Ell", expr: `\ell`, want: []string{"<mi>ℓ</mi>"}},
 		{name: "Degree", expr: `\deg f`, want: []string{"<mo>deg</mo>"}},
 		{name: "SquareCup", expr: `A \sqcup B`, want: []string{"<mo>⊔</mo>"}},
+		{name: "Dimension", expr: `\dim V`, want: []string{"<mo>dim</mo>"}},
+		{name: "BigSquareCup", expr: `A \bigsqcup B`, want: []string{"⨆"}},
+		{name: "RightSemidirectProduct", expr: `G \rtimes H`, want: []string{"<mo>⋊</mo>"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -54,6 +57,86 @@ func TestRenderSupportedCommands(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRenderBigDelimiter(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{name: "Parentheses", expr: `\Big(x\Big)`, want: `<math><mrow><mo fence="true" stretchy="true" lspace="0em" rspace="0em" minsize="1.623em" maxsize="1.623em">(</mo><mi>x</mi><mo fence="true" stretchy="true" lspace="0em" rspace="0em" minsize="1.623em" maxsize="1.623em">)</mo></mrow></math>`},
+		{name: "MiddleBar", expr: `a\Big|b`, want: `<math><mrow><mi>a</mi><mo fence="true" stretchy="true" lspace="0em" rspace="0em" minsize="1.623em" maxsize="1.623em">|</mo><mi>b</mi></mrow></math>`},
+		{name: "Braced", expr: `\Big{(}x\Big{)}`, want: `<math><mrow><mo fence="true" stretchy="true" lspace="0em" rspace="0em" minsize="1.623em" maxsize="1.623em">(</mo><mi>x</mi><mo fence="true" stretchy="true" lspace="0em" rspace="0em" minsize="1.623em" maxsize="1.623em">)</mo></mrow></math>`},
+		{name: "Vertical", expr: `\Big\Vert`, want: `<math><mo fence="true" stretchy="true" lspace="0em" rspace="0em" minsize="1.623em" maxsize="1.623em">‖</mo></math>`},
+		{name: "Arrow", expr: `\Big\uparrow`, want: `<math><mo fence="true" stretchy="true" lspace="0em" rspace="0em" minsize="1.623em" maxsize="1.623em">↑</mo></math>`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.expr, false)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if got != test.want {
+				t.Errorf("got %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRenderBiglDelimiters(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{name: "Vertical", expr: `\bigl\Vert x\bigr\Vert`, want: `<math><mrow><mo fence="true" form="prefix" stretchy="true" minsize="1.2em" maxsize="1.2em">‖</mo><mspace width="0.25em"/><mi>x</mi><mo fence="true" form="postfix" stretchy="true" minsize="1.2em" maxsize="1.2em">‖</mo></mrow></math>`},
+		{name: "Backslash", expr: `\bigl\backslash x\bigr/`, want: `<math><mrow><mo fence="true" form="prefix" stretchy="true" minsize="1.2em" maxsize="1.2em">\</mo><mspace width="0.25em"/><mi>x</mi><mo fence="true" form="postfix" stretchy="true" minsize="1.2em" maxsize="1.2em">/</mo></mrow></math>`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.expr, false)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if got != test.want {
+				t.Errorf("got %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRenderLeftRightAliases(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{name: "Brackets", expr: `\left\lbrack x\right\rbrack`, want: `<math><mrow><mo>[</mo><mrow><mspace width="0.25em"/><mi>x</mi></mrow><mo>]</mo></mrow></math>`},
+		{name: "Vertical", expr: `\left\lVert x\right\rVert`, want: `<math><mrow><mo>‖</mo><mrow><mspace width="0.25em"/><mi>x</mi></mrow><mo>‖</mo></mrow></math>`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.expr, false)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if got != test.want {
+				t.Errorf("got %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRenderBigSquareCup(t *testing.T) {
+	got, err := Render(`\bigsqcup_{i=1}^nA_i`, true)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	want := `<math display="block"><mrow><msubsup><mo form="prefix" largeop="true" movablelimits="true">⨆</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup><msub><mi>A</mi><mi>i</mi></msub></mrow></math>`
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 

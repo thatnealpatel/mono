@@ -199,7 +199,7 @@ func (p *parser) parseCommand() (Node, error) {
 		return p.parseEnv()
 	case `\end`:
 		return nil, errors.New(`unexpected \end without \begin`)
-	case `\bigl`, `\bigr`:
+	case `\bigl`, `\bigr`, `\Big`:
 		delimiter, err := p.parseDelimiter(name)
 		if err != nil {
 			return nil, err
@@ -238,7 +238,43 @@ func (p *parser) parseDelimiter(name string) (string, error) {
 	if p.pos >= len(p.input) {
 		return "", fmt.Errorf("missing delimiter after %s", name)
 	}
-	return p.readDelim(), nil
+	braced := p.input[p.pos] == '{'
+	if braced {
+		p.pos++
+		p.skipSpaces()
+		if p.pos >= len(p.input) {
+			return "", fmt.Errorf("missing delimiter after %s", name)
+		}
+	}
+	delimiter := p.readDelim()
+	if braced {
+		p.skipSpaces()
+		if p.pos >= len(p.input) || p.input[p.pos] != '}' {
+			return "", fmt.Errorf("invalid delimiter after %s", name)
+		}
+		p.pos++
+	}
+	if !isDelimiter(delimiter) {
+		return "", fmt.Errorf("invalid delimiter %q after %s", delimiter, name)
+	}
+	return delimiter, nil
+}
+
+func isDelimiter(delimiter string) bool {
+	switch delimiter {
+	case "(", ")", "[", "]", "|", ".", "/", "<", ">",
+		`\lparen`, `\rparen`, `\lbrack`, `\rbrack`, `\{`, `\}`, `\lbrace`, `\rbrace`,
+		`\|`, `\vert`, `\Vert`, `\lvert`, `\rvert`, `\lVert`, `\rVert`, `\mid`,
+		`\langle`, `\rangle`, `\lang`, `\rang`, `\lt`, `\gt`,
+		`\lfloor`, `\rfloor`, `\lceil`, `\rceil`, `\backslash`,
+		`\uparrow`, `\downarrow`, `\updownarrow`, `\Uparrow`, `\Downarrow`, `\Updownarrow`,
+		`\lgroup`, `\rgroup`, `\lmoustache`, `\rmoustache`,
+		`\ulcorner`, `\urcorner`, `\llcorner`, `\lrcorner`,
+		`\llbracket`, `\rrbracket`, `\lBrace`, `\rBrace`:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *parser) parseCommandArg(name string) ([]Node, error) {
@@ -286,11 +322,10 @@ func (p *parser) parseNumber() Node {
 }
 
 func (p *parser) parseDelimited() (Node, error) {
-	p.skipSpaces()
-	if p.pos >= len(p.input) {
-		return nil, errors.New(`missing delimiter after \left`)
+	open, err := p.parseDelimiter(`\left`)
+	if err != nil {
+		return nil, err
 	}
-	open := p.readDelim()
 	var nodes []Node
 	for p.pos < len(p.input) {
 		if p.hasControlWord(`\middle`) {
@@ -304,11 +339,11 @@ func (p *parser) parseDelimited() (Node, error) {
 		}
 		if p.hasControlWord(`\right`) {
 			p.pos += len([]rune(`\right`))
-			p.skipSpaces()
-			if p.pos >= len(p.input) {
-				return nil, errors.New(`missing delimiter after \right`)
+			close, err := p.parseDelimiter(`\right`)
+			if err != nil {
+				return nil, err
 			}
-			return Delimited{Open: open, Close: p.readDelim(), Body: nodes}, nil
+			return Delimited{Open: open, Close: close, Body: nodes}, nil
 		}
 		node, err := p.parseItem()
 		if err != nil {
