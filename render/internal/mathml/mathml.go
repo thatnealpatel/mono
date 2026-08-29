@@ -153,17 +153,14 @@ func (w *writer) command(command latex.Command) {
 			form = "postfix"
 		}
 		w.raw(`<mo fence="true" form="` + form + `" stretchy="true" minsize="1.2em" maxsize="1.2em">`)
-		for _, arg := range command.Args {
-			for _, node := range arg {
-				if op, ok := node.(latex.Operator); ok {
-					delimiter := delimiterText(string(op))
-					if delimiter != "." {
-						w.text(delimiter)
-					}
-				}
-			}
-		}
+		w.delimiterArguments(command.Args)
 		w.raw("</mo>")
+	case `\middle`:
+		w.raw(`<mo fence="true" stretchy="true">`)
+		w.delimiterArguments(command.Args)
+		w.raw("</mo>")
+	case `\not`, `\centernot`:
+		w.negation(command.Args)
 	case `\boxed`:
 		w.raw(`<menclose notation="box"><mrow>`)
 		w.arguments(command.Args)
@@ -238,6 +235,85 @@ func (w *writer) command(command latex.Command) {
 func (w *writer) arguments(args [][]latex.Node) {
 	for _, arg := range args {
 		w.nodes(arg)
+	}
+}
+
+func (w *writer) delimiterArguments(args [][]latex.Node) {
+	for _, arg := range args {
+		for _, node := range arg {
+			op, ok := node.(latex.Operator)
+			if !ok {
+				continue
+			}
+			delimiter := delimiterText(string(op))
+			if delimiter != "." {
+				w.text(delimiter)
+			}
+		}
+	}
+}
+
+func (w *writer) negation(args [][]latex.Node) {
+	if len(args) == 1 && len(args[0]) == 1 {
+		if value, ok := operatorText(args[0][0]); ok {
+			w.element("mo", negatedOperator(value))
+			return
+		}
+	}
+	w.raw(`<menclose notation="updiagonalstrike">`)
+	w.arguments(args)
+	w.raw(`</menclose>`)
+}
+
+func operatorText(node latex.Node) (string, bool) {
+	switch node := node.(type) {
+	case latex.Operator:
+		return string(node), true
+	case latex.Command:
+		return namedOperator(node.Name)
+	default:
+		return "", false
+	}
+}
+
+func negatedOperator(value string) string {
+	switch value {
+	case "=":
+		return "≠"
+	case "<":
+		return "≮"
+	case ">":
+		return "≯"
+	case "≤":
+		return "≰"
+	case "≥":
+		return "≱"
+	case "≅":
+		return "≇"
+	case "≈":
+		return "≉"
+	case "≡":
+		return "≢"
+	case "∈":
+		return "∉"
+	case "⊂":
+		return "⊄"
+	case "⊆":
+		return "⊈"
+	case "⊃":
+		return "⊅"
+	case "⊇":
+		return "⊉"
+	case "→":
+		return "↛"
+	case "←":
+		return "↚"
+	case "⇒":
+		return "⇏"
+	case "⇐":
+		return "⇍"
+	default:
+		return value + "̸"
 	}
 }
 
@@ -325,6 +401,8 @@ func special(command string) (string, bool) {
 		return "}", true
 	case `\|`:
 		return "‖", true
+	case `\vert`:
+		return "|", true
 	case `\,`, `\;`, `\:`:
 		return " ", true
 	case `\!`:
@@ -431,6 +509,10 @@ func namedOperator(command string) (string, bool) {
 		return "≈", true
 	case `\equiv`:
 		return "≡", true
+	case `\cong`:
+		return "≅", true
+	case `\otimes`:
+		return "⊗", true
 	case `\in`:
 		return "∈", true
 	case `\notin`:
@@ -459,7 +541,7 @@ func namedOperator(command string) (string, bool) {
 		return "↦", true
 	case `\Rightarrow`:
 		return "⇒", true
-	case `\Longrightarrow`:
+	case `\Longrightarrow`, `\implies`:
 		return "⟹", true
 	case `\Leftarrow`:
 		return "⇐", true
@@ -477,7 +559,7 @@ func namedOperator(command string) (string, bool) {
 		return "∃", true
 	case `\emptyset`:
 		return "∅", true
-	case `\mid`:
+	case `\mid`, `\vert`:
 		return "∣", true
 	case `\lfloor`:
 		return "⌊", true
