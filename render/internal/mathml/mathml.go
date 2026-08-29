@@ -55,16 +55,38 @@ func (w *writer) node(node latex.Node) {
 	case latex.Operator:
 		w.operator(string(node))
 	case latex.Sup:
+		if command, ok := underbraceBase(node.Base); ok {
+			w.raw("<mover>")
+			w.underbrace(command.Args)
+			w.node(node.Script)
+			w.raw("</mover>")
+			return
+		}
 		w.raw("<msup>")
 		w.node(node.Base)
 		w.node(node.Script)
 		w.raw("</msup>")
 	case latex.Sub:
+		if command, ok := underbraceBase(node.Base); ok {
+			w.raw("<munder>")
+			w.underbrace(command.Args)
+			w.node(node.Script)
+			w.raw("</munder>")
+			return
+		}
 		w.raw("<msub>")
 		w.node(node.Base)
 		w.node(node.Script)
 		w.raw("</msub>")
 	case latex.SubSup:
+		if command, ok := underbraceBase(node.Base); ok {
+			w.raw("<munderover>")
+			w.underbrace(command.Args)
+			w.node(node.Sub)
+			w.node(node.Sup)
+			w.raw("</munderover>")
+			return
+		}
 		w.raw("<msubsup>")
 		w.node(node.Base)
 		w.node(node.Sub)
@@ -83,6 +105,11 @@ func (w *writer) node(node latex.Node) {
 	case latex.Command:
 		w.command(node)
 	}
+}
+
+func underbraceBase(node latex.Node) (latex.Command, bool) {
+	command, ok := node.(latex.Command)
+	return command, ok && command.Name == `\underbrace`
 }
 
 func (w *writer) element(name, text string) {
@@ -180,6 +207,8 @@ func (w *writer) command(command latex.Command) {
 		w.raw("<munder><mrow>")
 		w.arguments(command.Args)
 		w.raw("</mrow><mo>_</mo></munder>")
+	case `\underbrace`:
+		w.underbrace(command.Args)
 	case `\textit`, `\mathit`:
 		w.raw(`<mtext mathvariant="italic">`)
 		w.textArguments(command.Args)
@@ -200,10 +229,12 @@ func (w *writer) command(command latex.Command) {
 		w.mathVariant(command.Args, script)
 	case `\mathbb`:
 		w.mathVariant(command.Args, doubleStruck)
+	case `\ell`:
+		w.element("mi", "ℓ")
 	case `\mod`, `\bmod`:
 		w.element("mo", "mod")
 		w.arguments(command.Args)
-	case `\gcd`, `\log`, `\min`, `\max`:
+	case `\gcd`, `\log`, `\min`, `\max`, `\deg`:
 		w.element("mo", command.Name[1:])
 		w.arguments(command.Args)
 	case `\pmod`:
@@ -230,6 +261,16 @@ func (w *writer) command(command latex.Command) {
 			w.arguments(command.Args)
 		}
 	}
+}
+
+func (w *writer) underbrace(args [][]latex.Node) {
+	w.raw(`<munder accentunder="true"><mrow>`)
+	for _, arg := range args {
+		for _, node := range arg {
+			w.node(node)
+		}
+	}
+	w.raw(`</mrow><mo stretchy="true">⏟</mo></munder>`)
 }
 
 func (w *writer) arguments(args [][]latex.Node) {
@@ -584,6 +625,8 @@ func namedOperator(command string) (string, bool) {
 		return "⊇", true
 	case `\cup`:
 		return "∪", true
+	case `\sqcup`:
+		return "⊔", true
 	case `\bigcup`:
 		return "⋃", true
 	case `\cap`:
@@ -612,6 +655,8 @@ func namedOperator(command string) (string, bool) {
 		return "⇜", true
 	case `\mapsto`:
 		return "↦", true
+	case `\longmapsto`:
+		return "⟼", true
 	case `\Rightarrow`:
 		return "⇒", true
 	case `\Longrightarrow`, `\implies`:
