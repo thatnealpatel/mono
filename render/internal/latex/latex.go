@@ -222,19 +222,34 @@ func (p *parser) parseCommand() (Node, error) {
 		cmd.OptArgs = append(cmd.OptArgs, arg)
 	}
 	for range nargs {
-		p.skipSpaces()
-		if p.pos >= len(p.input) || p.input[p.pos] != '{' {
-			return nil, fmt.Errorf("missing argument for %s", name)
+		arg, err := p.parseCommandArg(name)
+		if err != nil {
+			return nil, err
 		}
+		cmd.Args = append(cmd.Args, arg)
+	}
+	return cmd, nil
+}
+
+func (p *parser) parseCommandArg(name string) ([]Node, error) {
+	p.skipSpaces()
+	if p.pos >= len(p.input) {
+		return nil, fmt.Errorf("missing argument for %s", name)
+	}
+	if p.input[p.pos] == '{' {
 		p.pos++
 		arg, err := p.parseUntil('}')
 		if err != nil {
 			return nil, err
 		}
 		p.pos++
-		cmd.Args = append(cmd.Args, arg)
+		return arg, nil
 	}
-	return cmd, nil
+	node, err := p.parseAtom()
+	if err != nil {
+		return nil, err
+	}
+	return []Node{node}, nil
 }
 
 func commandArgCount(name string) (int, bool) {

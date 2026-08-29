@@ -15,6 +15,18 @@ func TestParseStructures(t *testing.T) {
 			command, ok := node.(Command)
 			return ok && command.Name == `\frac` && len(command.Args) == 2
 		}},
+		{name: "UnbracedLetterFraction", expr: `\frac ca`, check: func(node Node) bool {
+			command, ok := node.(Command)
+			return ok && len(command.Args) == 2 &&
+				len(command.Args[0]) == 1 && command.Args[0][0] == Letter("c") &&
+				len(command.Args[1]) == 1 && command.Args[1][0] == Letter("a")
+		}},
+		{name: "UnbracedNumberFraction", expr: `\frac12`, check: func(node Node) bool {
+			command, ok := node.(Command)
+			return ok && len(command.Args) == 2 &&
+				len(command.Args[0]) == 1 && command.Args[0][0] == Number("1") &&
+				len(command.Args[1]) == 1 && command.Args[1][0] == Number("2")
+		}},
 		{name: "RootIndex", expr: `\sqrt[3]{x}`, check: func(node Node) bool {
 			command, ok := node.(Command)
 			return ok && len(command.Args) == 1 && len(command.OptArgs) == 1
