@@ -561,6 +561,10 @@ func namedOperator(command string) (string, bool) {
 		return "∅", true
 	case `\mid`, `\vert`:
 		return "∣", true
+	case `\langle`:
+		return "⟨", true
+	case `\rangle`:
+		return "⟩", true
 	case `\lfloor`:
 		return "⌊", true
 	case `\rfloor`:
