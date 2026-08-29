@@ -196,10 +196,10 @@ func (w *writer) command(command latex.Command) {
 		w.raw("<mo>")
 		w.textArguments(command.Args)
 		w.raw("</mo>")
+	case `\mathcal`:
+		w.mathVariant(command.Args, script)
 	case `\mathbb`:
-		for _, arg := range command.Args {
-			w.mathbb(arg)
-		}
+		w.mathVariant(command.Args, doubleStruck)
 	case `\mod`, `\bmod`:
 		w.element("mo", "mod")
 		w.arguments(command.Args)
@@ -342,26 +342,83 @@ func (w *writer) argText(nodes []latex.Node) {
 	}
 }
 
-func (w *writer) mathbb(nodes []latex.Node) {
-	for _, node := range nodes {
-		switch node := node.(type) {
-		case latex.Letter:
-			w.raw("<mi>")
-			for _, r := range node {
-				w.WriteRune(doubleStruck(r))
-			}
-			w.raw("</mi>")
-		case latex.Number:
-			w.raw("<mn>")
-			for _, r := range node {
-				w.WriteRune(doubleStruck(r))
-			}
-			w.raw("</mn>")
-		case latex.List:
-			w.mathbb(node)
-		default:
+func (w *writer) mathVariant(args [][]latex.Node, transform func(rune) rune) {
+	w.raw("<mrow>")
+	for _, arg := range args {
+		for _, node := range variantNodes(arg, transform) {
 			w.node(node)
 		}
+	}
+	w.raw("</mrow>")
+}
+
+func variantNodes(nodes []latex.Node, transform func(rune) rune) []latex.Node {
+	result := make([]latex.Node, len(nodes))
+	for i, node := range nodes {
+		result[i] = variantNode(node, transform)
+	}
+	return result
+}
+
+func variantNode(node latex.Node, transform func(rune) rune) latex.Node {
+	switch node := node.(type) {
+	case latex.Letter:
+		letters := []rune(node)
+		for i, r := range letters {
+			letters[i] = transform(r)
+		}
+		return latex.Letter(letters)
+	case latex.Number:
+		digits := []rune(node)
+		for i, r := range digits {
+			digits[i] = transform(r)
+		}
+		return latex.Number(digits)
+	case latex.List:
+		return latex.List(variantNodes(node, transform))
+	case latex.Sup:
+		return latex.Sup{Base: variantNode(node.Base, transform), Script: variantNode(node.Script, transform)}
+	case latex.Sub:
+		return latex.Sub{Base: variantNode(node.Base, transform), Script: variantNode(node.Script, transform)}
+	case latex.SubSup:
+		return latex.SubSup{
+			Base: variantNode(node.Base, transform),
+			Sub:  variantNode(node.Sub, transform),
+			Sup:  variantNode(node.Sup, transform),
+		}
+	case latex.Delimited:
+		node.Body = variantNodes(node.Body, transform)
+		return node
+	case latex.Env:
+		node.Body = variantNodes(node.Body, transform)
+		return node
+	case latex.Command:
+		if commandSetsMathVariant(node.Name) {
+			return node
+		}
+		node.Args = variantArguments(node.Args, transform)
+		node.OptArgs = variantArguments(node.OptArgs, transform)
+		return node
+	default:
+		return node
+	}
+}
+
+func variantArguments(args [][]latex.Node, transform func(rune) rune) [][]latex.Node {
+	result := make([][]latex.Node, len(args))
+	for i, arg := range args {
+		result[i] = variantNodes(arg, transform)
+	}
+	return result
+}
+
+func commandSetsMathVariant(name string) bool {
+	switch name {
+	case `\mathcal`, `\mathbb`, `\mathfrak`, `\mathrm`, `\mathbf`, `\mathit`, `\operatorname`,
+		`\text`, `\textit`, `\textbf`, `\textmd`, `\textrm`:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -537,6 +594,22 @@ func namedOperator(command string) (string, bool) {
 		return "→", true
 	case `\leftarrow`:
 		return "←", true
+	case `\nearrow`:
+		return "↗", true
+	case `\searrow`:
+		return "↘", true
+	case `\nwarrow`:
+		return "↖", true
+	case `\swarrow`:
+		return "↙", true
+	case `\longrightarrow`:
+		return "⟶", true
+	case `\longleftarrow`:
+		return "⟵", true
+	case `\rightsquigarrow`:
+		return "⇝", true
+	case `\leftsquigarrow`:
+		return "⇜", true
 	case `\mapsto`:
 		return "↦", true
 	case `\Rightarrow`:
@@ -614,6 +687,41 @@ func mapAccent(command string) string {
 		return "¨"
 	default:
 		return "~"
+	}
+}
+
+func script(r rune) rune {
+	switch r {
+	case 'B':
+		return 'ℬ'
+	case 'E':
+		return 'ℰ'
+	case 'F':
+		return 'ℱ'
+	case 'H':
+		return 'ℋ'
+	case 'I':
+		return 'ℐ'
+	case 'L':
+		return 'ℒ'
+	case 'M':
+		return 'ℳ'
+	case 'R':
+		return 'ℛ'
+	case 'e':
+		return 'ℯ'
+	case 'g':
+		return 'ℊ'
+	case 'o':
+		return 'ℴ'
+	}
+	switch {
+	case r >= 'A' && r <= 'Z':
+		return 0x1D49C + (r - 'A')
+	case r >= 'a' && r <= 'z':
+		return 0x1D4B6 + (r - 'a')
+	default:
+		return r
 	}
 }
 

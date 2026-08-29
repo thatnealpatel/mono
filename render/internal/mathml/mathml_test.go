@@ -33,6 +33,10 @@ func TestRenderSupportedCommands(t *testing.T) {
 		{name: "LeftAngle", expr: `\langle x`, want: []string{"<mo>⟨</mo>"}},
 		{name: "RightAngle", expr: `x \rangle`, want: []string{"<mo>⟩</mo>"}},
 		{name: "AngleDelimiters", expr: `\left\langle x, y \right\rangle`, want: []string{"<mo>⟨</mo>", "<mo>⟩</mo>"}},
+		{name: "DiagonalArrows", expr: `a \nearrow b \searrow c \nwarrow d \swarrow e`, want: []string{"<mo>↗</mo>", "<mo>↘</mo>", "<mo>↖</mo>", "<mo>↙</mo>"}},
+		{name: "LongArrows", expr: `a \longrightarrow b \longleftarrow c`, want: []string{"<mo>⟶</mo>", "<mo>⟵</mo>"}},
+		{name: "SquiggleArrows", expr: `a \rightsquigarrow b \leftsquigarrow c`, want: []string{"<mo>⇝</mo>", "<mo>⇜</mo>"}},
+		{name: "Mathcal", expr: `\mathcal{F}`, want: []string{"<mi>ℱ</mi>"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -44,6 +48,56 @@ func TestRenderSupportedCommands(t *testing.T) {
 				if got, ok := strings.Contains(html, want), true; got != ok {
 					t.Errorf("contains %q: got %t, want %t; HTML = %q", want, got, ok, html)
 				}
+			}
+		})
+	}
+}
+
+func TestRenderMathcal(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{name: "Grouped", expr: `\mathcal{Fa2}`, want: `<math><mrow><mi>ℱ</mi><mi>𝒶</mi><mn>2</mn></mrow></math>`},
+		{name: "Script", expr: `x_{\mathcal{G}}`, want: `<math><msub><mi>x</mi><mrow><mi>𝒢</mi></mrow></msub></math>`},
+		{name: "Operator", expr: `\mathcal{F+1}`, want: `<math><mrow><mi>ℱ</mi><mo>+</mo><mn>1</mn></mrow></math>`},
+		{name: "MultipleSubscript", expr: `x_{\mathcal{AB}}`, want: `<math><msub><mi>x</mi><mrow><mi>𝒜</mi><mi>ℬ</mi></mrow></msub></math>`},
+		{name: "Composite", expr: `\mathcal{F^G+\frac{H}{I}}`, want: `<math><mrow><msup><mi>ℱ</mi><mi>𝒢</mi></msup><mo>+</mo><mfrac><mi>ℋ</mi><mi>ℐ</mi></mfrac></mrow></math>`},
+		{name: "OperatorOverride", expr: `\mathcal{\operatorname{Hom}}`, want: `<math><mrow><mo>Hom</mo></mrow></math>`},
+		{name: "MathbbOverride", expr: `\mathcal{\mathbb{A^B}}`, want: `<math><mrow><mrow><msup><mi>𝔸</mi><mi>𝔹</mi></msup></mrow></mrow></math>`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.expr, false)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if got != test.want {
+				t.Errorf("got %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRenderMathbb(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{name: "MultipleScript", expr: `x^{\mathbb{AB}}`, want: `<math><msup><mi>x</mi><mrow><mi>𝔸</mi><mi>𝔹</mi></mrow></msup></math>`},
+		{name: "Digits", expr: `\mathbb{12}`, want: `<math><mrow><mn>𝟙𝟚</mn></mrow></math>`},
+		{name: "ExpandingCommand", expr: `x^{\mathbb{\mod{A}}}`, want: `<math><msup><mi>x</mi><mrow><mo>mod</mo><mi>𝔸</mi></mrow></msup></math>`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.expr, false)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if got != test.want {
+				t.Errorf("got %q, want %q", got, test.want)
 			}
 		})
 	}
