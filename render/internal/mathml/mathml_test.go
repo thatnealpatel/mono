@@ -23,6 +23,11 @@ func TestRenderSupportedCommands(t *testing.T) {
 		{name: "BigDelimiter", expr: `\bigl(x\bigr)`, want: []string{`form="prefix"`, `form="postfix"`}},
 		{name: "Congruent", expr: `A \cong B`, want: []string{"<mo>≅</mo>"}},
 		{name: "TensorProduct", expr: `A \otimes B`, want: []string{"<mo>⊗</mo>"}},
+		{name: "Composition", expr: `f \circ g`, want: []string{"<mo>∘</mo>"}},
+		{name: "VariantEmptySet", expr: `\varnothing`, want: []string{"<mo>∅</mo>"}},
+		{name: "Smile", expr: `a \smile b`, want: []string{"<mo>⌣</mo>"}},
+		{name: "LeftRightArrow", expr: `A \leftrightarrow B`, want: []string{"<mo>↔</mo>"}},
+		{name: "LongLeftRightArrow", expr: `A \longleftrightarrow B`, want: []string{"<mo>⟷</mo>"}},
 		{name: "Implies", expr: `P \implies Q`, want: []string{"<mo>⟹</mo>"}},
 		{name: "Not", expr: `x \not= y`, want: []string{"<mo>≠</mo>"}},
 		{name: "NotCongruent", expr: `A \not\cong B`, want: []string{"<mo>≇</mo>"}},
@@ -55,6 +60,48 @@ func TestRenderSupportedCommands(t *testing.T) {
 				if got, ok := strings.Contains(html, want), true; got != ok {
 					t.Errorf("contains %q: got %t, want %t; HTML = %q", want, got, ok, html)
 				}
+			}
+		})
+	}
+}
+
+func TestRenderCommandsWithArguments(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{name: "Mathscr", expr: `\mathscr{Fa2}`, want: `<math><mrow><mi>ℱ</mi><mi>𝒶</mi><mn>2</mn></mrow></math>`},
+		{name: "MathscrOverride", expr: `\mathbb{\mathscr{A}}`, want: `<math><mrow><mrow><mi>𝒜</mi></mrow></mrow></math>`},
+		{name: "Mathrel", expr: `a\mathrel{R}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2778em"/><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mspace width="0.2778em"/><mi>b</mi></mrow></math>`},
+		{name: "KnownOperatorMathrel", expr: `a\mathrel{+}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2778em"/><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">+</mo><mspace width="0.2778em"/><mi>b</mi></mrow></math>`},
+		{name: "SeparatorMathrel", expr: `a\mathrel{,}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2778em"/><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">,</mo><mspace width="0.2778em"/><mi>b</mi></mrow></math>`},
+		{name: "AfterRelationMathrel", expr: `a=\mathrel{R}b`, want: `<math><mrow><mi>a</mi><mo>=</mo><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mspace width="0.2778em"/><mi>b</mi></mrow></math>`},
+		{name: "AfterScriptedRelationMathrel", expr: `a=_{x}\mathrel{R}b`, want: `<math><mrow><mi>a</mi><msub><mo>=</mo><mi>x</mi></msub><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mspace width="0.2778em"/><mi>b</mi></mrow></math>`},
+		{name: "AfterSlashMathrel", expr: `a/\mathrel{R}b`, want: `<math><mrow><mi>a</mi><mo>/</mo><mspace width="0.2778em"/><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mspace width="0.2778em"/><mi>b</mi></mrow></math>`},
+		{name: "AfterColonMathrel", expr: `a:\mathrel{R}b`, want: `<math><mrow><mi>a</mi><mo>:</mo><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mspace width="0.2778em"/><mi>b</mi></mrow></math>`},
+		{name: "BetweenDelimitersMathrel", expr: `(\mathrel{R})`, want: `<math><mrow><mo stretchy="false">(</mo><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mo stretchy="false">)</mo></mrow></math>`},
+		{name: "BetweenCommandDelimitersMathrel", expr: `\langle\mathrel{R}\rangle`, want: `<math><mrow><mo>⟨</mo><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mo>⟩</mo></mrow></math>`},
+		{name: "BetweenBigDelimitersMathrel", expr: `\bigl(\mathrel{R}\bigr)`, want: `<math><mrow><mo fence="true" form="prefix" stretchy="true" minsize="1.2em" maxsize="1.2em">(</mo><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mo fence="true" form="postfix" stretchy="true" minsize="1.2em" maxsize="1.2em">)</mo></mrow></math>`},
+		{name: "BetweenEscapedBracesMathrel", expr: `\{\mathrel{R}\}`, want: `<math><mrow><mo>{</mo><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mo>}</mo></mrow></math>`},
+		{name: "LeadingMathrel", expr: `\mathrel{R}a`, want: `<math><mrow><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mspace width="0.2778em"/><mi>a</mi></mrow></math>`},
+		{name: "BeforeBinaryMathrel", expr: `\mathrel{R}+b`, want: `<math><mrow><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mspace width="0.2778em"/><mo>+</mo><mi>b</mi></mrow></math>`},
+		{name: "TrailingMathrel", expr: `a\mathrel{R}`, want: `<math><mrow><mi>a</mi><mspace width="0.2778em"/><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo></mrow></math>`},
+		{name: "AdjacentMathrel", expr: `a\mathrel{R}\mathrel{S}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2778em"/><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">S</mo><mspace width="0.2778em"/><mi>b</mi></mrow></math>`},
+		{name: "ScriptMathrel", expr: `a_{\mathrel{R}b}`, want: `<math><msub><mi>a</mi><mrow><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mi>b</mi></mrow></msub></math>`},
+		{name: "ScriptedMathrel", expr: `a\mathrel{R}_{x}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2778em"/><msub><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mi>x</mi></msub><mspace width="0.2778em"/><mi>b</mi></mrow></math>`},
+		{name: "FractionMathrel", expr: `\frac{a\mathrel{R}b}{c}`, want: `<math><mfrac><mrow><mi>a</mi><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo><mi>b</mi></mrow><mi>c</mi></mfrac></math>`},
+		{name: "ComplexMathrel", expr: `a\mathrel{\frac12}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2778em"/><mrow><mfrac><mn>1</mn><mn>2</mn></mfrac></mrow><mspace width="0.2778em"/><mi>b</mi></mrow></math>`},
+		{name: "ComplexScriptedMathrel", expr: `a\mathrel{\frac12}_{x}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2778em"/><msub><mrow><mfrac><mn>1</mn><mn>2</mn></mfrac></mrow><mi>x</mi></msub><mspace width="0.2778em"/><mi>b</mi></mrow></math>`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.expr, false)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if got != test.want {
+				t.Errorf("got %q, want %q", got, test.want)
 			}
 		})
 	}
