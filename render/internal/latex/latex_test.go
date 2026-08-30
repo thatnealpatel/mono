@@ -78,7 +78,7 @@ func TestParseUnknownCommand(t *testing.T) {
 }
 
 func TestParseRejectsMalformedInput(t *testing.T) {
-	for _, expr := range []string{`\frac{x}`, `{x`, `x^`, `\left(x`, `\middle|`, `\begin{cases}x`, `\Big x`, `\Big\alpha`, `\left\alpha x\right)`, `\left(x\right\beta`, `\mathrel`, `\mathbin`, `\mathscr`} {
+	for _, expr := range []string{`\frac{x}`, `{x`, `x^`, `\left(x`, `\middle|`, `\begin{cases}x`, `\Big x`, `\Big\alpha`, `\left\alpha x\right)`, `\left(x\right\beta`, `\mathrel`, `\mathbin`, `\mathscr`, `\widetilde`} {
 		_, err := Parse(expr)
 		if !errors.Is(err, ErrInvalid) {
 			t.Errorf("Parse(%q) error = %v, want ErrInvalid", expr, err)

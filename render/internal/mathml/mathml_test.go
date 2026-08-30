@@ -50,6 +50,7 @@ func TestRenderSupportedCommands(t *testing.T) {
 		{name: "Dimension", expr: `\dim V`, want: []string{"<mo>dim</mo>"}},
 		{name: "BigSquareCup", expr: `A \bigsqcup B`, want: []string{"⨆"}},
 		{name: "RightSemidirectProduct", expr: `G \rtimes H`, want: []string{"<mo>⋊</mo>"}},
+		{name: "HookArrows", expr: `A \hookrightarrow B \hookleftarrow C`, want: []string{"<mo>↪</mo>", "<mo>↩</mo>"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -74,6 +75,7 @@ func TestRenderCommandsWithArguments(t *testing.T) {
 	}{
 		{name: "Mathscr", expr: `\mathscr{Fa2}`, want: `<math><mrow><mi>ℱ</mi><mi>𝒶</mi><mn>2</mn></mrow></math>`},
 		{name: "MathscrOverride", expr: `\mathbb{\mathscr{A}}`, want: `<math><mrow><mrow><mi>𝒜</mi></mrow></mrow></math>`},
+		{name: "WideTilde", expr: `\widetilde{ABC}`, want: `<math><mover><mrow><mi>A</mi><mi>B</mi><mi>C</mi></mrow><mo stretchy="true">~</mo></mover></math>`},
 		{name: "Mathbin", expr: `a\mathbin{\triangle}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2222em"/><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">△</mo><mspace width="0.2222em"/><mi>b</mi></mrow></math>`},
 		{name: "TriangleOrdinary", expr: `a\triangle2`, want: `<math><mrow><mi>a</mi><mo lspace="0em" rspace="0em">△</mo><mn>2</mn></mrow></math>`},
 		{name: "MathbinTypography", expr: `a\mathbin{x}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2222em"/><mrow><mi>x</mi></mrow><mspace width="0.2222em"/><mi>b</mi></mrow></math>`},
