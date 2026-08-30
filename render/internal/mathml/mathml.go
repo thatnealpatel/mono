@@ -432,7 +432,7 @@ func commandIsRelation(name string) bool {
 		`\not`, `\centernot`, `\uparrow`, `\downarrow`, `\updownarrow`, `\Uparrow`, `\Downarrow`, `\Updownarrow`,
 		`\rightarrow`, `\to`, `\leftarrow`, `\nearrow`, `\searrow`, `\nwarrow`, `\swarrow`,
 		`\longrightarrow`, `\longleftarrow`, `\leftrightarrow`, `\longleftrightarrow`,
-		`\rightsquigarrow`, `\leftsquigarrow`, `\mapsto`, `\longmapsto`, `\Rightarrow`,
+		`\hookrightarrow`, `\hookleftarrow`, `\rightsquigarrow`, `\leftsquigarrow`, `\mapsto`, `\longmapsto`, `\Rightarrow`,
 		`\Longrightarrow`, `\implies`, `\Leftarrow`, `\iff`:
 		return true
 	default:
@@ -540,6 +540,12 @@ func (w *writer) command(command latex.Command) {
 		w.raw("</mrow>")
 		w.element("mo", accent)
 		w.raw("</mover>")
+	case `\widetilde`:
+		w.raw("<mover><mrow>")
+		for _, node := range command.Args[0] {
+			w.node(node)
+		}
+		w.raw(`</mrow><mo stretchy="true">~</mo></mover>`)
 	case `\underline`:
 		w.raw("<munder><mrow>")
 		w.arguments(command.Args)
@@ -1128,6 +1134,10 @@ func namedOperator(command string) (string, bool) {
 		return "⟶", true
 	case `\longleftarrow`:
 		return "⟵", true
+	case `\hookrightarrow`:
+		return "↪", true
+	case `\hookleftarrow`:
+		return "↩", true
 	case `\leftrightarrow`:
 		return "↔", true
 	case `\longleftrightarrow`:
