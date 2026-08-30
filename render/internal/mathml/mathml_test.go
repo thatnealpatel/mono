@@ -76,6 +76,7 @@ func TestRenderCommandsWithArguments(t *testing.T) {
 		{name: "Mathscr", expr: `\mathscr{Fa2}`, want: `<math><mrow><mi>ℱ</mi><mi>𝒶</mi><mn>2</mn></mrow></math>`},
 		{name: "MathscrOverride", expr: `\mathbb{\mathscr{A}}`, want: `<math><mrow><mrow><mi>𝒜</mi></mrow></mrow></math>`},
 		{name: "WideTilde", expr: `\widetilde{ABC}`, want: `<math><mover><mrow><mi>A</mi><mi>B</mi><mi>C</mi></mrow><mo stretchy="true">~</mo></mover></math>`},
+		{name: "Phantom", expr: `a\phantom{b+1}c`, want: `<math><mrow><mi>a</mi><mphantom><mrow><mi>b</mi><mo>+</mo><mn>1</mn></mrow></mphantom><mi>c</mi></mrow></math>`},
 		{name: "Mathbin", expr: `a\mathbin{\triangle}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2222em"/><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">△</mo><mspace width="0.2222em"/><mi>b</mi></mrow></math>`},
 		{name: "TriangleOrdinary", expr: `a\triangle2`, want: `<math><mrow><mi>a</mi><mo lspace="0em" rspace="0em">△</mo><mn>2</mn></mrow></math>`},
 		{name: "MathbinTypography", expr: `a\mathbin{x}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2222em"/><mrow><mi>x</mi></mrow><mspace width="0.2222em"/><mi>b</mi></mrow></math>`},
