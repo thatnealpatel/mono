@@ -302,7 +302,7 @@ func commandArgCount(name string) (int, bool) {
 	switch name {
 	case `\frac`, `\dfrac`, `\tfrac`, `\binom`:
 		return 2, true
-	case `\sqrt`, `\overline`, `\underline`, `\underbrace`, `\hat`, `\boxed`, `\xmapsto`,
+	case `\sqrt`, `\overline`, `\underline`, `\underbrace`, `\hat`, `\boxed`, `\phantom`, `\xmapsto`,
 		`\bar`, `\vec`, `\dot`, `\ddot`, `\tilde`, `\widetilde`, `\text`, `\textit`,
 		`\textbf`, `\textmd`, `\textrm`, `\mathrm`, `\mathbf`, `\mathit`,
 		`\operatorname`, `\mathcal`, `\mathscr`, `\mathbb`, `\mathfrak`, `\mathrel`, `\mathbin`, `\mod`, `\pmod`,

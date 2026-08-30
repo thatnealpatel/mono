@@ -529,6 +529,10 @@ func (w *writer) command(command latex.Command) {
 		w.raw(`<menclose notation="box"><mrow>`)
 		w.arguments(command.Args)
 		w.raw("</mrow></menclose>")
+	case `\phantom`:
+		w.raw("<mphantom>")
+		w.arguments(command.Args)
+		w.raw("</mphantom>")
 	case `\xmapsto`:
 		w.raw(`<mover><mo stretchy="true">⟼</mo><mrow>`)
 		w.scriptArguments(command.Args)
