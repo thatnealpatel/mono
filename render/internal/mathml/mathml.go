@@ -556,11 +556,11 @@ func (w *writer) command(command latex.Command) {
 		w.raw("</mrow><mo>_</mo></munder>")
 	case `\underbrace`:
 		w.underbrace(command.Args)
-	case `\textit`, `\mathit`:
+	case `\textit`:
 		w.raw(`<mtext mathvariant="italic">`)
 		w.textArguments(command.Args)
 		w.raw("</mtext>")
-	case `\textbf`, `\mathbf`:
+	case `\textbf`:
 		w.raw(`<mtext mathvariant="bold">`)
 		w.textArguments(command.Args)
 		w.raw("</mtext>")
@@ -578,6 +578,12 @@ func (w *writer) command(command latex.Command) {
 		w.mathVariant(command.Args, doubleStruck)
 	case `\mathsf`:
 		w.mathVariant(command.Args, sansSerif)
+	case `\mathbf`:
+		w.mathVariant(command.Args, bold)
+	case `\mathit`:
+		w.mathVariant(command.Args, italic)
+	case `\mathfrak`:
+		w.mathVariant(command.Args, fraktur)
 	case `\ell`:
 		w.element("mi", "ℓ")
 	case `\triangle`:
@@ -1282,6 +1288,55 @@ func script(r rune) rune {
 		return 0x1D49C + (r - 'A')
 	case r >= 'a' && r <= 'z':
 		return 0x1D4B6 + (r - 'a')
+	default:
+		return r
+	}
+}
+
+func bold(r rune) rune {
+	switch {
+	case r >= 'A' && r <= 'Z':
+		return 0x1D400 + (r - 'A')
+	case r >= 'a' && r <= 'z':
+		return 0x1D41A + (r - 'a')
+	case r >= '0' && r <= '9':
+		return 0x1D7CE + (r - '0')
+	default:
+		return r
+	}
+}
+
+func italic(r rune) rune {
+	switch {
+	case r == 'h':
+		return 'ℎ'
+	case r >= 'A' && r <= 'Z':
+		return 0x1D434 + (r - 'A')
+	case r >= 'a' && r <= 'z':
+		return 0x1D44E + (r - 'a')
+	default:
+		return r
+	}
+}
+
+func fraktur(r rune) rune {
+	switch {
+	case r >= 'A' && r <= 'Z':
+		switch r {
+		case 'C':
+			return 'ℭ'
+		case 'H':
+			return 'ℌ'
+		case 'I':
+			return 'ℑ'
+		case 'R':
+			return 'ℜ'
+		case 'Z':
+			return 'ℨ'
+		}
+		return 0x1D504 + (r - 'A')
+	case r >= 'a' && r <= 'z':
+		return 0x1D51E + (r - 'a')
 	default:
 		return r
 	}
