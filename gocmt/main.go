@@ -135,10 +135,10 @@ func handle(name string) error {
 	return nil
 }
 
-// diff shows old versus new for -d.
-// ponytail: shells out to diff(1); vendor
-// an internal diff if this ever needs to
-// run where diff is missing.
+// diff shows old versus new for -d. It
+// shells out to diff(1), so an internal
+// diff would be needed to run where that
+// command is missing.
 func diff(name string, old, new []byte) {
 	dir, err := os.MkdirTemp("", "gocmt")
 	if err != nil {
@@ -169,6 +169,9 @@ func process(name string, src []byte) ([]byte, error) {
 	var out []byte
 	last := 0
 	for _, g := range f.Comments {
+		if g == f.Doc {
+			continue // package doc comments are left as written
+		}
 		start, end, text, ok := rewrap(tf, src, g)
 		if !ok {
 			continue
@@ -183,8 +186,8 @@ func process(name string, src []byte) ([]byte, error) {
 
 // rewrap formats one comment group. It reports ok=false when the group is not
 // eligible (block comment, trailing comment, mixed indentation, no prose) or
-// already formatted. On success the replacement text spans src[start:end], from
-// the first line's indent to the last comment's final byte.
+// already formatted. On success the replacement text spans src[start:end],
+// from the first line's indent to the last comment's final byte.
 func rewrap(tf *token.File, src []byte, g *ast.CommentGroup) (start, end int, text []byte, ok bool) {
 	var indent string
 	for i, c := range g.List {
@@ -246,10 +249,10 @@ func rewrap(tf *token.File, src []byte, g *ast.CommentGroup) (start, end int, te
 
 	// Every paragraph in the block wraps
 	// at the same candidate width so their
-	// right edges agree, and the block score
-	// is the summed wrap cost. Ties go to
-	// the width nearest the anchor target,
-	// then to the narrower one.
+	// right edges agree, and the block
+	// score is the summed wrap cost. Ties
+	// go to the width nearest the anchor
+	// target, then to the narrower one.
 	var best []string
 	bestCost, bestDist := 1<<60, 1<<60
 	for w := lo; w <= hi; w++ {
@@ -267,7 +270,7 @@ func rewrap(tf *token.File, src []byte, g *ast.CommentGroup) (start, end int, te
 			}
 			ls, c := wrapWords(ch.words, avail)
 			cost += c
-			// ponytail: naive widow rule; tune the divisor if taste disagrees
+			// Naive widow rule; tune the divisor if taste disagrees.
 			if last := utf8.RuneCountInString(ls[len(ls)-1]); last < avail/3 {
 				d := avail/3 - last
 				cost += d * d
@@ -294,9 +297,9 @@ func rewrap(tf *token.File, src []byte, g *ast.CommentGroup) (start, end int, te
 
 // anchorWidth returns the display width of
 // the first non-blank line after byte offset
-// from. ponytail: a tab counts as one column,
-// matching the corpus habit of a fixed text
-// width regardless of indentation.
+// from. A tab counts as one column, matching
+// the corpus habit of a fixed text width
+// regardless of indentation.
 func anchorWidth(src []byte, from int) int {
 	for _, line := range strings.Split(string(src[from:]), "\n")[1:] {
 		line = strings.TrimRight(line, " \t")
@@ -370,10 +373,10 @@ func listOrHeading(s string) bool {
 
 // wrapWords breaks words into lines of at most width
 // columns, minimizing the summed squared deviation from
-// width so the lines form an even block (Knuth-style minimum
-// raggedness), and returns the lines with that cost. The
-// last line pays no penalty for running short. A single word
-// longer than the width gets a line to itself.
+// width so the lines form an even block (Knuth-style
+// minimum raggedness), and returns the lines with that
+// cost. The last line pays no penalty for running short. A
+// single word longer than the width gets a line to itself.
 func wrapWords(words []string, width int) ([]string, int) {
 	n := len(words)
 	if n == 0 {
