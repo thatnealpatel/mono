@@ -409,7 +409,7 @@ func (w *writer) relationNucleus(node latex.Node) {
 
 func commandIsOperator(name string) bool {
 	switch name {
-	case `\sum`, `\prod`, `\int`, `\bigcup`, `\bigsqcup`, `\gcd`, `\log`, `\min`, `\max`, `\deg`, `\dim`, `\operatorname`:
+	case `\sum`, `\prod`, `\int`, `\bigcup`, `\bigsqcup`, `\gcd`, `\log`, `\min`, `\max`, `\deg`, `\dim`, `\ker`, `\operatorname`:
 		return true
 	default:
 		return false
@@ -418,7 +418,7 @@ func commandIsOperator(name string) bool {
 
 func commandIsBinary(name string) bool {
 	switch name {
-	case `\pm`, `\mp`, `\times`, `\div`, `\cdot`, `\circ`, `\otimes`, `\rtimes`, `\cup`, `\sqcup`, `\cap`, `\setminus`:
+	case `\pm`, `\mp`, `\times`, `\div`, `\cdot`, `\circ`, `\otimes`, `\oplus`, `\rtimes`, `\cup`, `\sqcup`, `\cap`, `\setminus`:
 		return true
 	default:
 		return false
@@ -428,7 +428,7 @@ func commandIsBinary(name string) bool {
 func commandIsRelation(name string) bool {
 	switch name {
 	case `\leq`, `\le`, `\geq`, `\ge`, `\neq`, `\ne`, `\approx`, `\equiv`, `\cong`,
-		`\in`, `\notin`, `\subset`, `\subseteq`, `\supset`, `\supseteq`, `\smile`, `\mid`, `\vert`,
+		`\in`, `\notin`, `\subset`, `\subseteq`, `\supset`, `\supseteq`, `\smile`, `\mid`, `\nmid`, `\vert`, `\perp`,
 		`\not`, `\centernot`, `\uparrow`, `\downarrow`, `\updownarrow`, `\Uparrow`, `\Downarrow`, `\Updownarrow`,
 		`\rightarrow`, `\to`, `\leftarrow`, `\nearrow`, `\searrow`, `\nwarrow`, `\swarrow`,
 		`\longrightarrow`, `\longleftarrow`, `\leftrightarrow`, `\longleftrightarrow`,
@@ -576,6 +576,8 @@ func (w *writer) command(command latex.Command) {
 		w.mathVariant(command.Args, script)
 	case `\mathbb`:
 		w.mathVariant(command.Args, doubleStruck)
+	case `\mathsf`:
+		w.mathVariant(command.Args, sansSerif)
 	case `\ell`:
 		w.element("mi", "ℓ")
 	case `\triangle`:
@@ -589,7 +591,7 @@ func (w *writer) command(command latex.Command) {
 	case `\mod`, `\bmod`:
 		w.element("mo", "mod")
 		w.arguments(command.Args)
-	case `\gcd`, `\log`, `\min`, `\max`, `\deg`, `\dim`:
+	case `\gcd`, `\log`, `\min`, `\max`, `\deg`, `\dim`, `\ker`:
 		w.element("mo", command.Name[1:])
 		w.arguments(command.Args)
 	case `\pmod`:
@@ -892,7 +894,7 @@ func variantArguments(args [][]latex.Node, transform func(rune) rune) [][]latex.
 
 func commandSetsMathVariant(name string) bool {
 	switch name {
-	case `\mathcal`, `\mathscr`, `\mathbb`, `\mathfrak`, `\mathrm`, `\mathbf`, `\mathit`, `\operatorname`,
+	case `\mathcal`, `\mathscr`, `\mathbb`, `\mathfrak`, `\mathsf`, `\mathrm`, `\mathbf`, `\mathit`, `\operatorname`,
 		`\text`, `\textit`, `\textbf`, `\textmd`, `\textrm`:
 		return true
 	default:
@@ -1094,6 +1096,8 @@ func namedOperator(command string) (string, bool) {
 		return "≡", true
 	case `\cong`:
 		return "≅", true
+	case `\oplus`:
+		return "⊕", true
 	case `\otimes`:
 		return "⊗", true
 	case `\rtimes`:
@@ -1176,6 +1180,10 @@ func namedOperator(command string) (string, bool) {
 		return "∅", true
 	case `\mid`, `\vert`:
 		return "∣", true
+	case `\nmid`:
+		return "∤", true
+	case `\perp`:
+		return "⟂", true
 	case `\langle`:
 		return "⟨", true
 	case `\rangle`:
@@ -1274,6 +1282,19 @@ func script(r rune) rune {
 		return 0x1D49C + (r - 'A')
 	case r >= 'a' && r <= 'z':
 		return 0x1D4B6 + (r - 'a')
+	default:
+		return r
+	}
+}
+
+func sansSerif(r rune) rune {
+	switch {
+	case r >= 'A' && r <= 'Z':
+		return 0x1D5A0 + (r - 'A')
+	case r >= 'a' && r <= 'z':
+		return 0x1D5BA + (r - 'a')
+	case r >= '0' && r <= '9':
+		return 0x1D7E2 + (r - '0')
 	default:
 		return r
 	}

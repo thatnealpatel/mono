@@ -305,7 +305,7 @@ func commandArgCount(name string) (int, bool) {
 	case `\sqrt`, `\overline`, `\underline`, `\underbrace`, `\hat`, `\boxed`, `\phantom`, `\xmapsto`,
 		`\bar`, `\vec`, `\dot`, `\ddot`, `\tilde`, `\widetilde`, `\text`, `\textit`,
 		`\textbf`, `\textmd`, `\textrm`, `\mathrm`, `\mathbf`, `\mathit`,
-		`\operatorname`, `\mathcal`, `\mathscr`, `\mathbb`, `\mathfrak`, `\mathrel`, `\mathbin`, `\mod`, `\pmod`,
+		`\operatorname`, `\mathcal`, `\mathscr`, `\mathbb`, `\mathfrak`, `\mathsf`, `\mathrel`, `\mathbin`, `\mod`, `\pmod`,
 		`\bmod`, `\eqref`, `\label`, `\tag`, `\substack`, `\not`, `\centernot`:
 		return 1, true
 	default:
