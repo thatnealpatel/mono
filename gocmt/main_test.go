@@ -138,6 +138,28 @@ func f() {
 `,
 	},
 	{
+		name: "first-line comment untouched",
+		in: `// Copyright 2026. This long copyright notice must remain exactly as written.
+// All rights reserved.
+
+package p
+
+// P is tiny but its comment still gets exactly forty columns of width.
+type P struct {
+}
+`,
+		want: `// Copyright 2026. This long copyright notice must remain exactly as written.
+// All rights reserved.
+
+package p
+
+// P is tiny but its comment still gets
+// exactly forty columns of width.
+type P struct {
+}
+`,
+	},
+	{
 		name: "package doc untouched",
 		in: `// Package p has a long doc paragraph that would otherwise be rewrapped.
 package p
