@@ -169,6 +169,9 @@ func process(name string, src []byte) ([]byte, error) {
 	var out []byte
 	last := 0
 	for _, g := range f.Comments {
+		if tf.Line(g.Pos()) == 1 {
+			continue // comments beginning on line 1 are left as written
+		}
 		if g == f.Doc {
 			continue // package doc comments are left as written
 		}
