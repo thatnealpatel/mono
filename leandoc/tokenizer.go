@@ -88,8 +88,8 @@ func isWord(s string) bool {
 	return false
 }
 
-// Hand-curated; should be replaced
-// with corpus-derived frequency cutoff.
+// Hand-curated; should be replaced with
+// corpus-derived frequency cutoff.
 var leanStopWords = map[string]bool{
 	"an": true, "the": true, "in": true, "of": true,
 	"to": true, "for": true, "is": true, "and": true,
