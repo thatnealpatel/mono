@@ -1,6 +1,8 @@
 package indexing
 
 import (
+	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +26,7 @@ func build(t *testing.T, recs []Record, names map[string]string) *Index {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
+	t.Cleanup(func() { _ = b.Abort() })
 	for _, r := range recs {
 		if err := b.Add(r); err != nil {
 			t.Fatalf("Add %s: %v", r.Name, err)
@@ -118,6 +121,27 @@ func TestLookupMiss(t *testing.T) {
 	}
 }
 
+func TestLookupCandidateOrder(t *testing.T) {
+	recs := []Record{
+		{Name: "Zeta.target", Kind: "def"},
+		{Name: "Alpha.target", Kind: "def"},
+	}
+	names := map[string]string{
+		"Zoo.target":   "Zoo.lean",
+		"Beta.target":  "Beta.lean",
+		"Alpha.target": "AlphaGenerated.lean",
+	}
+	ix := build(t, recs, names)
+	env, err := ix.Lookup("Missing.Target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Alpha.target", "Zeta.target", "Beta.target", "Zoo.target"}
+	if strings.Join(env.Candidates, ",") != strings.Join(want, ",") {
+		t.Errorf("candidates = %v, want declaration-backed then generated-only in lexical order: %v", env.Candidates, want)
+	}
+}
+
 func TestLookupMissNoCandidates(t *testing.T) {
 	ix := build(t, corpus, generated)
 	env, err := ix.Lookup("Nothing")
@@ -185,6 +209,374 @@ func TestSearchEmpty(t *testing.T) {
 	}
 	if env.Mode != "search" || len(env.Matches) != 0 || env.Matches == nil {
 		t.Errorf("env = %+v", env)
+	}
+}
+
+func TestEnvelopeOmitsEmptyOptionalMatchFields(t *testing.T) {
+	encoded, err := json.Marshal(Envelope{
+		Mode:    "exact",
+		Matches: []Match{{Name: "GF", Kind: "object"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(encoded), `{"mode":"exact","matches":[{"name":"GF","kind":"object"}]}`; got != want {
+		t.Fatalf("JSON = %s, want %s", got, want)
+	}
+}
+
+func assertAbsent(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("Stat(%q) error = %v, want not exist", path, err)
+	}
+}
+
+func assertOnlyFiles(t *testing.T, root string, paths ...string) {
+	t.Helper()
+	want := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		want[filepath.Clean(path)] = false
+	}
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		path = filepath.Clean(path)
+		if _, ok := want[path]; !ok {
+			t.Errorf("unexpected file %q (possible SQLite path alias)", path)
+			return nil
+		}
+		want[path] = true
+		return nil
+	}); err != nil {
+		t.Fatalf("walk %q: %v", root, err)
+	}
+	for path, found := range want {
+		if !found {
+			t.Errorf("expected file %q does not exist", path)
+		}
+	}
+}
+
+var literalSQLitePathComponents = []string{
+	"question?mark",
+	"hash#mark",
+	"percent%mark",
+	"escaped-slash%2Fmark",
+	"space mark",
+	"all ?#% marks",
+}
+
+func TestSQLiteDSNEscapesLiteralRelativePath(t *testing.T) {
+	got := sqliteDSN("relative/cache ?#%20/index.db", url.Values{
+		"immutable": {"1"},
+		"mode":      {"ro"},
+	})
+	want := "file:relative/cache%20%3F%23%2520/index.db?immutable=1&mode=ro"
+	if got != want {
+		t.Fatalf("sqliteDSN = %q, want %q", got, want)
+	}
+}
+
+func TestBuilderPublishesLiteralSQLitePaths(t *testing.T) {
+	for _, component := range literalSQLitePathComponents {
+		t.Run(component, func(t *testing.T) {
+			root := t.TempDir()
+			cache := filepath.Join(root, "cache-"+component)
+			if err := os.Mkdir(cache, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(cache, "index.db")
+			b, err := Create(path, wordTokenizer{})
+			if err != nil {
+				t.Fatalf("Create(%q): %v", path, err)
+			}
+			t.Cleanup(func() { _ = b.Abort() })
+			if err := b.Add(Record{Name: "Exact.path", Kind: "def"}); err != nil {
+				t.Fatal(err)
+			}
+			var journalMode string
+			if err := b.db.QueryRow("pragma journal_mode").Scan(&journalMode); err != nil {
+				t.Fatal(err)
+			}
+			if journalMode != "off" {
+				t.Errorf("journal_mode = %q, want off", journalMode)
+			}
+			var synchronous int
+			if err := b.db.QueryRow("pragma synchronous").Scan(&synchronous); err != nil {
+				t.Fatal(err)
+			}
+			if synchronous != 0 {
+				t.Errorf("synchronous = %d, want 0", synchronous)
+			}
+			assertAbsent(t, path)
+			if _, err := os.Stat(path + ".tmp"); err != nil {
+				t.Fatalf("temporary index %q does not exist before Close: %v", path+".tmp", err)
+			}
+			if err := b.Close(); err != nil {
+				t.Fatalf("Close(%q): %v", path, err)
+			}
+			assertAbsent(t, path+".tmp")
+
+			ix, err := Open(path, wordTokenizer{})
+			if err != nil {
+				t.Fatalf("Open(%q): %v", path, err)
+			}
+			env, err := ix.Lookup("Exact.path")
+			if err != nil || env.Mode != "exact" || len(env.Matches) != 1 {
+				t.Errorf("Lookup from literal path: env=%+v, err=%v", env, err)
+			}
+			if _, err := ix.db.Exec("delete from decls"); err == nil {
+				t.Error("Open returned a writable index")
+			}
+			if err := ix.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			// In particular, '?' and '#' must
+			// not truncate the URI path and
+			// percent escapes must not create a
+			// differently named database.
+			assertOnlyFiles(t, root, path)
+		})
+	}
+}
+
+func TestBuilderAbortCleansLiteralSQLitePaths(t *testing.T) {
+	for _, component := range literalSQLitePathComponents {
+		t.Run(component, func(t *testing.T) {
+			root := t.TempDir()
+			cache := filepath.Join(root, "cache-"+component)
+			if err := os.Mkdir(cache, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(cache, "index.db")
+			b, err := Create(path, wordTokenizer{})
+			if err != nil {
+				t.Fatalf("Create(%q): %v", path, err)
+			}
+			if err := b.Add(Record{Name: "Aborted.path", Kind: "def"}); err != nil {
+				t.Fatal(err)
+			}
+			if err := b.Abort(); err != nil {
+				t.Fatalf("Abort(%q): %v", path, err)
+			}
+			assertAbsent(t, path)
+			assertAbsent(t, path+".tmp")
+			assertOnlyFiles(t, root)
+		})
+	}
+}
+
+func TestBuilderAbortIdempotent(t *testing.T) {
+	stages := []struct {
+		name string
+		run  func(*testing.T, *Builder)
+	}{
+		{name: "empty"},
+		{name: "add", run: func(t *testing.T, b *Builder) {
+			if err := b.Add(Record{Name: "Nat.add"}); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "add name", run: func(t *testing.T, b *Builder) {
+			if err := b.AddName("Nat.generated", "Nat.lean"); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	}
+	for _, stage := range stages {
+		t.Run(stage.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "index.db")
+			b, err := Create(path, wordTokenizer{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stage.run != nil {
+				stage.run(t, b)
+			}
+			if err := b.Abort(); err != nil {
+				t.Fatalf("Abort: %v", err)
+			}
+			if err := b.Abort(); err != nil {
+				t.Fatalf("second Abort: %v", err)
+			}
+			assertAbsent(t, path)
+			assertAbsent(t, path+".tmp")
+			if err := b.Add(Record{Name: "too.late"}); err == nil {
+				t.Error("Add after Abort succeeded")
+			}
+			if err := b.AddName("too.late", "late.lean"); err == nil {
+				t.Error("AddName after Abort succeeded")
+			}
+			if err := b.Close(); err == nil {
+				t.Error("Close after Abort succeeded")
+			}
+		})
+	}
+}
+
+func TestBuilderAbortAfterClosePreservesIndex(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "index.db")
+	b, err := Create(path, wordTokenizer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Add(Record{Name: "Nat.add", Kind: "def"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Abort(); err != nil {
+		t.Fatalf("Abort after Close: %v", err)
+	}
+	if err := b.Abort(); err != nil {
+		t.Fatalf("second Abort after Close: %v", err)
+	}
+	assertAbsent(t, path+".tmp")
+
+	ix, err := Open(path, wordTokenizer{})
+	if err != nil {
+		t.Fatalf("Open after Abort: %v", err)
+	}
+	defer ix.Close()
+	env, err := ix.Lookup("Nat.add")
+	if err != nil || env.Mode != "exact" {
+		t.Fatalf("Lookup after Abort: env=%+v, err=%v", env, err)
+	}
+	if err := b.Close(); err == nil {
+		t.Error("second Close succeeded")
+	}
+}
+
+func TestBuilderAbortAfterAddFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "index.db")
+	b, err := Create(path, wordTokenizer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.fts.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Add(Record{Name: "Nat.add"}); err == nil {
+		t.Fatal("Add with closed FTS statement succeeded")
+	}
+	if err := b.Abort(); err != nil {
+		t.Fatal(err)
+	}
+	assertAbsent(t, path)
+	assertAbsent(t, path+".tmp")
+}
+
+func TestBuilderCloseFailureCleansTemporaryFile(t *testing.T) {
+	t.Run("commit", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "index.db")
+		old := []byte("existing index")
+		if err := os.WriteFile(path, old, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		b, err := Create(path, wordTokenizer{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.tx.Rollback(); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Close(); err == nil {
+			t.Fatal("Close after rollback succeeded")
+		}
+		assertAbsent(t, path+".tmp")
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != string(old) {
+			t.Errorf("existing index changed to %q", got)
+		}
+	})
+
+	t.Run("optimize", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "index.db")
+		b, err := Create(path, wordTokenizer{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := b.tx.Exec("drop table fts"); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Close(); err == nil {
+			t.Fatal("Close without fts table succeeded")
+		}
+		assertAbsent(t, path)
+		assertAbsent(t, path+".tmp")
+	})
+
+	t.Run("closed database", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "index.db")
+		b, err := Create(path, wordTokenizer{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.db.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Close(); err == nil {
+			t.Fatal("Close with closed database succeeded")
+		}
+		assertAbsent(t, path)
+		assertAbsent(t, path+".tmp")
+	})
+
+	t.Run("rename", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "index.db")
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		sentinel := filepath.Join(path, "keep")
+		if err := os.WriteFile(sentinel, []byte("keep"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		b, err := Create(path, wordTokenizer{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Close(); err == nil {
+			t.Fatal("Close renamed database over directory")
+		}
+		assertAbsent(t, path+".tmp")
+		if got, err := os.ReadFile(sentinel); err != nil || string(got) != "keep" {
+			t.Errorf("destination changed: contents=%q, err=%v", got, err)
+		}
+	})
+}
+
+func TestCreateFailureDoesNotLeaveTemporaryFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "index.db")
+	if _, err := Create(path, wordTokenizer{}); err == nil {
+		t.Fatal("Create in missing directory succeeded")
+	}
+	assertAbsent(t, path)
+	assertAbsent(t, path+".tmp")
+
+	path = filepath.Join(t.TempDir(), "index.db")
+	tmp := path + ".tmp"
+	if err := os.Mkdir(tmp, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "keep"), []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Create(path, wordTokenizer{}); err == nil {
+		t.Fatal("Create ignored stale temporary-file removal failure")
+	}
+	if _, err := os.Stat(filepath.Join(tmp, "keep")); err != nil {
+		t.Errorf("stale temporary directory was damaged: %v", err)
 	}
 }
 

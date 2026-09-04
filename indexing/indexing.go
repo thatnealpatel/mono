@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -49,8 +50,8 @@ type Match struct {
 	Docstring string  `json:"docstring,omitempty"`
 	Snippet   string  `json:"snippet,omitempty"`
 	Body      string  `json:"body,omitempty"`
-	File      string  `json:"file"`
-	Line      int     `json:"line"`
+	File      string  `json:"file,omitempty"`
+	Line      int     `json:"line,omitempty"`
 	Score     float64 `json:"score,omitempty"`
 }
 
@@ -92,53 +93,63 @@ insert into fts(fts, rank) values('rank', 'bm25(10.0, 3.0, 1.0, 2.0)');
 // leaves a partial index.
 type Builder struct {
 	path string
+	tmp  string
 	db   *sql.DB
 	tx   *sql.Tx
 	decl *sql.Stmt
 	fts  *sql.Stmt
 	name *sql.Stmt
 	tok  Tokenizer
+	done bool
 }
+
+var errBuilderClosed = errors.New("indexing: builder is closed")
 
 // Create starts building the index at path.
 func Create(path string, tok Tokenizer) (*Builder, error) {
 	tmp := path + ".tmp"
-	os.Remove(tmp)
-	db, err := sql.Open("sqlite", "file:"+tmp+"?_pragma=journal_mode(off)&_pragma=synchronous(off)")
-	if err != nil {
+	if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	if _, err := db.Exec(schema); err != nil {
-		db.Close()
+	db, err := sql.Open("sqlite", sqliteDSN(tmp, url.Values{
+		"_pragma": {"journal_mode(off)", "synchronous(off)"},
+	}))
+	if err != nil {
+		if cleanupErr := os.Remove(tmp); cleanupErr != nil && !errors.Is(cleanupErr, os.ErrNotExist) {
+			return nil, errors.Join(err, cleanupErr)
+		}
 		return nil, err
+	}
+	b := &Builder{path: path, tmp: tmp, db: db, tok: tok}
+	if _, err := db.Exec(schema); err != nil {
+		return nil, b.fail(err)
 	}
 	if _, err := db.Exec(fmt.Sprintf("pragma user_version = %d", SchemaVersion)); err != nil {
-		db.Close()
-		return nil, err
+		return nil, b.fail(err)
 	}
-	tx, err := db.Begin()
+	b.tx, err = db.Begin()
 	if err != nil {
-		db.Close()
-		return nil, err
+		return nil, b.fail(err)
 	}
-	b := &Builder{path: path, db: db, tx: tx, tok: tok}
-	b.decl, err = tx.Prepare(`insert into decls(name, qualname, kind, signature, docstring, file, line, final)
+	b.decl, err = b.tx.Prepare(`insert into decls(name, qualname, kind, signature, docstring, file, line, final)
 		values(?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err == nil {
-		b.fts, err = tx.Prepare(`insert into fts(rowid, name, signature, docstring, examples) values(?, ?, ?, ?, ?)`)
+		b.fts, err = b.tx.Prepare(`insert into fts(rowid, name, signature, docstring, examples) values(?, ?, ?, ?, ?)`)
 	}
 	if err == nil {
-		b.name, err = tx.Prepare(`insert or ignore into names(name, final, file) values(?, ?, ?)`)
+		b.name, err = b.tx.Prepare(`insert or ignore into names(name, final, file) values(?, ?, ?)`)
 	}
 	if err != nil {
-		db.Close()
-		return nil, err
+		return nil, b.fail(err)
 	}
 	return b, nil
 }
 
 // Add indexes one declaration.
 func (b *Builder) Add(r Record) error {
+	if b.done || b.decl == nil || b.fts == nil {
+		return errBuilderClosed
+	}
 	res, err := b.decl.Exec(r.Name, r.Qualname, r.Kind, r.Signature, r.Docstring, r.File, r.Line, final(r.Name))
 	if err != nil {
 		return err
@@ -157,15 +168,79 @@ func (b *Builder) Add(r Record) error {
 //
 // It is served by Lookup only.
 func (b *Builder) AddName(name, file string) error {
+	if b.done || b.name == nil {
+		return errBuilderClosed
+	}
 	_, err := b.name.Exec(name, final(name), file)
+	return err
+}
+
+// Abort abandons a build. It is safe
+// to call more than once and after a
+// successful Close.
+func (b *Builder) Abort() error {
+	if b.done {
+		return nil
+	}
+	b.done = true
+
+	var errs []error
+	if err := b.closeStatements(); err != nil {
+		errs = append(errs, err)
+	}
+	if b.tx != nil {
+		if err := b.tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+			errs = append(errs, err)
+		}
+		b.tx = nil
+	}
+	if b.db != nil {
+		if err := b.db.Close(); err != nil {
+			errs = append(errs, err)
+		}
+		b.db = nil
+	}
+	if b.tmp != "" {
+		if err := os.Remove(b.tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (b *Builder) closeStatements() error {
+	var errs []error
+	for _, stmt := range []*sql.Stmt{b.decl, b.fts, b.name} {
+		if stmt != nil {
+			if err := stmt.Close(); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	b.decl = nil
+	b.fts = nil
+	b.name = nil
+	return errors.Join(errs...)
+}
+
+func (b *Builder) fail(err error) error {
+	if cleanupErr := b.Abort(); cleanupErr != nil {
+		return errors.Join(err, cleanupErr)
+	}
 	return err
 }
 
 // Close commits the index and moves it into place.
 func (b *Builder) Close() error {
+	if b.done || b.tx == nil || b.db == nil {
+		return errBuilderClosed
+	}
 	if err := b.tx.Commit(); err != nil {
-		b.db.Close()
-		return err
+		return b.fail(err)
+	}
+	b.tx = nil
+	if err := b.closeStatements(); err != nil {
+		return b.fail(err)
 	}
 	for _, s := range []string{
 		"create index decls_name on decls(name)",
@@ -174,14 +249,18 @@ func (b *Builder) Close() error {
 		"insert into fts(fts) values('optimize')",
 	} {
 		if _, err := b.db.Exec(s); err != nil {
-			b.db.Close()
-			return err
+			return b.fail(err)
 		}
 	}
 	if err := b.db.Close(); err != nil {
-		return err
+		return b.fail(err)
 	}
-	return os.Rename(b.path+".tmp", b.path)
+	b.db = nil
+	if err := os.Rename(b.tmp, b.path); err != nil {
+		return b.fail(err)
+	}
+	b.done = true
+	return nil
 }
 
 func (b *Builder) shadow(text string) string {
@@ -201,12 +280,30 @@ type Index struct {
 	tok Tokenizer
 }
 
+// sqliteDSN constructs a file URI without allowing
+// characters in path to be interpreted as URI syntax.
+// OmitHost is needed to preserve relative paths as
+// relative SQLite filenames rather than turning their
+// first component into a URI authority.
+func sqliteDSN(path string, query url.Values) string {
+	u := url.URL{
+		Scheme:   "file",
+		Path:     path,
+		RawQuery: query.Encode(),
+		OmitHost: true,
+	}
+	return u.String()
+}
+
 // Open opens the index at path.
 func Open(path string, tok Tokenizer) (*Index, error) {
 	if _, err := os.Stat(path); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro&immutable=1")
+	db, err := sql.Open("sqlite", sqliteDSN(path, url.Values{
+		"immutable": {"1"},
+		"mode":      {"ro"},
+	}))
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +371,7 @@ func (ix *Index) candidates(final string) ([]string, error) {
 		select name, 0 as src from decls where final = ?
 		union all
 		select name, 1 from names where final = ?
-	) group by name order by min(src) limit 10`, final, final)
+	) group by name order by min(src), name limit 10`, final, final)
 	if err != nil {
 		return nil, err
 	}
