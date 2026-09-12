@@ -13,8 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-
-	"patel.codes/unsafe/uuid"
+	"uuid"
 
 	"golang.org/x/sys/unix"
 )

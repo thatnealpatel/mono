@@ -5,8 +5,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"patel.codes/unsafe/uuid"
+	"uuid"
 )
 
 type entry struct {
