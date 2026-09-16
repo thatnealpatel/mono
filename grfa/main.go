@@ -1,14 +1,12 @@
-// Package main implements grfa, a small Gerrit review CLI for
-// harness agents. It is the single place an upload is checked and
-// attributed: it runs the repository's pre-upload checks, delegates
-// the push to the repository's jj gerrit upload, and stamps the
-// session that produced the change. Everything else is a narrow,
-// read-mostly view of one change through the authenticated
-// /gerrit/a entrance.
+// Package main implements grfa, a small Gerrit CLI for agents.
 //
-// patel.codes/grfa is not a security boundary: authority is
-// enforced by the Gerrit server behind the selected endpoint.
-// Environment variables are routing hints, not authorization.
+// It is meant to be a thin replacement for .git/hooks/pre-commit
+// and other hooks. It currently hardcodes a post-upload hook that
+// writes the value of `YAH_SESSION` if it is non-empty into a new
+// resolved comment on each new CL.
+//
+// patel.codes/grfa assumes the user is untrusted: Trust and safety
+// are the caller's responsibility.
 package main
 
 import (
@@ -37,9 +35,11 @@ func main() {
 	}
 }
 
-// cli bundles the process-wide collaborators so tests can inject
-// the HTTP client, the VCS command runner, and the environment
-// without touching the real ones.
+// cli bundles the process-wide
+// collaborators so tests can inject the
+// HTTP client, the VCS command runner,
+// and the environment without touching
+// the real ones.
 type cli struct {
 	out    io.Writer
 	api    *gerritClient
@@ -48,8 +48,8 @@ type cli struct {
 }
 
 // run dispatches one grfa invocation. upload is the only
-// repository-scoped command; every other command is scoped to the
-// <change> named as the first argument.
+// repository-scoped command; every other command is scoped
+// to the <change> named as the first argument.
 func (c *cli) run(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		fmt.Fprint(c.out, usage)
@@ -99,9 +99,10 @@ change-scoped; <change> is a Change-Id, change number, or project~branch~Change-
   grfa <change> comment <message> [-reply <comment-id>] [-resolved]
 `
 
-// uploadOptions are the pass-through hints for jj gerrit upload.
-// Absent flags leave the choice to the repository's VCS
-// configuration.
+// uploadOptions are the pass-through
+// hints for jj gerrit upload. Absent
+// flags leave the choice to the
+// repository's VCS configuration.
 type uploadOptions struct {
 	revset    string
 	branch    string
@@ -175,9 +176,10 @@ func parseCommentArgs(args []string) (*commentOptions, error) {
 				return nil, fmt.Errorf("flag -reply requires a value")
 			}
 			i++
-			// An explicitly empty value is not an absent flag:
-			// a blank id would fall through to a brand-new
-			// comment instead of a reply.
+			// An explicitly empty value is not
+			// an absent flag: a blank id would
+			// fall through to a brand-new comment
+			// instead of a reply.
 			if args[i] == "" {
 				return nil, fmt.Errorf("flag -reply requires a non-empty comment id")
 			}
@@ -200,16 +202,19 @@ func parseCommentArgs(args []string) (*commentOptions, error) {
 type command struct {
 	name string
 	args []string
-	// dir is the working directory; empty inherits the parent's.
+	// dir is the working directory; empty
+	// inherits the parent's.
 	dir string
-	// passthrough wires the child's stdin, stdout, and stderr to
-	// the parent's instead of capturing them.
+	// passthrough wires the child's stdin,
+	// stdout, and stderr to the parent's
+	// instead of capturing them.
 	passthrough bool
 }
 
-// runner is the injectable process boundary to the repository's
-// VCS and pre-upload hook. Tests replace it so the suite never
-// needs a real jj.
+// runner is the injectable process
+// boundary to the repository's VCS and
+// pre-upload hook. Tests replace it so
+// the suite never needs a real jj.
 type runner interface {
 	output(ctx context.Context, cmd command) (string, error)
 	run(ctx context.Context, cmd command) error
@@ -231,8 +236,8 @@ func startCommand(ctx context.Context, cmd command) *exec.Cmd {
 	return c
 }
 
-// output captures stdout for read-only queries; a failing command
-// reports its stderr.
+// output captures stdout for read-only queries; a failing command reports
+// its stderr.
 func (execRunner) output(ctx context.Context, cmd command) (string, error) {
 	c := startCommand(ctx, cmd)
 	var stdout, stderr bytes.Buffer
@@ -248,9 +253,11 @@ func (execRunner) output(ctx context.Context, cmd command) (string, error) {
 	return stdout.String(), nil
 }
 
-// exitCodeError carries a delegated command's exit status so it
-// flows through grfa's own exit status instead of collapsing
-// every failure to 1. The wrapped error keeps the original
+// exitCodeError carries a delegated
+// command's exit status so it flows
+// through grfa's own exit status instead
+// of collapsing every failure to 1.
+// The wrapped error keeps the original
 // message and stage prefix intact.
 type exitCodeError struct {
 	err  error
@@ -261,8 +268,10 @@ func (e *exitCodeError) Error() string { return e.err.Error() }
 
 func (e *exitCodeError) Unwrap() error { return e.err }
 
-// exitStatus reports the status grfa should exit with for err:
-// a delegated command's status when it carries one, otherwise 1.
+// exitStatus reports the status grfa
+// should exit with for err: a delegated
+// command's status when it carries one,
+// otherwise 1.
 func exitStatus(err error) int {
 	var ec *exitCodeError
 	if errors.As(err, &ec) && ec.code >= 0 {
@@ -271,13 +280,13 @@ func exitStatus(err error) int {
 	return 1
 }
 
-// run passes stdio through and returns the exit status unchanged.
+// run passes stdio through and returns the exit status
+// unchanged.
 func (execRunner) run(ctx context.Context, cmd command) error {
 	c := startCommand(ctx, cmd)
 	if err := c.Run(); err != nil {
 		wrapped := fmt.Errorf("%s: %w", cmd.name, err)
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			if code := exitErr.ExitCode(); code >= 0 {
 				return &exitCodeError{err: wrapped, code: code}
 			}

@@ -14,9 +14,11 @@ import (
 	"testing"
 )
 
-// recordedPost is one review POST the fake Gerrit received, with
-// both the decoded body and the raw wire bytes so tests can
-// assert on exact JSON field presence and omission.
+// recordedPost is one review POST the
+// fake Gerrit received, with both the
+// decoded body and the raw wire bytes so
+// tests can assert on exact JSON field
+// presence and omission.
 type recordedPost struct {
 	Change   string
 	Revision string
@@ -24,9 +26,12 @@ type recordedPost struct {
 	Raw      []byte
 }
 
-// fakeGerrit is a minimal in-memory Gerrit behind httptest. It
-// serves the routes grfa uses, records every request, and applies
-// posted reviews to its own state so refreshed views see them.
+// fakeGerrit is a minimal in-memory
+// Gerrit behind httptest. It serves
+// the routes grfa uses, records every
+// request, and applies posted reviews
+// to its own state so refreshed views
+// see them.
 type fakeGerrit struct {
 	mu       sync.Mutex
 	user     string
@@ -101,8 +106,8 @@ func (f *fakeGerrit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// applyReview records the post and folds it into the fake's
-// change state, the way a real Gerrit would publish it.
+// applyReview records the post and folds it into the fake's change state, the
+// way a real Gerrit would publish it.
 func (f *fakeGerrit) applyReview(w http.ResponseWriter, change, revision string, r *http.Request) {
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -171,14 +176,15 @@ func (f *fakeGerrit) sawCredentials() bool {
 	return f.authSeen
 }
 
-// testClient wires a grfa client at the fake server with the
-// given expected entrance identity.
+// testClient wires a grfa client at the fake server with the given
+// expected entrance identity.
 func testClient(srv *httptest.Server, expectedUser string) *gerritClient {
 	return newGerritClient(srv.URL, expectedUser, nil)
 }
 
-// fakeRunner is the injectable command runner: it records every
-// command and answers from a programmed responder.
+// fakeRunner is the injectable command
+// runner: it records every command and
+// answers from a programmed responder.
 type fakeRunner struct {
 	mu       sync.Mutex
 	commands []command
@@ -208,16 +214,18 @@ func (f *fakeRunner) snapshot() []command {
 	return append([]command{}, f.commands...)
 }
 
-// refusingRunner rejects any subprocess; change-scoped commands
-// must never spawn one.
+// refusingRunner rejects any subprocess;
+// change-scoped commands must never
+// spawn one.
 func refusingRunner() *fakeRunner {
 	return &fakeRunner{respond: func(cmd command) (string, error) {
 		return "", fmt.Errorf("unexpected subprocess %s %v", cmd.name, cmd.args)
 	}}
 }
 
-// jjFake answers the read-only jj queries and the push around an
-// upload, plus the optional pre-upload hook.
+// jjFake answers the read-only jj queries
+// and the push around an upload, plus the
+// optional pre-upload hook.
 type jjFake struct {
 	mu         sync.Mutex
 	root       string
@@ -232,8 +240,9 @@ func (j *jjFake) runner() runner {
 	return &fakeRunner{respond: j.respond}
 }
 
-// jjBody strips the read-only global flags from a recorded jj
-// command and joins the remainder for matching.
+// jjBody strips the read-only global
+// flags from a recorded jj command and
+// joins the remainder for matching.
 func jjBody(cmd command) string {
 	rest := cmd.args
 	for len(rest) > 0 && (rest[0] == "--ignore-working-copy" || rest[0] == "--no-pager") {
@@ -247,8 +256,8 @@ func (j *jjFake) respond(cmd command) (string, error) {
 	defer j.mu.Unlock()
 	j.commands = append(j.commands, cmd)
 	if cmd.name != jjBinary {
-		// The only non-jj subprocess grfa runs is the
-		// pre-upload hook.
+		// The only non-jj subprocess grfa runs
+		// is the pre-upload hook.
 		return "", j.hookErr
 	}
 	joined := jjBody(cmd)
@@ -271,8 +280,9 @@ func (j *jjFake) commandsSnapshot() []command {
 	return append([]command{}, j.commands...)
 }
 
-// uploadSetOutput renders the upload-set query answer in the same
-// shape the real jj template produces.
+// uploadSetOutput renders the upload-set
+// query answer in the same shape the real
+// jj template produces.
 func uploadSetOutput(revs []revision) string {
 	var b strings.Builder
 	for _, r := range revs {
@@ -288,8 +298,8 @@ func uploadSetOutput(revs []revision) string {
 	return b.String()
 }
 
-// writeHook creates an executable pre-upload hook under a fake
-// repository root.
+// writeHook creates an executable pre-upload hook
+// under a fake repository root.
 func writeHook(t *testing.T, root, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Join(root, ".grfa"), 0o755); err != nil {

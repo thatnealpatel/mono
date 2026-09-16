@@ -14,10 +14,11 @@ const (
 	ps2SHA    = "2222222222222222222222222222222222222222"
 )
 
-// testFixture is a change with two patch sets: c1/c2 are a thread
-// on file.go (c2 resolved the thread), c3 sits on the old patch
-// set on a path missing from the current one, and c4 is a
-// patch-set-level thread. Only c4 is unresolved at the leaves.
+// testFixture is a change with two patch sets: c1/c2 are a
+// thread on file.go (c2 resolved the thread), c3 sits on
+// the old patch set on a path missing from the current one,
+// and c4 is a patch-set-level thread. Only c4 is unresolved
+// at the leaves.
 func testFixture() (*changeDetail, map[string][]commentInfo) {
 	d := &changeDetail{
 		ID:              "proj~main~" + changeKey,
@@ -75,9 +76,10 @@ func seededClient(t *testing.T, user string) (*fakeGerrit, *cli, *bytes.Buffer) 
 	return f, c, out
 }
 
-// Acceptance 2: one view includes current and older patch-set
-// comments with their exact revision identities, and prints IDs
-// that -reply accepts verbatim.
+// Acceptance 2: one view includes current and
+// older patch-set comments with their exact
+// revision identities, and prints IDs that
+// -reply accepts verbatim.
 func TestViewIncludesAllPatchSets(t *testing.T) {
 	f, c, out := seededClient(t, "Agent")
 	if err := c.cmdView(context.Background(), changeKey); err != nil {
@@ -110,9 +112,9 @@ func TestViewIncludesAllPatchSets(t *testing.T) {
 	}
 }
 
-// Acceptance 3: a reply to a file absent from the current patch
-// set posts to the target comment's commit_id, against the
-// original path, not against revisions/current.
+// Acceptance 3: a reply to a file absent from the current patch set
+// posts to the target comment's commit_id, against the original
+// path, not against revisions/current.
 func TestReplyToRemovedFileUsesTargetCommitAndPath(t *testing.T) {
 	f, c, _ := seededClient(t, "Agent")
 	if err := c.cmdComment(context.Background(), changeKey, "why was this removed?", []string{"-reply", "c3"}); err != nil {
@@ -149,10 +151,11 @@ func TestReplyToRemovedFileUsesTargetCommitAndPath(t *testing.T) {
 	}
 }
 
-// Acceptance 4: reply matching is exact. An id absent from the
-// change-level comment list fails without posting, a change-message
-// id fails, and an id that exists only on an older patch set
-// succeeds.
+// Acceptance 4: reply matching is exact. An id
+// absent from the change-level comment list
+// fails without posting, a change-message id
+// fails, and an id that exists only on an
+// older patch set succeeds.
 func TestReplyMatchingIsExact(t *testing.T) {
 	t.Run("unknown id fails without posting", func(t *testing.T) {
 		f, c, _ := seededClient(t, "Agent")
@@ -189,8 +192,9 @@ func TestReplyMatchingIsExact(t *testing.T) {
 	})
 }
 
-// Acceptance 5: replies preserve line, range, merge-parent-2,
-// file-level, and patch-set-level locations with correct
+// Acceptance 5: replies preserve line,
+// range, merge-parent-2, file-level, and
+// patch-set-level locations with correct
 // omission of empty fields.
 func TestReplyLocationCopy(t *testing.T) {
 	cases := []struct {
@@ -302,15 +306,16 @@ func TestReplyLocationCopy(t *testing.T) {
 	}
 }
 
-// Acceptance 6: default unresolved and explicit resolved work for
-// both new comments and replies; a reply never inherits the
-// target's state.
+// Acceptance 6: default unresolved and
+// explicit resolved work for both new
+// comments and replies; a reply never
+// inherits the target's state.
 func TestUnresolvedDefaults(t *testing.T) {
 	cases := []struct {
 		name string
 		args []string
-		// replyTarget is the id to reply to; empty means a new
-		// comment.
+		// replyTarget is the id to reply to;
+		// empty means a new comment.
 		replyTarget string
 		want        bool
 	}{
@@ -353,7 +358,8 @@ func TestUnresolvedDefaults(t *testing.T) {
 	}
 }
 
-// Acceptance 7: quoted option-like message text is preserved.
+// Acceptance 7: quoted option-like message text
+// is preserved.
 func TestOptionLikeMessagePreserved(t *testing.T) {
 	f, c, _ := seededClient(t, "Agent")
 	msg := "-r main --dry-run \"quoted text\" -resolved"
@@ -373,9 +379,10 @@ func TestOptionLikeMessagePreserved(t *testing.T) {
 	}
 }
 
-// Acceptance 8: the refreshed response state is actually
-// consumed after posting; the fake changes the relevant comment
-// and resolution state, and the printed view must reflect it.
+// Acceptance 8: the refreshed response state is
+// actually consumed after posting; the fake changes
+// the relevant comment and resolution state, and
+// the printed view must reflect it.
 func TestRefreshAfterPostIsConsumed(t *testing.T) {
 	t.Run("resolved reply updates the thread", func(t *testing.T) {
 		f, c, out := seededClient(t, "Agent")

@@ -11,8 +11,9 @@ import (
 // emptyGetenv reports no environment at all.
 func emptyGetenv(string) (string, bool) { return "", false }
 
-// Acceptance 7: bad arguments fail without any network mutation.
-// Every case must produce an error before a single HTTP request.
+// Acceptance 7: bad arguments fail without any network
+// mutation. Every case must produce an error before a
+// single HTTP request.
 func TestBadArgumentsFailWithoutNetwork(t *testing.T) {
 	cases := []struct {
 		name string
@@ -49,7 +50,8 @@ func TestBadArgumentsFailWithoutNetwork(t *testing.T) {
 	}
 }
 
-// Argument errors must also abort before any subprocess runs.
+// Argument errors must also abort before any
+// subprocess runs.
 func TestBadArgumentsRunNoSubprocess(t *testing.T) {
 	runner := refusingRunner()
 	c := &cli{out: &bytes.Buffer{}, api: nil, runner: runner, getenv: emptyGetenv}
@@ -61,8 +63,9 @@ func TestBadArgumentsRunNoSubprocess(t *testing.T) {
 	}
 }
 
-// A real delegated subprocess failure carries its own exit
-// status, and a plain error still means exit status 1.
+// A real delegated subprocess failure carries its
+// own exit status, and a plain error still means
+// exit status 1.
 func TestExecRunnerRunCarriesExitStatus(t *testing.T) {
 	r := execRunner{}
 	err := r.run(context.Background(), command{name: "sh", args: []string{"-c", "exit 7"}})
@@ -106,8 +109,9 @@ func TestUsagePrintsCommandSurface(t *testing.T) {
 	}
 }
 
-// A message that looks like a flag is still the message when it
-// is the first operand: it is only the following arguments that
+// A message that looks like a flag is still
+// the message when it is the first operand:
+// it is only the following arguments that
 // are parsed as flags.
 func TestMessageTakenVerbatim(t *testing.T) {
 	f, c, _ := seededClient(t, "Agent")

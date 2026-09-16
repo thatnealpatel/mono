@@ -21,8 +21,8 @@ const (
 	changeID2 = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 )
 
-// uploadFixture wires a client whose fake jj reports the given
-// upload set, and seeds the fake Gerrit with both changes.
+// uploadFixture wires a client whose fake jj reports the given upload set, and
+// seeds the fake Gerrit with both changes.
 func uploadFixture(t *testing.T, revs []revision, session string, sessionSet bool) (*fakeGerrit, *jjFake, *cli, *bytes.Buffer) {
 	t.Helper()
 	f, srv := newFakeGerrit(t, "Agent")
@@ -68,8 +68,9 @@ func countPushes(cmds []command) int {
 	return n
 }
 
-// Acceptance 12: upload stamps each change in the upload set with
-// the environment session as a resolved patch-set-level comment.
+// Acceptance 12: upload stamps each change in
+// the upload set with the environment session
+// as a resolved patch-set-level comment.
 func TestUploadStampsEveryChange(t *testing.T) {
 	f, jj, c, out := uploadFixture(t, twoRevisions(), session42, true)
 	if err := c.cmdUpload(context.Background(), nil); err != nil {
@@ -116,8 +117,8 @@ func TestUploadStampsEveryChange(t *testing.T) {
 	}
 }
 
-// Acceptance 12: no marker is posted when the environment variable
-// is absent.
+// Acceptance 12: no marker is posted when the environment
+// variable is absent.
 func TestUploadWithoutSessionPostsNoMarker(t *testing.T) {
 	f, jj, c, out := uploadFixture(t, twoRevisions(), "", false)
 	if err := c.cmdUpload(context.Background(), nil); err != nil {
@@ -134,9 +135,11 @@ func TestUploadWithoutSessionPostsNoMarker(t *testing.T) {
 	}
 }
 
-// Acceptance 13: re-running upload against a revision that
-// already carries the identical marker posts nothing new, and no
-// duplicate push happens for unchanged content.
+// Acceptance 13: re-running upload
+// against a revision that already carries
+// the identical marker posts nothing
+// new, and no duplicate push happens for
+// unchanged content.
 func TestStampIdempotent(t *testing.T) {
 	f, jj, c, _ := uploadFixture(t, []revision{
 		{Commit: revA, ChangeID: changeID1, Subject: "first change"},
@@ -162,8 +165,9 @@ func TestStampIdempotent(t *testing.T) {
 			t.Errorf("run %d: cumulative pushes = %d, want %d (one delegated push per run)", run, got, run)
 		}
 	}
-	// A marker on an older revision is not identical: a new
-	// patch set gets a fresh stamp.
+	// A marker on an older revision is not
+	// identical: a new patch set gets a
+	// fresh stamp.
 	f.mu.Lock()
 	f.comments[changeID1] = map[string][]commentInfo{
 		patchSetLevel: {
@@ -183,8 +187,9 @@ func TestStampIdempotent(t *testing.T) {
 	}
 }
 
-// Acceptance 10: a failing pre-upload hook aborts before the push
-// and stamps nothing; the recorded command log contains no push.
+// Acceptance 10: a failing pre-upload hook aborts
+// before the push and stamps nothing; the recorded
+// command log contains no push.
 func TestFailingHookAbortsBeforePush(t *testing.T) {
 	f, jj, c, out := uploadFixture(t, twoRevisions(), session42, true)
 	writeHook(t, jj.root, "#!/bin/sh\nexit 3\n")
@@ -259,8 +264,8 @@ func TestAbsentHookIsNoop(t *testing.T) {
 	}
 }
 
-// Acceptance 11: a missing local Change-Id aborts before the
-// push.
+// Acceptance 11: a missing local Change-Id aborts
+// before the push.
 func TestMissingChangeIDAbortsBeforePush(t *testing.T) {
 	f, jj, c, _ := uploadFixture(t, []revision{
 		{Commit: revA, ChangeID: changeID1, Subject: "good"},
@@ -293,9 +298,9 @@ func TestMissingChangeIDAbortsBeforePush(t *testing.T) {
 	}
 }
 
-// Acceptance 14: grfa mutates no repository state: the recorded
-// commands are read-only queries plus at most one push, with no
-// snapshot, rebase, or commit.
+// Acceptance 14: grfa mutates no repository state:
+// the recorded commands are read-only queries plus at
+// most one push, with no snapshot, rebase, or commit.
 func TestUploadIsReadOnlyPlusOnePush(t *testing.T) {
 	_, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
 	if err := c.cmdUpload(context.Background(), nil); err != nil {
@@ -313,8 +318,8 @@ func TestUploadIsReadOnlyPlusOnePush(t *testing.T) {
 		if len(cmd.args) == 0 || cmd.args[0] != "--ignore-working-copy" {
 			t.Errorf("command is not in the read-only stance: %v", cmd.args)
 		}
-		// The subcommand is the first argument that is not a
-		// global flag.
+		// The subcommand is the first argument
+		// that is not a global flag.
 		sub := ""
 		for _, a := range cmd.args {
 			if !strings.HasPrefix(a, "-") {
@@ -335,8 +340,9 @@ func TestUploadIsReadOnlyPlusOnePush(t *testing.T) {
 	}
 }
 
-// Pass-through hints reach jj gerrit upload verbatim, and the
-// upload-set query mirrors the given revset.
+// Pass-through hints reach jj gerrit upload
+// verbatim, and the upload-set query mirrors
+// the given revset.
 func TestUploadHintsPassThrough(t *testing.T) {
 	_, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
 	args := []string{"-r", "myrev", "-b", "feature", "-remote", "upstream", "-reviewer", "a@x", "-reviewer", "b@x"}
@@ -360,7 +366,8 @@ func TestUploadHintsPassThrough(t *testing.T) {
 	if !strings.Contains(query, "mutable()::(myrev)") {
 		t.Errorf("upload-set query = %q, want it to mirror the given revset", query)
 	}
-	// With an explicit -r, the default-revision probe never runs.
+	// With an explicit -r, the default-revision
+	// probe never runs.
 	for _, cmd := range jj.commandsSnapshot() {
 		if strings.Contains(jjBody(cmd), `if(description`) {
 			t.Errorf("default-revision probe ran despite -r")
@@ -395,14 +402,16 @@ func TestUploadDefaultRevsetMirrored(t *testing.T) {
 	if !strings.Contains(query, "mutable()::(@-)") {
 		t.Errorf("query = %q, want it to mirror the probed default", query)
 	}
-	// The push itself passes no -r: the choice stays with the VCS.
+	// The push itself passes no -r: the
+	// choice stays with the VCS.
 	if push != "gerrit upload" {
 		t.Errorf("push = %q, want the bare delegated push", push)
 	}
 }
 
-// -dry-run runs the checks and reports the upload set and the
-// changes that would be stamped, without pushing or stamping.
+// -dry-run runs the checks and reports the upload
+// set and the changes that would be stamped, without
+// pushing or stamping.
 func TestDryRunReportsWithoutPushOrStamp(t *testing.T) {
 	f, jj, c, out := uploadFixture(t, twoRevisions(), session42, true)
 	writeHook(t, jj.root, "#!/bin/sh\nexit 0\n")
@@ -445,8 +454,8 @@ func TestDryRunWithoutSession(t *testing.T) {
 	}
 }
 
-// A failed push is reported as its own stage, and nothing is
-// stamped.
+// A failed push is reported as its own stage,
+// and nothing is stamped.
 func TestFailedPushIsItsOwnStage(t *testing.T) {
 	f, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
 	jj.mu.Lock()
@@ -464,8 +473,9 @@ func TestFailedPushIsItsOwnStage(t *testing.T) {
 	}
 }
 
-// The delegated push's exit status is grfa's own exit status;
-// it does not collapse to 1 through the error text.
+// The delegated push's exit status is grfa's own exit
+// status; it does not collapse to 1 through the error
+// text.
 func TestFailedPushExitStatusFlowsThrough(t *testing.T) {
 	f, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
 	jj.mu.Lock()
@@ -486,8 +496,8 @@ func TestFailedPushExitStatusFlowsThrough(t *testing.T) {
 	}
 }
 
-// A failed stamp after a successful push is a partial result,
-// reported plainly.
+// A failed stamp after a successful push is a
+// partial result, reported plainly.
 func TestFailedStampIsPartialResult(t *testing.T) {
 	f, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
 	f.mu.Lock()
@@ -556,8 +566,9 @@ func TestSessionValidation(t *testing.T) {
 	}
 }
 
-// The marker must never appear in process arguments: upload is
-// invoked with only pass-through hints.
+// The marker must never appear in process
+// arguments: upload is invoked with only
+// pass-through hints.
 func TestSessionNeverInArgs(t *testing.T) {
 	_, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
 	if err := c.cmdUpload(context.Background(), nil); err != nil {
@@ -572,8 +583,9 @@ func TestSessionNeverInArgs(t *testing.T) {
 	}
 }
 
-// The upload-set query records commit ids, subjects, and
-// Change-Ids exactly as jj reports them.
+// The upload-set query records commit
+// ids, subjects, and Change-Ids exactly
+// as jj reports them.
 func TestUploadSetRecords(t *testing.T) {
 	jj := &jjFake{root: t.TempDir(), defaultRev: "@"}
 	c := &cli{out: &bytes.Buffer{}, api: nil, runner: jj.runner(),

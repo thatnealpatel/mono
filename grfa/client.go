@@ -14,16 +14,16 @@ import (
 	"time"
 )
 
-// magicPrefix is the XSS-protection prefix Gerrit puts in front
-// of every JSON response body.
+// magicPrefix is the XSS-protection
+// prefix Gerrit puts in front of every
+// JSON response body.
 const magicPrefix = ")]}'\n"
 
-// selectEndpoint picks the Gerrit entrance from the environment
-// hints. The port and expected identity follow the entrance hint:
-// agent traffic enters on 9001 as Agent, everything else on 9999
-// as Human. These are routing hints, not authorization
-// boundaries; the server enforces authority, and a denied route
-// is an error, never a fallback.
+// selectEndpoint picks the Gerrit entrance from the environment hints. The
+// port and expected identity follow the entrance hint: agent traffic enters
+// on 9001 as Agent, everything else on 9999 as Human. These are routing
+// hints, not authorization boundaries; the server enforces authority, and a
+// denied route is an error, never a fallback.
 func selectEndpoint(host, yah string) (base string, expectedUser string) {
 	if host == "" {
 		host = "supermarket"
@@ -40,16 +40,16 @@ func selectEndpoint(host, yah string) (base string, expectedUser string) {
 	return base, user
 }
 
-// newClient builds the production client from the environment.
+// newClient builds the production client
+// from the environment.
 func newClient() *gerritClient {
 	base, expectedUser := selectEndpoint(os.Getenv("GRFA_HOST"), os.Getenv("YAH"))
 	return newGerritClient(base, expectedUser, nil)
 }
 
-// newGerritClient builds a client for one authenticated entrance.
-// A nil transport uses the default. Redirects are always refused so
-// a request can never silently change entrance, and no
-// credential is ever attached.
+// newGerritClient builds a client for one authenticated entrance. A nil
+// transport uses the default. Redirects are always refused so a request can
+// never silently change entrance, and no credential is ever attached.
 func newGerritClient(base, expectedUser string, rt http.RoundTripper) *gerritClient {
 	if rt == nil {
 		rt = http.DefaultTransport
@@ -67,25 +67,25 @@ func newGerritClient(base, expectedUser string, rt http.RoundTripper) *gerritCli
 	}
 }
 
-// gerritClient talks to exactly one authenticated /gerrit/a
-// entrance.
+// gerritClient talks to exactly one
+// authenticated /gerrit/a entrance.
 type gerritClient struct {
 	base         string
 	expectedUser string
 	hc           *http.Client
 }
 
-// request performs one HTTP round trip and returns the raw body
-// and status. Path components are escaped individually rather
-// than concatenated from user input. Accepted statuses are
-// checked explicitly by the callers.
+// request performs one HTTP round trip and returns the raw body and status.
+// Path components are escaped individually rather than concatenated from user
+// input. Accepted statuses are checked explicitly by the callers.
 func (c *gerritClient) request(ctx context.Context, method string, parts []string, query url.Values, body any) ([]byte, int, error) {
-	u := c.base
+	var u strings.Builder
+	u.WriteString(c.base)
 	for _, p := range parts {
-		u += "/" + url.PathEscape(p)
+		u.WriteString("/" + url.PathEscape(p))
 	}
 	if len(query) > 0 {
-		u += "?" + query.Encode()
+		u.WriteString("?" + query.Encode())
 	}
 	var r io.Reader
 	if body != nil {
@@ -95,7 +95,7 @@ func (c *gerritClient) request(ctx context.Context, method string, parts []strin
 		}
 		r = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u, r)
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), r)
 	if err != nil {
 		return nil, 0, fmt.Errorf("new request: %w", err)
 	}
@@ -141,8 +141,8 @@ func (c *gerritClient) checkIdentity(ctx context.Context) error {
 	return nil
 }
 
-// fetchChangeDetail fetches the change with every revision,
-// labels, votes, and published change messages.
+// fetchChangeDetail fetches the change with every revision, labels, votes, and
+// published change messages.
 func (c *gerritClient) fetchChangeDetail(ctx context.Context, change string) (*changeDetail, error) {
 	q := url.Values{}
 	for _, o := range []string{"ALL_REVISIONS", "DETAILED_LABELS", "MESSAGES", "DETAILED_ACCOUNTS"} {
@@ -162,10 +162,9 @@ func (c *gerritClient) fetchChangeDetail(ctx context.Context, change string) (*c
 	return &d, nil
 }
 
-// fetchChangeComments fetches the change-level comment list: the
-// only list that includes patch_set and commit_id for every
-// published comment, across all patch sets, and the same list
-// -reply resolves against.
+// fetchChangeComments fetches the change-level comment list: the only list
+// that includes patch_set and commit_id for every published comment, across
+// all patch sets, and the same list -reply resolves against.
 func (c *gerritClient) fetchChangeComments(ctx context.Context, change string) (map[string][]commentInfo, error) {
 	data, status, err := c.request(ctx, http.MethodGet, []string{"changes", change, "comments"}, nil, nil)
 	if err != nil {
@@ -184,8 +183,8 @@ func (c *gerritClient) fetchChangeComments(ctx context.Context, change string) (
 	return m, nil
 }
 
-// postReview posts one review to one specific revision. It is the
-// only mutation grfa performs.
+// postReview posts one review to one specific revision. It is the only
+// mutation grfa performs.
 func (c *gerritClient) postReview(ctx context.Context, change, revision string, in *reviewInput) error {
 	data, status, err := c.request(ctx, http.MethodPost, []string{"changes", change, "revisions", revision, "review"}, nil, in)
 	if err != nil {
@@ -197,13 +196,15 @@ func (c *gerritClient) postReview(ctx context.Context, change, revision string, 
 	return nil
 }
 
-// decodeGerritJSON strips Gerrit's magic prefix before decoding.
+// decodeGerritJSON strips Gerrit's magic prefix
+// before decoding.
 func decodeGerritJSON(data []byte, dst any) error {
 	return json.Unmarshal(bytes.TrimPrefix(data, []byte(magicPrefix)), dst)
 }
 
-// statusError reports an unexpected HTTP status with a bounded
-// slice of the body, without inventing a permission diagnosis.
+// statusError reports an unexpected HTTP status
+// with a bounded slice of the body, without
+// inventing a permission diagnosis.
 func statusError(status int, body []byte) error {
 	return fmt.Errorf("status %d: %s", status, truncate(string(bytes.TrimSpace(body)), 4<<10))
 }
@@ -240,8 +241,9 @@ type commentRange struct {
 	EndChar   int `json:"end_character"`
 }
 
-// commentInfo is a published comment as returned by the
-// change-level /comments endpoint.
+// commentInfo is a published comment as
+// returned by the change-level /comments
+// endpoint.
 type commentInfo struct {
 	ID         string        `json:"id"`
 	PatchSet   int           `json:"patch_set"`
@@ -257,9 +259,11 @@ type commentInfo struct {
 	Updated    string        `json:"updated,omitempty"`
 }
 
-// commentInput is the wire form of one comment in a review.
-// Unresolved is always sent explicitly: Gerrit inherits a reply's
-// resolution from its parent comment when the field is omitted.
+// commentInput is the wire form of one
+// comment in a review. Unresolved is
+// always sent explicitly: Gerrit inherits
+// a reply's resolution from its parent
+// comment when the field is omitted.
 type commentInput struct {
 	Message    string        `json:"message"`
 	InReplyTo  string        `json:"in_reply_to,omitempty"`
@@ -270,13 +274,15 @@ type commentInput struct {
 	Range      *commentRange `json:"range,omitempty"`
 }
 
-// reviewInput carries only comments: no change message and no
-// votes are ever sent.
+// reviewInput carries only comments: no
+// change message and no votes are ever
+// sent.
 type reviewInput struct {
 	Comments map[string][]commentInput `json:"comments"`
 }
 
-// revisionInfo is one revision entry in ChangeInfo.revisions.
+// revisionInfo is one revision entry in
+// ChangeInfo.revisions.
 type revisionInfo struct {
 	Number int `json:"_number"`
 }
@@ -287,8 +293,9 @@ type labelInfo struct {
 	All   []voteInfo `json:"all,omitempty"`
 }
 
-// voteInfo is one vote on a label; the account rides in the
-// _account_id key as an AccountInfo object.
+// voteInfo is one vote on a label; the
+// account rides in the _account_id key
+// as an AccountInfo object.
 type voteInfo struct {
 	Value   int          `json:"value"`
 	Account *accountInfo `json:"_account_id,omitempty"`

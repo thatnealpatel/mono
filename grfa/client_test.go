@@ -8,9 +8,10 @@ import (
 	"testing"
 )
 
-// Acceptance 1: endpoint routing selects Agent for exactly the
-// entrance hint, otherwise Human; no credentials or fallback
-// route are used.
+// Acceptance 1: endpoint routing selects
+// Agent for exactly the entrance hint,
+// otherwise Human; no credentials or
+// fallback route are used.
 func TestSelectEndpoint(t *testing.T) {
 	cases := []struct {
 		host, yah    string
@@ -56,8 +57,9 @@ func TestNewClientFromEnv(t *testing.T) {
 // Acceptance 1: a wrong accounts/self prevents the POST.
 func TestWrongIdentityPreventsPost(t *testing.T) {
 	f, c, _ := seededClient(t, "Human")
-	// The client entered through the agent door; the server
-	// reports the human identity.
+	// The client entered through the agent
+	// door; the server reports the human
+	// identity.
 	c.api.expectedUser = "Agent"
 	err := c.cmdComment(context.Background(), changeKey, "hello", nil)
 	if err == nil {
@@ -85,8 +87,8 @@ func TestNoCredentialsAttached(t *testing.T) {
 	}
 }
 
-// Acceptance 9: HTTP errors and redirect refusal do not trigger
-// another entrance or a false success.
+// Acceptance 9: HTTP errors and redirect refusal do
+// not trigger another entrance or a false success.
 func TestHTTPErrorAndRedirectRefused(t *testing.T) {
 	t.Run("server error on detail", func(t *testing.T) {
 		f, c, _ := seededClient(t, "Agent")
@@ -125,8 +127,9 @@ func TestHTTPErrorAndRedirectRefused(t *testing.T) {
 				t.Errorf("client followed the redirect to %q", r)
 			}
 		}
-		// The identity check, the detail fetch, and the refused
-		// post: no retries through any other entrance.
+		// The identity check, the detail fetch,
+		// and the refused post: no retries
+		// through any other entrance.
 		if len(requests) > 3 {
 			t.Errorf("made %d requests (%v), want at most 3", len(requests), requests)
 		}
