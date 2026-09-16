@@ -25,7 +25,7 @@ import (
 func main() {
 	c := &cli{
 		out:    os.Stdout,
-		api:    newClient(),
+		api:    newClient(nil),
 		runner: execRunner{},
 		getenv: os.LookupEnv,
 	}

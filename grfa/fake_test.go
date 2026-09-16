@@ -75,7 +75,11 @@ func (f *fakeGerrit) writeJSON(w http.ResponseWriter, v any) {
 func (f *fakeGerrit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	rec := r.Method + " " + r.URL.Path
+	// path is the request path with the authenticated /gerrit/a
+	// prefix removed, so the fake serves the same routes whether a
+	// client addresses it directly or through the real prefix.
+	path := strings.TrimPrefix(r.URL.Path, "/gerrit/a")
+	rec := r.Method + " " + path
 	if r.URL.RawQuery != "" {
 		rec += "?" + r.URL.RawQuery
 	}
@@ -84,7 +88,7 @@ func (f *fakeGerrit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.authSeen = true
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if status, ok := f.statuses[r.Method+" "+r.URL.Path]; ok {
+	if status, ok := f.statuses[r.Method+" "+path]; ok {
 		if status/100 == 3 {
 			// A different entrance the client must never reach.
 			w.Header().Set("Location", "/gerrit/other-entrance")
@@ -92,14 +96,14 @@ func (f *fakeGerrit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		return
 	}
-	if body, ok := f.raw[r.Method+" "+r.URL.Path]; ok {
+	if body, ok := f.raw[r.Method+" "+path]; ok {
 		// A verbatim payload, exactly as the real server sent it.
 		w.Write([]byte(body))
 		return
 	}
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	switch {
-	case r.Method == http.MethodGet && r.URL.Path == "/accounts/self":
+	case r.Method == http.MethodGet && path == "/accounts/self":
 		f.writeJSON(w, f.selfAccount())
 	case r.Method == http.MethodGet && len(parts) == 1 && parts[0] == "changes" && r.URL.RawQuery != "":
 		// The change-query endpoint, GET /changes/?q=<term>&o=<option>.

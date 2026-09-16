@@ -19,32 +19,30 @@ import (
 // JSON response body.
 const magicPrefix = ")]}'\n"
 
-// selectEndpoint picks the Gerrit entrance from the environment hints. The
-// port and expected identity follow the entrance hint: agent traffic enters
-// on 9001 as Agent, everything else on 9999 as Human. These are routing
-// hints, not authorization boundaries; the server enforces authority, and a
-// denied route is an error, never a fallback.
-func selectEndpoint(host, yah string) (base string, expectedUser string) {
+// selectEndpoint builds the authenticated Agent entrance for a host.
+// The port is fixed at 9001, the least-privileged entrance and the only
+// one an agent host can reach, and the expected identity is Agent: no
+// environment hint selects the entrance, so a bare environment is enough.
+// GRFA_HOST is a routing hint for the host, not an authorization boundary;
+// the server enforces authority, and a denied route is an error, never a
+// fallback.
+func selectEndpoint(host string) (base string, expectedUser string) {
 	if host == "" {
 		host = "supermarket"
 	}
-	port, user := "9999", "Human"
-	if yah == "1" {
-		port, user = "9001", "Agent"
-	}
 	base = (&url.URL{
 		Scheme: "http",
-		Host:   net.JoinHostPort(host, port),
+		Host:   net.JoinHostPort(host, "9001"),
 		Path:   "/gerrit/a",
 	}).String()
-	return base, user
+	return base, "Agent"
 }
 
-// newClient builds the production client
-// from the environment.
-func newClient() *gerritClient {
-	base, expectedUser := selectEndpoint(os.Getenv("GRFA_HOST"), os.Getenv("YAH"))
-	return newGerritClient(base, expectedUser, nil)
+// newClient builds the production client from the environment over the
+// given transport; a nil transport uses the default.
+func newClient(rt http.RoundTripper) *gerritClient {
+	base, expectedUser := selectEndpoint(os.Getenv("GRFA_HOST"))
+	return newGerritClient(base, expectedUser, rt)
 }
 
 // newGerritClient builds a client for one authenticated entrance. A nil

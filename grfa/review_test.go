@@ -195,14 +195,14 @@ const realDetailPayload = ")]}'\n" + `{
 // voter, and their vote value, including a vote of 0 and a label with no
 // votes.
 func TestViewDecodesRealDetailedLabelsPayload(t *testing.T) {
-	f, srv := newFakeGerrit(t, "Human")
+	f, srv := newFakeGerrit(t, "Agent")
 	f.mu.Lock()
 	f.raw["GET /changes/141/detail"] = realDetailPayload
 	f.mu.Unlock()
 	out := &bytes.Buffer{}
 	c := &cli{
 		out:    out,
-		api:    testClient(srv, "Human"),
+		api:    testClient(srv, "Agent"),
 		runner: refusingRunner(),
 		getenv: emptyGetenv,
 	}

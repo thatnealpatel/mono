@@ -808,7 +808,7 @@ func TestPrePushLookupAbsentStillPushes(t *testing.T) {
 // push. The entrance reports the wrong identity, so the upload aborts
 // before any push or stamp; the error names the entrance it tried.
 func TestIdentityCheckAbortsBeforePushWrongIdentity(t *testing.T) {
-	f, srv := newFakeGerrit(t, "Human") // the entrance reports the human identity
+	f, srv := newFakeGerrit(t, "Imposter") // the entrance reports the wrong identity
 	_, jj, c, _ := uploadFixtureAt(t, f, srv, "Agent", twoRevisions(), session42, true)
 	err := c.cmdUpload(context.Background(), nil)
 	if err == nil {
