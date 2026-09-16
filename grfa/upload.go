@@ -30,13 +30,14 @@ type revision struct {
 	Subject  string
 }
 
-// cmdUpload supervises an upload: resolve the upload set, require
-// local Change-Id trailers, run the pre-upload hook, check the entrance
-// identity when a session will stamp, look the revisions up before the
-// push, delegate the push to jj gerrit upload, and stamp the session
-// that produced the change. A failed check, a missing Change-Id, a
-// failed push, and a failed stamp are distinct stages and are reported
-// as such; re-running upload is the recovery path.
+// cmdUpload supervises an upload: resolve the upload set, reject an
+// empty one, require local Change-Id trailers, run the pre-upload hook,
+// check the entrance identity when a session will stamp, look the
+// revisions up before the push, delegate the push to jj gerrit upload,
+// and stamp the session that produced the change. An empty upload set, a
+// failed check, a missing Change-Id, a failed push, and a failed stamp
+// are distinct stages and are reported as such; re-running upload is the
+// recovery path.
 func (c *cli) cmdUpload(ctx context.Context, args []string) error {
 	opts, err := parseUploadArgs(args)
 	if err != nil {
@@ -50,9 +51,21 @@ func (c *cli) cmdUpload(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	revs, err := c.uploadSet(ctx, opts.revset)
+	revs, rev, err := c.resolveUploadSet(ctx, opts.revset)
 	if err != nil {
 		return err
+	}
+
+	// An empty upload set is its own stage, not a push failure: the
+	// requested push cannot happen, so it is reported here, at
+	// resolution, before the Change-Id requirement, the pre-upload
+	// hook, the identity check, any network request, and the
+	// delegated push. -dry-run gets the same diagnosis, since an
+	// empty set is no more reportable as a successful dry run than
+	// as a silent success. The diagnosis names the revision set the
+	// caller asked for, never the internal mutable()::(...) query.
+	if len(revs) == 0 {
+		return fmt.Errorf("no mutable revisions in the upload set (%s); nothing to upload", rev)
 	}
 
 	// Require local Change-Id trailers
@@ -245,23 +258,32 @@ func (c *cli) repoRoot(ctx context.Context) (string, error) {
 	return root, nil
 }
 
-// uploadSet resolves the revisions jj gerrit upload would push: the given
-// revset plus its mutable ancestors, or the VCS default (@ when described, @-
-// otherwise) when no revset was given. Resolution is delegated to jj; grfa
-// only mirrors the documented default so the Change-Id requirement can be
-// checked locally, read-only.
-func (c *cli) uploadSet(ctx context.Context, revset string) ([]revision, error) {
+// resolveUploadSet resolves the revisions jj gerrit upload would push and
+// reports the revision set the caller actually asked for: the given revset,
+// or the VCS default (@ when described, @- otherwise) that the resolver
+// chose. The effective revset is what an empty set is reported against, so
+// the internal mutable()::(...) query is never surfaced.
+func (c *cli) resolveUploadSet(ctx context.Context, revset string) ([]revision, string, error) {
 	rev := revset
 	if rev == "" {
 		out, err := c.jj(ctx, "log", "--no-graph", "-r", "@", "-T", `if(description, "@", "@-")`)
 		if err != nil {
-			return nil, fmt.Errorf("resolve default upload revision: %w", err)
+			return nil, "", fmt.Errorf("resolve default upload revision: %w", err)
 		}
 		rev = strings.TrimSpace(out)
 		if rev == "" {
-			return nil, fmt.Errorf("resolve default upload revision: empty output")
+			return nil, "", fmt.Errorf("resolve default upload revision: empty output")
 		}
 	}
+	revs, err := c.uploadSetOf(ctx, rev)
+	if err != nil {
+		return nil, "", err
+	}
+	return revs, rev, nil
+}
+
+// uploadSetOf runs the mutable-ancestors query for one effective revset.
+func (c *cli) uploadSetOf(ctx context.Context, rev string) ([]revision, error) {
 	query := fmt.Sprintf("mutable()::(%s)", rev)
 	out, err := c.jj(ctx, "log", "--no-graph", "-r", query, "-T", `commit_id ++ "\x1f" ++ description ++ "\x1f"`)
 	if err != nil {

@@ -977,7 +977,7 @@ func TestUploadSetRecords(t *testing.T) {
 		{Commit: revB, ChangeID: "", Subject: ""},
 	}
 	jj.mu.Unlock()
-	revs, err := c.uploadSet(context.Background(), "")
+	revs, _, err := c.resolveUploadSet(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1009,7 +1009,135 @@ func TestUploadSetRejectsGarbage(t *testing.T) {
 			return "garbage without terminator", nil
 		}
 	}}, getenv: func(string) (string, bool) { return "", false }}
-	if _, err := c.uploadSet(context.Background(), ""); err == nil {
+	if _, _, err := c.resolveUploadSet(context.Background(), ""); err == nil {
 		t.Fatal("garbage jj output: want an error")
+	}
+}
+
+// emptySetDiagnosis is the exact report an empty upload set owes the
+// operator: the revset the caller asked for, no internal mutable()::
+// query, and no push failure.
+func emptySetDiagnosis(revset string) string {
+	return fmt.Sprintf("no mutable revisions in the upload set (%s); nothing to upload", revset)
+}
+
+// hookRan reports whether the pre-upload hook was invoked at all.
+func hookRan(cmds []command) bool {
+	for _, cmd := range cmds {
+		if strings.HasSuffix(cmd.name, ".grfa/pre-upload") {
+			return true
+		}
+	}
+	return false
+}
+
+// assertEmptySetAborted pins the resolution-stage contract for an empty
+// upload set: the exact diagnosis naming the requested revset, a non-zero
+// exit status of its own, no delegated push, no pre-upload hook, and no
+// network traffic of any kind. The fake runner never executes the hook
+// script — it returns its own hookErr, which these tests leave nil — so the
+// detector for a hook that ran is the hookRan command-log assertion.
+func assertEmptySetAborted(t *testing.T, f *fakeGerrit, jj *jjFake, err error, out *bytes.Buffer, revset string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("empty upload set: want an error, got nil; output:\n%s", out)
+	}
+	want := emptySetDiagnosis(revset)
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
+	}
+	if strings.Contains(err.Error(), "mutable()::") {
+		t.Errorf("error leaks the internal upload-set query: %q", err)
+	}
+	if strings.Contains(err.Error(), "push:") {
+		t.Errorf("the empty upload set must not be reported as a push failure: %q", err)
+	}
+	if got := exitStatus(err); got == 0 {
+		t.Errorf("exitStatus = %d, want non-zero", got)
+	}
+	cmds := jj.commandsSnapshot()
+	if got := countPushes(cmds); got != 0 {
+		t.Errorf("delegated %d push(es), want 0", got)
+	}
+	if hookRan(cmds) {
+		t.Errorf("the pre-upload hook ran before the empty upload set was reported")
+	}
+	if got := f.requestCount(); got != 0 {
+		t.Errorf("made %d network request(s), want 0", got)
+	}
+}
+
+// The defect, shape 1: an explicit -r whose set resolves empty (a
+// post-merge re-run against an immutable revision) must be reported as
+// its own stage naming that revset, before the pre-upload hook and before
+// the delegated push — not as jj's raw immutable-commit fault or a bare
+// push: jj: exit status 1.
+func TestEmptyUploadSetWithExplicitRevsetStopsBeforePush(t *testing.T) {
+	f, jj, c, out := uploadFixture(t, nil, session42, true)
+	// The fake runner never executes this script — it returns its own
+	// hookErr, which this test leaves nil — so hookRan, not the script,
+	// is what detects a hook that ran.
+	writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
+	err := c.cmdUpload(context.Background(), []string{"-r", "none()"})
+	assertEmptySetAborted(t, f, jj, err, out, "none()")
+}
+
+// An empty upload set is diagnosed identically when YAH_SESSION is absent:
+// the abort is at resolution, so it precedes the pre-upload hook and the
+// delegated push whether or not a provenance marker would be posted.
+func TestEmptyUploadSetWithoutSessionStopsBeforePush(t *testing.T) {
+	f, jj, c, out := uploadFixture(t, nil, "", false)
+	writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
+	err := c.cmdUpload(context.Background(), []string{"-r", "none()"})
+	assertEmptySetAborted(t, f, jj, err, out, "none()")
+}
+
+// The default revset is no exception without YAH_SESSION: the diagnosis
+// names the default the resolver chose, @ or @-.
+func TestEmptyUploadSetWithDefaultRevsetWithoutSession(t *testing.T) {
+	for _, def := range []string{"@", "@-"} {
+		t.Run(def, func(t *testing.T) {
+			f, jj, c, out := uploadFixture(t, nil, "", false)
+			jj.mu.Lock()
+			jj.defaultRev = def
+			jj.mu.Unlock()
+			writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
+			err := c.cmdUpload(context.Background(), nil)
+			assertEmptySetAborted(t, f, jj, err, out, def)
+		})
+	}
+}
+
+// The defect, shape 2: a revset that resolves to nothing must not be a
+// silent success with jj's No revisions to upload. on stderr. The same
+// diagnosis names the default the resolver actually chose, @ or @-.
+func TestEmptyUploadSetWithDefaultRevsetStopsBeforePush(t *testing.T) {
+	for _, def := range []string{"@", "@-"} {
+		t.Run(def, func(t *testing.T) {
+			f, jj, c, out := uploadFixture(t, nil, session42, true)
+			jj.mu.Lock()
+			jj.defaultRev = def
+			jj.mu.Unlock()
+			writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
+			err := c.cmdUpload(context.Background(), nil)
+			assertEmptySetAborted(t, f, jj, err, out, def)
+		})
+	}
+}
+
+// -dry-run is no exception: an empty upload set is the same diagnosis, not
+// dry-run: 0 revision(s) in the upload set. Nothing is pushed, nothing is
+// stamped, and the report is non-zero because the requested push cannot
+// happen.
+func TestEmptyUploadSetDryRunReportsSameDiagnosis(t *testing.T) {
+	f, jj, c, out := uploadFixture(t, nil, session42, true)
+	writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
+	err := c.cmdUpload(context.Background(), []string{"-r", "none()", "-dry-run"})
+	assertEmptySetAborted(t, f, jj, err, out, "none()")
+	if got := out.String(); strings.Contains(got, "dry-run:") {
+		t.Errorf("dry-run reported a count for an empty upload set:\n%s", got)
+	}
+	if f.postCount() != 0 {
+		t.Errorf("dry-run with an empty upload set stamped %d time(s), want 0", f.postCount())
 	}
 }
