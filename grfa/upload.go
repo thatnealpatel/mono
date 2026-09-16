@@ -31,11 +31,12 @@ type revision struct {
 }
 
 // cmdUpload supervises an upload: resolve the upload set, require
-// local Change-Id trailers, run the pre-upload hook, delegate the
-// push to jj gerrit upload, and stamp the session that produced
-// the change. A failed check, a missing Change-Id, a failed push,
-// and a failed stamp are distinct stages and are reported as such;
-// re-running upload is the recovery path.
+// local Change-Id trailers, run the pre-upload hook, check the entrance
+// identity when a session will stamp, look the revisions up before the
+// push, delegate the push to jj gerrit upload, and stamp the session
+// that produced the change. A failed check, a missing Change-Id, a
+// failed push, and a failed stamp are distinct stages and are reported
+// as such; re-running upload is the recovery path.
 func (c *cli) cmdUpload(ctx context.Context, args []string) error {
 	opts, err := parseUploadArgs(args)
 	if err != nil {
@@ -80,6 +81,21 @@ func (c *cli) cmdUpload(ctx context.Context, args []string) error {
 		return c.reportDryRun(revs, session)
 	}
 
+	// The identity check runs before the push, and only when a provenance
+	// marker will actually be posted. The asymmetry is deliberate: when
+	// YAH_SESSION is absent no marker is posted, and such an upload must
+	// not require API reachability, so no check runs and an unreachable
+	// entrance cannot abort it; when a session is present the upload must
+	// never reach Gerrit unable to be stamped, so a wrong identity or an
+	// unreachable entrance aborts here, before the push, instead of after
+	// it. One check precedes every mutation that follows — the push and the
+	// stamp — so the stamping path never re-checks.
+	if session != "" {
+		if err := c.api.checkIdentity(ctx); err != nil {
+			return err
+		}
+	}
+
 	pushArgs := []string{"--ignore-working-copy", "gerrit", "upload"}
 	if opts.revset != "" {
 		pushArgs = append(pushArgs, "-r", opts.revset)
@@ -92,6 +108,37 @@ func (c *cli) cmdUpload(ctx context.Context, args []string) error {
 	}
 	for _, r := range opts.reviewers {
 		pushArgs = append(pushArgs, "--reviewer", r)
+	}
+	if err := c.pushUpload(ctx, revs, pushArgs); err != nil {
+		return err
+	}
+
+	if session == "" {
+		fmt.Fprintf(c.out, "uploaded %d revision(s); YAH_SESSION not set, no provenance marker posted\n", len(revs))
+		return nil
+	}
+	return c.stampUpload(ctx, revs, session)
+}
+
+// pushUpload delegates the push to jj gerrit upload, unless the pre-push
+// lookup positively confirms every revision of the upload set is already on
+// the server as its change's current patch set: a re-run of a completed
+// upload must not delegate a push Gerrit would only reject. A lookup
+// failure is never fatal and never a skip — it is reported and the push
+// proceeds as usual — and the post-push recovery remains the second chance,
+// because a change can appear between the lookup and the push, or the
+// lookup itself can fail. The delegated command's output is never parsed.
+func (c *cli) pushUpload(ctx context.Context, revs []revision, pushArgs []string) error {
+	present, lookupErr := c.pushAlreadyPresent(ctx, revs)
+	switch {
+	case lookupErr != nil:
+		// Only a positive confirmation may skip
+		// the push; an inconclusive lookup is
+		// reported and the push runs as usual.
+		fmt.Fprintf(c.out, "pre-push lookup: %v; pushing as usual\n", lookupErr)
+	case present:
+		c.reportAlreadyPresent(len(revs))
+		return nil
 	}
 	if err := c.runner.run(ctx, command{name: jjBinary, args: pushArgs, passthrough: true}); err != nil {
 		present, lookupErr := c.pushAlreadyPresent(ctx, revs)
@@ -109,24 +156,26 @@ func (c *cli) cmdUpload(ctx context.Context, args []string) error {
 		// appears to be: re-running upload is the
 		// recovery path, and the stamp is what
 		// repairs the partial result.
-		fmt.Fprintf(c.out, "push: %d revision(s) already present on the server as the current patch set(s); nothing new to push\n", len(revs))
+		c.reportAlreadyPresent(len(revs))
 	}
+	return nil
+}
 
-	if session == "" {
-		fmt.Fprintf(c.out, "uploaded %d revision(s); YAH_SESSION not set, no provenance marker posted\n", len(revs))
-		return nil
-	}
-	return c.stampUpload(ctx, revs, session)
+// reportAlreadyPresent reports plainly that the revision(s) of the upload
+// set are already on the server as the current patch set(s).
+func (c *cli) reportAlreadyPresent(n int) {
+	fmt.Fprintf(c.out, "push: %d revision(s) already present on the server as the current patch set(s); nothing new to push\n", n)
 }
 
 // pushAlreadyPresent reports whether every revision of the upload set is
 // already on the server as its change's current revision: that is how a
-// re-run of an already-completed upload looks when the delegated push is
-// rejected. Each revision is looked up by its local Change-Id through a
-// read-only query on the authenticated entrance, and the server's
-// current_revision is compared with the locally known full commit id —
-// the delegated command's output is never parsed. A lookup failure is
-// reported as such: it never turns a push failure into a success.
+// re-run of an already-completed upload looks, both to the lookup before
+// the push and to the recovery after a rejected one. Each revision is
+// looked up by its local Change-Id through a read-only query on the
+// authenticated entrance, and the server's current_revision is compared
+// with the locally known full commit id — the delegated command's output
+// is never parsed. A lookup failure is reported as such: it never turns a
+// push failure into a success.
 func (c *cli) pushAlreadyPresent(ctx context.Context, revs []revision) (bool, error) {
 	if len(revs) == 0 {
 		return false, nil
@@ -283,9 +332,8 @@ func (c *cli) reportDryRun(revs []revision, session string) error {
 // A failed stamp after a successful push is a partial result and is reported
 // plainly.
 func (c *cli) stampUpload(ctx context.Context, revs []revision, session string) error {
-	if err := c.api.checkIdentity(ctx); err != nil {
-		return fmt.Errorf("push succeeded, but stamping failed: %w", err)
-	}
+	// The entrance identity was checked before the push, so the
+	// stamp needs no second check.
 	marker := "Yah-Session: " + session
 	seen := map[string]bool{}
 	var problems []string

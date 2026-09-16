@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -17,15 +19,25 @@ const (
 const (
 	revA      = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	revB      = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	revC      = "cccccccccccccccccccccccccccccccccccccccc"
 	changeID1 = "Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	changeID2 = "Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 )
 
-// uploadFixture wires a client whose fake jj reports the given upload set, and
-// seeds the fake Gerrit with both changes.
+// uploadFixture wires a client whose fake jj reports the given upload set,
+// and seeds the fake Gerrit with both changes. The seeded changes are not
+// on the server yet — no push has landed — so a fresh upload's pre-push
+// lookup finds nothing.
 func uploadFixture(t *testing.T, revs []revision, session string, sessionSet bool) (*fakeGerrit, *jjFake, *cli, *bytes.Buffer) {
 	t.Helper()
 	f, srv := newFakeGerrit(t, "Agent")
+	return uploadFixtureAt(t, f, srv, "Agent", revs, session, sessionSet)
+}
+
+// uploadFixtureAt wires the cli at an already-built fake entrance, for
+// tests that need a different server identity or reachability.
+func uploadFixtureAt(t *testing.T, f *fakeGerrit, srv *httptest.Server, expectedUser string, revs []revision, session string, sessionSet bool) (*fakeGerrit, *jjFake, *cli, *bytes.Buffer) {
+	t.Helper()
 	f.details[changeID1] = &changeDetail{
 		ID: changeID1, ChangeID: changeID1, Number: 1, Status: "NEW", CurrentRevision: revA,
 		Revisions: map[string]revisionInfo{revA: {Kind: "REWORK", Number: 1, Ref: "refs/changes/01/1/1"}},
@@ -66,6 +78,32 @@ func countPushes(cmds []command) int {
 		}
 	}
 	return n
+}
+
+// assertOneIdentityCheck pins the invariant that a session-present
+// upload which reaches stamping performs the entrance identity check
+// exactly once, before any stamp POST: one check covers the push and
+// the stamp, and the stamping path never re-checks. A removed pre-push
+// check (zero requests) and a re-added stamp-path check (two or more)
+// both fail here, as does a check that runs only after the stamps.
+func assertOneIdentityCheck(t *testing.T, f *fakeGerrit) {
+	t.Helper()
+	if got := f.selfRequestCount(); got != 1 {
+		t.Errorf("identity checks = %d, want exactly 1 GET /accounts/self before stamping", got)
+	}
+	_, requests := f.snapshot()
+	self, stamp := -1, -1
+	for i, r := range requests {
+		if strings.HasPrefix(r, "GET /accounts/self") && self == -1 {
+			self = i
+		}
+		if strings.HasPrefix(r, "POST /changes/") && stamp == -1 {
+			stamp = i
+		}
+	}
+	if self == -1 || stamp == -1 || self > stamp {
+		t.Errorf("the identity check must precede the stamp POST: %v", requests)
+	}
 }
 
 // Acceptance 12: upload stamps each change in
@@ -115,6 +153,7 @@ func TestUploadStampsEveryChange(t *testing.T) {
 	if !strings.Contains(out.String(), "stamped "+changeID1) {
 		t.Errorf("output should report stamping:\n%s", out)
 	}
+	assertOneIdentityCheck(t, f)
 }
 
 // Acceptance 12: no marker is posted when the environment
@@ -138,12 +177,19 @@ func TestUploadWithoutSessionPostsNoMarker(t *testing.T) {
 // Acceptance 13: re-running upload
 // against a revision that already carries
 // the identical marker posts nothing
-// new, and no duplicate push happens for
-// unchanged content.
+// new, and performs no duplicate push
+// for unchanged content: once the first
+// push has landed the changes, the second
+// run's pre-push lookup confirms presence
+// and skips the push entirely.
 func TestStampIdempotent(t *testing.T) {
 	f, jj, c, _ := uploadFixture(t, []revision{
 		{Commit: revA, ChangeID: changeID1, Subject: "first change"},
 	}, session42, true)
+	// The push lands the change on the
+	// server, so a re-run sees it as the
+	// current patch set.
+	jj.onPush = func() { f.land([]revision{{Commit: revA, ChangeID: changeID1}}) }
 	// The revision already carries the identical marker.
 	f.mu.Lock()
 	f.comments[changeID1] = map[string][]commentInfo{
@@ -161,8 +207,8 @@ func TestStampIdempotent(t *testing.T) {
 			t.Errorf("run %d: posted %d markers, want 0 (already stamped)", run, got)
 		}
 		cmds := jj.commandsSnapshot()
-		if got := countPushes(cmds); got != run {
-			t.Errorf("run %d: cumulative pushes = %d, want %d (one delegated push per run)", run, got, run)
+		if got := countPushes(cmds); got != 1 {
+			t.Errorf("run %d: cumulative pushes = %d, want 1 (the re-run skips the redundant push)", run, got)
 		}
 	}
 	// A marker on an older revision is not
@@ -461,9 +507,9 @@ func TestDryRunWithoutSession(t *testing.T) {
 // for an already-completed upload.
 func TestFailedPushIsItsOwnStage(t *testing.T) {
 	f, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
-	f.mu.Lock()
-	f.details[changeID1].CurrentRevision = "cccccccccccccccccccccccccccccccccccccccc"
-	f.mu.Unlock()
+	// The server already holds an older current
+	// revision for the first change.
+	f.land([]revision{{Commit: revC, ChangeID: changeID1}})
 	jj.mu.Lock()
 	jj.pushErr = errors.New("exit status 1")
 	jj.mu.Unlock()
@@ -485,9 +531,9 @@ func TestFailedPushIsItsOwnStage(t *testing.T) {
 // different current revision.
 func TestFailedPushExitStatusFlowsThrough(t *testing.T) {
 	f, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
-	f.mu.Lock()
-	f.details[changeID1].CurrentRevision = "cccccccccccccccccccccccccccccccccccccccc"
-	f.mu.Unlock()
+	// The server already holds an older current
+	// revision for the first change.
+	f.land([]revision{{Commit: revC, ChangeID: changeID1}})
 	jj.mu.Lock()
 	jj.pushErr = &exitCodeError{err: fmt.Errorf("%s: exit status 3", jjBinary), code: 3}
 	jj.mu.Unlock()
@@ -506,18 +552,26 @@ func TestFailedPushExitStatusFlowsThrough(t *testing.T) {
 	}
 }
 
-// Defect 3, case (a): re-running upload is the recovery path. The delegated
+// Defect 3, case (d): post-push recovery, scripted honestly as the concurrent case.
+// The delegated
 // push fails because the change is already current on the server, and the
 // read-only Change-Id lookup confirms every revision of the upload set is
 // the change's current_revision: the push was a no-op, so upload continues
 // to stamping, posts the marker, and exits successfully. The push's stdout
 // claims a fresh upload, which must not matter: grfa never parses it.
+// Concretely: the pre-push lookup reports both changes absent, the change
+// appears before the push is attempted (modeled by the fake's onPush
+// landing at push time), so the push is rejected and the recovery confirms it.
 func TestUploadRecoversWhenPushAlreadyPresent(t *testing.T) {
 	f, jj, c, out := uploadFixture(t, twoRevisions(), session42, true)
 	jj.mu.Lock()
 	jj.pushErr = errors.New("exit status 1")
 	jj.pushStdout = "Uploaded new patch sets, fresh as can be"
 	jj.mu.Unlock()
+	// A concurrent upload lands the same
+	// content just as the push is attempted,
+	// so Gerrit rejects ours as redundant.
+	jj.onPush = func() { f.land(twoRevisions()) }
 	if err := c.cmdUpload(context.Background(), nil); err != nil {
 		t.Fatalf("a push that was already present must be recovered, not an error: %v", err)
 	}
@@ -562,7 +616,7 @@ func TestUploadRecoversWhenPushAlreadyPresent(t *testing.T) {
 	}
 }
 
-// Defect 3, case (b): the change exists but its current revision differs
+// The change exists but its current revision differs
 // from the local commit, so the push genuinely failed: the original error
 // surfaces unchanged and nothing is stamped. The push's stdout claims
 // success, which must not matter.
@@ -572,9 +626,9 @@ func TestUploadSurfacesPushFailureWhenRevisionDiffers(t *testing.T) {
 	jj.pushErr = errors.New("exit status 1")
 	jj.pushStdout = "push successful, nothing to worry about"
 	jj.mu.Unlock()
-	f.mu.Lock()
-	f.details[changeID1].CurrentRevision = "cccccccccccccccccccccccccccccccccccccccc"
-	f.mu.Unlock()
+	// The server holds an older current
+	// revision for the first change.
+	f.land([]revision{{Commit: revC, ChangeID: changeID1}})
 	err := c.cmdUpload(context.Background(), nil)
 	if err == nil {
 		t.Fatal("differing server revision: want the original push error")
@@ -593,7 +647,7 @@ func TestUploadSurfacesPushFailureWhenRevisionDiffers(t *testing.T) {
 	}
 }
 
-// Defect 3, case (c): the change is absent from the server, so the push
+// The change is absent from the server, so the push
 // genuinely failed: the original error surfaces unchanged and nothing is
 // stamped.
 func TestUploadSurfacesPushFailureWhenChangeAbsent(t *testing.T) {
@@ -622,16 +676,21 @@ func TestUploadSurfacesPushFailureWhenChangeAbsent(t *testing.T) {
 	}
 }
 
-// Defect 3, case (d): during recovery the push still runs exactly once,
+// Post-push recovery, concurrent case: during recovery the push still
+// runs exactly once (the pre-push lookup reported the change absent),
 // its stdout is never captured or parsed (it runs in pass-through mode),
 // and the recorded command log stays read-only queries plus at most one
 // push.
 func TestRecoveryRunsPushOnceAndNeverParsesStdout(t *testing.T) {
-	_, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
+	f, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
 	jj.mu.Lock()
 	jj.pushErr = errors.New("exit status 1")
 	jj.pushStdout = "Uploaded fix for review: this line is not a contract"
 	jj.mu.Unlock()
+	// The change appears before the push is
+	// attempted, so the push is rejected and
+	// the recovery confirms it.
+	jj.onPush = func() { f.land(twoRevisions()) }
 	if err := c.cmdUpload(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -655,6 +714,166 @@ func TestRecoveryRunsPushOnceAndNeverParsesStdout(t *testing.T) {
 		if len(cmd.args) == 0 || cmd.args[0] != "--ignore-working-copy" {
 			t.Errorf("command is not in the read-only stance: %v", cmd.args)
 		}
+	}
+}
+
+// Defect 3, case (a): the pre-push lookup confirms every revision is
+// already the server's current patch set, so the delegated push is
+// skipped entirely, the report says the revision(s) were already
+// present, and stamping still runs.
+func TestPrePushLookupSkipsRedundantPush(t *testing.T) {
+	f, jj, c, out := uploadFixture(t, twoRevisions(), session42, true)
+	// A previous upload already landed both
+	// changes as their current patch sets.
+	f.land(twoRevisions())
+	if err := c.cmdUpload(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := countPushes(jj.commandsSnapshot()); got != 0 {
+		t.Errorf("pushes = %d, want 0 (the redundant push must be skipped)", got)
+	}
+	if got := f.postCount(); got != 2 {
+		t.Errorf("stamps = %d, want 2 (stamping continues without the push)", got)
+	}
+	got := out.String()
+	if !strings.Contains(got, "already present") {
+		t.Errorf("output should report the revision(s) as already present:\n%s", got)
+	}
+	if !strings.Contains(got, "stamped "+changeID1) {
+		t.Errorf("output should still report the stamp stage:\n%s", got)
+	}
+	// The pre-push lookup went through the authenticated entrance as a
+	// read-only query carrying the CURRENT_REVISION option.
+	_, requests := f.snapshot()
+	var sawQuery bool
+	for _, r := range requests {
+		if strings.HasPrefix(r, "GET /changes?") &&
+			strings.Contains(r, "q=change%3A") &&
+			strings.Contains(r, "o=CURRENT_REVISION") {
+			sawQuery = true
+		}
+	}
+	if !sawQuery {
+		t.Errorf("the pre-push lookup must use the change-query endpoint with CURRENT_REVISION: %v", requests)
+	}
+	assertOneIdentityCheck(t, f)
+}
+
+// Defect 3, case (b): a pre-push lookup failure is never fatal and never
+// a skip: it is reported and the push runs, with the rest of the flow
+// unchanged.
+func TestPrePushLookupErrorStillPushes(t *testing.T) {
+	f, jj, c, out := uploadFixture(t, twoRevisions(), session42, true)
+	f.mu.Lock()
+	f.statuses["GET /changes"] = http.StatusInternalServerError // the lookup endpoint errors
+	f.mu.Unlock()
+	if err := c.cmdUpload(context.Background(), nil); err != nil {
+		t.Fatalf("a lookup failure must not abort the upload: %v", err)
+	}
+	if got := countPushes(jj.commandsSnapshot()); got != 1 {
+		t.Errorf("pushes = %d, want 1 (an inconclusive lookup never skips the push)", got)
+	}
+	if got := f.postCount(); got != 2 {
+		t.Errorf("stamps = %d, want 2 (the flow is unchanged)", got)
+	}
+	if !strings.Contains(out.String(), "pre-push lookup") {
+		t.Errorf("output should report the failed lookup, not hide it:\n%s", out.String())
+	}
+}
+
+// Defect 3, case (c): the pre-push lookup reports the revisions absent,
+// so the push runs.
+func TestPrePushLookupAbsentStillPushes(t *testing.T) {
+	f, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
+	if err := c.cmdUpload(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := countPushes(jj.commandsSnapshot()); got != 1 {
+		t.Errorf("pushes = %d, want 1 (absent revisions still push)", got)
+	}
+	// The lookup actually consulted the server before the push.
+	_, requests := f.snapshot()
+	var sawQuery bool
+	for _, r := range requests {
+		if strings.HasPrefix(r, "GET /changes?") && strings.Contains(r, "q=change%3A") {
+			sawQuery = true
+		}
+	}
+	if !sawQuery {
+		t.Errorf("the pre-push lookup never queried the server: %v", requests)
+	}
+}
+
+// Defect 2: with a session present, the identity check runs before the
+// push. The entrance reports the wrong identity, so the upload aborts
+// before any push or stamp; the error names the entrance it tried.
+func TestIdentityCheckAbortsBeforePushWrongIdentity(t *testing.T) {
+	f, srv := newFakeGerrit(t, "Human") // the entrance reports the human identity
+	_, jj, c, _ := uploadFixtureAt(t, f, srv, "Agent", twoRevisions(), session42, true)
+	err := c.cmdUpload(context.Background(), nil)
+	if err == nil {
+		t.Fatal("wrong identity: want an error")
+	}
+	if !strings.Contains(err.Error(), "entrance") || !strings.Contains(err.Error(), srv.URL) {
+		t.Errorf("error should name the entrance it tried: %v", err)
+	}
+	if got := countPushes(jj.commandsSnapshot()); got != 0 {
+		t.Errorf("recorded commands contain %d pushes, want 0", got)
+	}
+	if f.postCount() != 0 {
+		t.Errorf("stamped %d changes, want 0", f.postCount())
+	}
+	if got := f.requestCount(); got != 1 {
+		t.Errorf("made %d requests, want 1 (accounts/self only, then abort)", got)
+	}
+}
+
+// Defect 2: with a session present and the entrance unreachable, the
+// identity check's transport failure aborts before any push or stamp;
+// the error names the entrance it tried.
+func TestIdentityCheckAbortsBeforePushUnreachableEntrance(t *testing.T) {
+	f, srv := newFakeGerrit(t, "Agent")
+	srv.Close() // the entrance is down
+	_, jj, c, _ := uploadFixtureAt(t, f, srv, "Agent", twoRevisions(), session42, true)
+	err := c.cmdUpload(context.Background(), nil)
+	if err == nil {
+		t.Fatal("unreachable entrance: want an error")
+	}
+	if !strings.Contains(err.Error(), "check identity") || !strings.Contains(err.Error(), srv.URL) {
+		t.Errorf("error should name the entrance it tried: %v", err)
+	}
+	if got := countPushes(jj.commandsSnapshot()); got != 0 {
+		t.Errorf("recorded commands contain %d pushes, want 0", got)
+	}
+	if f.postCount() != 0 {
+		t.Errorf("stamped %d changes, want 0", f.postCount())
+	}
+	// The entrance is down, so no request can arrive to be recorded;
+	// the abort is proven by the error naming it and the empty push log.
+}
+
+// Defect 2, the other half of the asymmetry: with YAH_SESSION absent no
+// marker will be posted, so the upload must not require API reachability.
+// Even a dead entrance cannot abort it; the pre-push lookup failure is
+// reported but never fatal.
+func TestNoSessionDoesNotRequireAPIReachability(t *testing.T) {
+	f, srv := newFakeGerrit(t, "Agent")
+	srv.Close() // the entrance is down
+	_, jj, c, out := uploadFixtureAt(t, f, srv, "Agent", twoRevisions(), "", false)
+	if err := c.cmdUpload(context.Background(), nil); err != nil {
+		t.Fatalf("an upload that will never stamp must not require API reachability: %v", err)
+	}
+	if f.postCount() != 0 {
+		t.Errorf("stamped %d changes, want 0 (no session, no marker)", f.postCount())
+	}
+	if got := countPushes(jj.commandsSnapshot()); got != 1 {
+		t.Errorf("pushes = %d, want 1 (the push is unaffected)", got)
+	}
+	if !strings.Contains(out.String(), "pre-push lookup") {
+		t.Errorf("output should report the failed lookup:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "no provenance marker") {
+		t.Errorf("output should explain the missing marker:\n%s", out.String())
 	}
 }
 

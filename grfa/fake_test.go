@@ -37,6 +37,9 @@ type fakeGerrit struct {
 	user     string
 	details  map[string]*changeDetail
 	comments map[string]map[string][]commentInfo
+	// onServer records which changes the change-query endpoint can
+	// see: a change that was never pushed is not on the server.
+	onServer map[string]bool
 	// raw serves verbatim payloads keyed by "METHOD path",
 	// mirroring the exact bytes a real Gerrit produced.
 	raw      map[string]string
@@ -55,6 +58,7 @@ func newFakeGerrit(t *testing.T, user string) (*fakeGerrit, *httptest.Server) {
 		comments: map[string]map[string][]commentInfo{},
 		raw:      map[string]string{},
 		statuses: map[string]int{},
+		onServer: map[string]bool{},
 	}
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
@@ -153,12 +157,34 @@ func (f *fakeGerrit) serveChangeQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	matches := []*changeDetail{}
-	for _, d := range f.details {
+	for key, d := range f.details {
+		if !f.onServer[key] {
+			// A change no push ever landed is not
+			// on the server, so no query can see it.
+			continue
+		}
 		if d.ChangeID == id || d.ID == id || strings.HasSuffix(d.ID, "~"+id) {
 			matches = append(matches, d)
 		}
 	}
 	f.writeJSON(w, matches)
+}
+
+// land puts the given revisions on the fake server as their changes'
+// current patch sets: from then on the change-query endpoint reports
+// them. It models the moment a push lands — or a concurrent upload
+// lands the same content between grfa's lookup and its own push.
+func (f *fakeGerrit) land(revs []revision) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for key, d := range f.details {
+		for _, r := range revs {
+			if d.ChangeID == r.ChangeID || d.ID == r.ChangeID {
+				d.CurrentRevision = r.Commit
+				f.onServer[key] = true
+			}
+		}
+	}
 }
 
 // applyReview records the post and folds it into the fake's change state, the
@@ -225,6 +251,20 @@ func (f *fakeGerrit) requestCount() int {
 	return len(f.requests)
 }
 
+// selfRequestCount reports how many GET /accounts/self requests the
+// fake has served: the identity check is the only endpoint used by it.
+func (f *fakeGerrit) selfRequestCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, r := range f.requests {
+		if strings.HasPrefix(r, "GET /accounts/self") {
+			n++
+		}
+	}
+	return n
+}
+
 func (f *fakeGerrit) sawCredentials() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -289,7 +329,11 @@ type jjFake struct {
 	pushErr    error
 	pushStdout string // stdout the push emits; grfa must never parse it
 	hookErr    error
-	commands   []command
+	// onPush, when set, runs when the push command is attempted;
+	// tests use it to script what lands on the server at that
+	// moment.
+	onPush   func()
+	commands []command
 }
 
 func (j *jjFake) runner() runner {
@@ -325,6 +369,13 @@ func (j *jjFake) respond(cmd command) (string, error) {
 	case strings.HasPrefix(joined, "log --no-graph -r"):
 		return uploadSetOutput(j.setRevs), nil
 	case strings.HasPrefix(joined, "gerrit upload"):
+		// The push is attempted: fire the scripted
+		// landing before answering, so a test can put
+		// content on the server between grfa's lookup
+		// and this push.
+		if j.onPush != nil {
+			j.onPush()
+		}
 		// pushStdout is never parsed by grfa; it exists
 		// so tests can prove exactly that.
 		return j.pushStdout, j.pushErr
