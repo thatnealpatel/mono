@@ -94,7 +94,22 @@ func (c *cli) cmdUpload(ctx context.Context, args []string) error {
 		pushArgs = append(pushArgs, "--reviewer", r)
 	}
 	if err := c.runner.run(ctx, command{name: jjBinary, args: pushArgs, passthrough: true}); err != nil {
-		return fmt.Errorf("push: %w", err)
+		present, lookupErr := c.pushAlreadyPresent(ctx, revs)
+		if lookupErr != nil || !present {
+			// A genuine push failure, or a lookup
+			// that could not say either way: surface
+			// the original failure unchanged, with
+			// its exit status. Never retry the push,
+			// and never invent a success.
+			return fmt.Errorf("push: %w", err)
+		}
+		// Every revision of the upload set is already
+		// on the server as its change's current
+		// patch set, so the push was the no-op it
+		// appears to be: re-running upload is the
+		// recovery path, and the stamp is what
+		// repairs the partial result.
+		fmt.Fprintf(c.out, "push: %d revision(s) already present on the server as the current patch set(s); nothing new to push\n", len(revs))
 	}
 
 	if session == "" {
@@ -102,6 +117,41 @@ func (c *cli) cmdUpload(ctx context.Context, args []string) error {
 		return nil
 	}
 	return c.stampUpload(ctx, revs, session)
+}
+
+// pushAlreadyPresent reports whether every revision of the upload set is
+// already on the server as its change's current revision: that is how a
+// re-run of an already-completed upload looks when the delegated push is
+// rejected. Each revision is looked up by its local Change-Id through a
+// read-only query on the authenticated entrance, and the server's
+// current_revision is compared with the locally known full commit id —
+// the delegated command's output is never parsed. A lookup failure is
+// reported as such: it never turns a push failure into a success.
+func (c *cli) pushAlreadyPresent(ctx context.Context, revs []revision) (bool, error) {
+	if len(revs) == 0 {
+		return false, nil
+	}
+	for _, r := range revs {
+		currents, err := c.api.queryCurrentRevisions(ctx, r.ChangeID)
+		if err != nil {
+			return false, err
+		}
+		present := false
+		for _, cur := range currents {
+			// A Change-Id can name more than one open
+			// change (one per branch); any change whose
+			// current revision is this commit makes the
+			// push a no-op for this revision.
+			if cur == r.Commit {
+				present = true
+				break
+			}
+		}
+		if !present {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // sessionMarker returns the provenance

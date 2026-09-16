@@ -20,41 +20,72 @@ const (
 // and c4 is a patch-set-level thread. Only c4 is unresolved
 // at the leaves.
 func testFixture() (*changeDetail, map[string][]commentInfo) {
+	alice := &accountInfo{ID: accountID(1000002), Name: "Alice", Username: "alice"}
 	d := &changeDetail{
 		ID:              "proj~main~" + changeKey,
+		Project:         "proj",
+		Branch:          "main",
+		ChangeID:        changeKey,
 		Number:          42,
 		Status:          "NEW",
 		Subject:         "add the widget",
+		Created:         "2026-09-14 10:00:00.000000000",
+		Updated:         "2026-09-15 10:00:00.000000000",
 		CurrentRevision: ps2SHA,
 		Revisions: map[string]revisionInfo{
-			ps1SHA: {Number: 1},
-			ps2SHA: {Number: 2},
+			ps1SHA: {Kind: "REWORK", Number: 1, Created: "2026-09-14 10:00:00.000000000", Uploader: alice, Ref: "refs/changes/42/42/1"},
+			ps2SHA: {Kind: "REWORK", Number: 2, Created: "2026-09-15 10:00:00.000000000", Uploader: alice, Ref: "refs/changes/42/42/2"},
 		},
 		Labels: map[string]labelInfo{
-			"Code-Review": {Value: 1, All: []voteInfo{
-				{Value: 2, Account: &accountInfo{Username: "alice"}},
-				{Value: -1, Account: &accountInfo{Username: "bob"}},
-			}},
+			"Code-Review": {
+				Value:        1,
+				DefaultValue: 0,
+				Values: map[string]string{
+					" 0": "No score",
+					"-1": "I would prefer this is not submitted as is",
+					"-2": "This shall not be submitted",
+					"+1": "Looks good to me, but someone else must approve",
+					"+2": "Looks good to me, approved",
+				},
+				All: []voteInfo{
+					{
+						Value:          2,
+						Date:           "2026-09-14 11:00:00.000000000",
+						PermittedRange: &votingRange{Min: -2, Max: 2},
+						accountInfo:    *alice,
+					},
+					{
+						Value:       -1,
+						Date:        "2026-09-15 09:00:00.000000000",
+						accountInfo: accountInfo{ID: accountID(1000003), Name: "Bob", Username: "bob"},
+					},
+				},
+			},
 		},
 		Messages: []changeMessage{
-			{ID: "msg-1", Author: &accountInfo{Username: "carol"}, Message: "Patch Set 1: Code-Review+2"},
+			{ID: "msg-1", Author: &accountInfo{ID: accountID(1000004), Name: "Carol", Username: "carol"},
+				Date: "2026-09-14 12:00:00.000000000", Message: "Patch Set 1: Code-Review+2", Revision: 1},
 		},
 	}
 	comments := map[string][]commentInfo{
 		"file.go": {
 			{ID: "c1", PatchSet: 1, CommitID: ps1SHA, Message: "first", Unresolved: true,
-				Author: &accountInfo{Username: "alice"}, Line: 3},
+				Updated: "2026-09-14 10:01:00.000000000",
+				Author:  &accountInfo{ID: accountID(1000002), Name: "Alice", Username: "alice"}, Line: 3},
 			{ID: "c2", PatchSet: 2, CommitID: ps2SHA, Message: "second", Unresolved: false,
-				InReplyTo: "c1", Author: &accountInfo{Username: "dave"}},
+				InReplyTo: "c1", Updated: "2026-09-15 10:01:00.000000000",
+				Author: &accountInfo{ID: accountID(1000005), Name: "Dave", Username: "dave"}},
 		},
 		"removed/file.go": {
 			{ID: "c3", PatchSet: 1, CommitID: ps1SHA, Message: "on old patch set", Unresolved: true,
-				Author: &accountInfo{Username: "alice"}, Side: "PARENT", Parent: 2,
+				Updated: "2026-09-14 10:02:00.000000000",
+				Author:  &accountInfo{ID: accountID(1000002), Name: "Alice", Username: "alice"}, Side: "PARENT", Parent: 2,
 				Range: &commentRange{StartLine: 1, StartChar: 0, EndLine: 2, EndChar: 5}},
 		},
 		patchSetLevel: {
 			{ID: "c4", PatchSet: 2, CommitID: ps2SHA, Message: "patch-set-level", Unresolved: true,
-				Author: &accountInfo{Username: "eve"}},
+				Updated: "2026-09-15 10:03:00.000000000",
+				Author:  &accountInfo{ID: accountID(1000006), Name: "Eve", Username: "eve"}},
 		},
 	}
 	return d, comments
@@ -74,6 +105,131 @@ func seededClient(t *testing.T, user string) (*fakeGerrit, *cli, *bytes.Buffer) 
 		getenv: func(string) (string, bool) { return "", false },
 	}
 	return f, c, out
+}
+
+// realVotesFragment is the exact label fragment a real Gerrit served for
+// change 141: each entry of a label's all is an account object —
+// _account_id as a number, name and username as siblings — flattened
+// with the vote's own value and permitted_voting_range.
+const realVotesFragment = `"all":[{"value":0,"permitted_voting_range":{"min":-2,"max":2},"_account_id":1000000,"name":"Human","username":"Human"}]`
+
+// realDetailPayload is a realistic GET /changes/141/detail DETAILED_LABELS
+// response, served verbatim: it carries realVotesFragment, more than one
+// label, a label with no votes, and a vote carrying permitted_voting_range.
+const realDetailPayload = ")]}'\n" + `{
+  "id": "grfa~main~I1a2b3c4d5e6f708192a3b4c5d6e7f80918273a",
+  "project": "grfa",
+  "branch": "main",
+  "change_id": "I1a2b3c4d5e6f708192a3b4c5d6e7f80918273a",
+  "subject": "add the widget",
+  "status": "NEW",
+  "created": "2026-09-15 21:07:05.000000000",
+  "updated": "2026-09-16 01:39:12.000000000",
+  "insertions": 12,
+  "deletions": 4,
+  "_number": 141,
+  "current_revision": "4f0c9d0a1e2b3c4d5e6f708192a3b4c5d6e7f80",
+  "revisions": {
+    "3b9f8a7d6c5e4f30129384756a7b8c9d0e1f2a3b": {
+      "kind": "REWORK",
+      "_number": 1,
+      "created": "2026-09-15 21:07:05.000000000",
+      "uploader": {"_account_id": 1000000, "name": "Human", "username": "Human"},
+      "ref": "refs/changes/41/141/1"
+    },
+    "4f0c9d0a1e2b3c4d5e6f708192a3b4c5d6e7f80": {
+      "kind": "REWORK",
+      "_number": 2,
+      "created": "2026-09-16 01:38:44.000000000",
+      "uploader": {"_account_id": 1000000, "name": "Human", "username": "Human"},
+      "ref": "refs/changes/41/141/2"
+    }
+  },
+  "labels": {
+    "Code-Review": {
+      "default_value": 0,
+      "values": {
+        " 0": "No score",
+        "-1": "I would prefer this is not submitted as is",
+        "-2": "This shall not be submitted",
+        "+1": "Looks good to me, but someone else must approve",
+        "+2": "Looks good to me, approved"
+      },
+      ` + realVotesFragment + `
+    },
+    "Verified": {
+      "default_value": 0,
+      "values": {" 0": "No score", "-1": "Fails", "+1": "Verified"},
+      "all": [
+        {
+          "value": 1,
+          "permitted_voting_range": {"min": -1, "max": 1},
+          "date": "2026-09-16 01:39:01.000000000",
+          "_account_id": 1000001,
+          "name": "Alice",
+          "username": "alice",
+          "email": "alice@example.com"
+        }
+      ]
+    },
+    "Presubmit-Ready": {
+      "default_value": 0,
+      "values": {" 0": "No score", "+1": "Presubmit-Ready"}
+    }
+  },
+  "messages": [
+    {
+      "id": "message-9f2e5b1c3d7a4801928374656a7b8c9d",
+      "author": {"_account_id": 1000001, "name": "Alice", "username": "alice"},
+      "date": "2026-09-16 01:39:01.000000000",
+      "message": "Patch Set 2: Verified+1",
+      "_revision_number": 2
+    }
+  ],
+  "unresolved_comment_count": 0
+}`
+
+// Regression for a real Gerrit change: the real DETAILED_LABELS payload —
+// where each entry of a label's all is an account object flattened with
+// the vote fields — must decode cleanly and render the label, every
+// voter, and their vote value, including a vote of 0 and a label with no
+// votes.
+func TestViewDecodesRealDetailedLabelsPayload(t *testing.T) {
+	f, srv := newFakeGerrit(t, "Human")
+	f.mu.Lock()
+	f.raw["GET /changes/141/detail"] = realDetailPayload
+	f.mu.Unlock()
+	out := &bytes.Buffer{}
+	c := &cli{
+		out:    out,
+		api:    testClient(srv, "Human"),
+		runner: refusingRunner(),
+		getenv: emptyGetenv,
+	}
+	if err := c.cmdView(context.Background(), "141"); err != nil {
+		t.Fatalf("view against the real payload must decode: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"change grfa~main~I1a2b3c4d5e6f708192a3b4c5d6e7f80918273a (#141) NEW \"add the widget\"",
+		"revision 4f0c9d0a1e2b3c4d5e6f708192a3b4c5d6e7f80 patch-set 2",
+		"unresolved-threads 0",
+		// The verbatim real fragment: Human is permitted to vote but
+		// has not, so the vote value is 0.
+		"Code-Review +0 (Human=+0)",
+		// alice's vote carries permitted_voting_range.
+		"Verified +0 (alice=+1)",
+		// A label with no votes renders without a voter list.
+		"Presubmit-Ready +0",
+		"alice: Patch Set 2: Verified+1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("view output missing %q\ngot:\n%s", want, got)
+		}
+	}
+	if f.requestCount() != 2 {
+		t.Errorf("view made %d requests, want 2 (detail + comments)", f.requestCount())
+	}
 }
 
 // Acceptance 2: one view includes current and

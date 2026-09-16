@@ -198,11 +198,12 @@ func renderChange(w io.Writer, d *changeDetail, comments map[string][]commentInf
 	b.WriteString("labels\n")
 	for _, name := range sortedKeys(d.Labels) {
 		l := d.Labels[name]
+		// Every entry of a label's all is a voter, including an
+		// account permitted to vote that has not yet: its identity
+		// and vote value — 0 included — is the label's real state.
 		votes := make([]string, 0, len(l.All))
 		for _, v := range l.All {
-			if v.Value != 0 {
-				votes = append(votes, fmt.Sprintf("%s=%+d", accountName(v.Account), v.Value))
-			}
+			votes = append(votes, fmt.Sprintf("%s=%+d", accountName(&v.accountInfo), v.Value))
 		}
 		if len(votes) > 0 {
 			fmt.Fprintf(&b, "  %s %+d (%s)\n", name, l.Value, strings.Join(votes, ", "))

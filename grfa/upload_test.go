@@ -27,12 +27,12 @@ func uploadFixture(t *testing.T, revs []revision, session string, sessionSet boo
 	t.Helper()
 	f, srv := newFakeGerrit(t, "Agent")
 	f.details[changeID1] = &changeDetail{
-		ID: changeID1, Number: 1, Status: "NEW", CurrentRevision: revA,
-		Revisions: map[string]revisionInfo{revA: {Number: 1}},
+		ID: changeID1, ChangeID: changeID1, Number: 1, Status: "NEW", CurrentRevision: revA,
+		Revisions: map[string]revisionInfo{revA: {Kind: "REWORK", Number: 1, Ref: "refs/changes/01/1/1"}},
 	}
 	f.details[changeID2] = &changeDetail{
-		ID: changeID2, Number: 2, Status: "NEW", CurrentRevision: revB,
-		Revisions: map[string]revisionInfo{revB: {Number: 1}},
+		ID: changeID2, ChangeID: changeID2, Number: 2, Status: "NEW", CurrentRevision: revB,
+		Revisions: map[string]revisionInfo{revB: {Kind: "REWORK", Number: 1, Ref: "refs/changes/02/2/1"}},
 	}
 	root := t.TempDir()
 	jj := &jjFake{root: root, defaultRev: "@", setRevs: revs}
@@ -149,7 +149,7 @@ func TestStampIdempotent(t *testing.T) {
 	f.comments[changeID1] = map[string][]commentInfo{
 		patchSetLevel: {
 			{ID: "m0", PatchSet: 1, CommitID: revA, Message: marker42, Unresolved: false,
-				Author: &accountInfo{Username: "Agent"}},
+				Author: &accountInfo{ID: accountID(1000000), Name: "Agent", Username: "Agent"}},
 		},
 	}
 	f.mu.Unlock()
@@ -455,9 +455,15 @@ func TestDryRunWithoutSession(t *testing.T) {
 }
 
 // A failed push is reported as its own stage,
-// and nothing is stamped.
+// and nothing is stamped. The failure is genuine:
+// the server holds a different current revision for
+// the first change, so the failure cannot be mistaken
+// for an already-completed upload.
 func TestFailedPushIsItsOwnStage(t *testing.T) {
 	f, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
+	f.mu.Lock()
+	f.details[changeID1].CurrentRevision = "cccccccccccccccccccccccccccccccccccccccc"
+	f.mu.Unlock()
 	jj.mu.Lock()
 	jj.pushErr = errors.New("exit status 1")
 	jj.mu.Unlock()
@@ -475,9 +481,13 @@ func TestFailedPushIsItsOwnStage(t *testing.T) {
 
 // The delegated push's exit status is grfa's own exit
 // status; it does not collapse to 1 through the error
-// text.
+// text. The failure is genuine: the server holds a
+// different current revision.
 func TestFailedPushExitStatusFlowsThrough(t *testing.T) {
 	f, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
+	f.mu.Lock()
+	f.details[changeID1].CurrentRevision = "cccccccccccccccccccccccccccccccccccccccc"
+	f.mu.Unlock()
 	jj.mu.Lock()
 	jj.pushErr = &exitCodeError{err: fmt.Errorf("%s: exit status 3", jjBinary), code: 3}
 	jj.mu.Unlock()
@@ -493,6 +503,158 @@ func TestFailedPushExitStatusFlowsThrough(t *testing.T) {
 	}
 	if f.postCount() != 0 {
 		t.Errorf("stamped %d changes after a failed push", f.postCount())
+	}
+}
+
+// Defect 3, case (a): re-running upload is the recovery path. The delegated
+// push fails because the change is already current on the server, and the
+// read-only Change-Id lookup confirms every revision of the upload set is
+// the change's current_revision: the push was a no-op, so upload continues
+// to stamping, posts the marker, and exits successfully. The push's stdout
+// claims a fresh upload, which must not matter: grfa never parses it.
+func TestUploadRecoversWhenPushAlreadyPresent(t *testing.T) {
+	f, jj, c, out := uploadFixture(t, twoRevisions(), session42, true)
+	jj.mu.Lock()
+	jj.pushErr = errors.New("exit status 1")
+	jj.pushStdout = "Uploaded new patch sets, fresh as can be"
+	jj.mu.Unlock()
+	if err := c.cmdUpload(context.Background(), nil); err != nil {
+		t.Fatalf("a push that was already present must be recovered, not an error: %v", err)
+	}
+	posts, _ := f.snapshot()
+	if len(posts) != 2 {
+		t.Fatalf("stamps = %d, want 2 (the missing marker is repaired)", len(posts))
+	}
+	byChange := map[string]recordedPost{}
+	for _, p := range posts {
+		byChange[p.Change] = p
+	}
+	if byChange[changeID1].Revision != revA || byChange[changeID2].Revision != revB {
+		t.Errorf("stamps went against %q/%q, want the pushed revisions %q/%q",
+			byChange[changeID1].Revision, byChange[changeID2].Revision, revA, revB)
+	}
+	if byChange[changeID1].Body.Comments[patchSetLevel][0].Message != marker42 {
+		t.Errorf("marker = %v, want %q", byChange[changeID1].Body.Comments, marker42)
+	}
+	got := out.String()
+	if !strings.Contains(got, "already present") {
+		t.Errorf("output should report plainly that the push was already present:\n%s", got)
+	}
+	if !strings.Contains(got, "stamped "+changeID1) {
+		t.Errorf("output should still report the stamp stage:\n%s", got)
+	}
+	if got := countPushes(jj.commandsSnapshot()); got != 1 {
+		t.Errorf("pushes = %d, want exactly 1 (no retry)", got)
+	}
+	// The recovery lookup went through the authenticated entrance as a
+	// read-only query carrying the CURRENT_REVISION option.
+	_, requests := f.snapshot()
+	var sawQuery bool
+	for _, r := range requests {
+		if strings.HasPrefix(r, "GET /changes?") &&
+			strings.Contains(r, "q=change%3A") &&
+			strings.Contains(r, "o=CURRENT_REVISION") {
+			sawQuery = true
+		}
+	}
+	if !sawQuery {
+		t.Errorf("the recovery lookup must use the change-query endpoint with CURRENT_REVISION: %v", requests)
+	}
+}
+
+// Defect 3, case (b): the change exists but its current revision differs
+// from the local commit, so the push genuinely failed: the original error
+// surfaces unchanged and nothing is stamped. The push's stdout claims
+// success, which must not matter.
+func TestUploadSurfacesPushFailureWhenRevisionDiffers(t *testing.T) {
+	f, jj, c, out := uploadFixture(t, twoRevisions(), session42, true)
+	jj.mu.Lock()
+	jj.pushErr = errors.New("exit status 1")
+	jj.pushStdout = "push successful, nothing to worry about"
+	jj.mu.Unlock()
+	f.mu.Lock()
+	f.details[changeID1].CurrentRevision = "cccccccccccccccccccccccccccccccccccccccc"
+	f.mu.Unlock()
+	err := c.cmdUpload(context.Background(), nil)
+	if err == nil {
+		t.Fatal("differing server revision: want the original push error")
+	}
+	if !strings.Contains(err.Error(), "push:") || !strings.Contains(err.Error(), "exit status 1") {
+		t.Errorf("the original push failure must surface unchanged: %v", err)
+	}
+	if f.postCount() != 0 {
+		t.Errorf("stamped %d changes, want 0", f.postCount())
+	}
+	if got := countPushes(jj.commandsSnapshot()); got != 1 {
+		t.Errorf("pushes = %d, want exactly 1 (no retry)", got)
+	}
+	if strings.Contains(out.String(), "already present") || strings.Contains(out.String(), "stamped") {
+		t.Errorf("output must not report recovery or stamping:\n%s", out)
+	}
+}
+
+// Defect 3, case (c): the change is absent from the server, so the push
+// genuinely failed: the original error surfaces unchanged and nothing is
+// stamped.
+func TestUploadSurfacesPushFailureWhenChangeAbsent(t *testing.T) {
+	f, jj, c, out := uploadFixture(t, twoRevisions(), session42, true)
+	jj.mu.Lock()
+	jj.pushErr = errors.New("exit status 1")
+	jj.mu.Unlock()
+	f.mu.Lock()
+	delete(f.details, changeID1)
+	f.mu.Unlock()
+	err := c.cmdUpload(context.Background(), nil)
+	if err == nil {
+		t.Fatal("absent change: want the original push error")
+	}
+	if !strings.Contains(err.Error(), "push:") || !strings.Contains(err.Error(), "exit status 1") {
+		t.Errorf("the original push failure must surface unchanged: %v", err)
+	}
+	if f.postCount() != 0 {
+		t.Errorf("stamped %d changes, want 0", f.postCount())
+	}
+	if got := countPushes(jj.commandsSnapshot()); got != 1 {
+		t.Errorf("pushes = %d, want exactly 1 (no retry)", got)
+	}
+	if strings.Contains(out.String(), "already present") || strings.Contains(out.String(), "stamped") {
+		t.Errorf("output must not report recovery or stamping:\n%s", out)
+	}
+}
+
+// Defect 3, case (d): during recovery the push still runs exactly once,
+// its stdout is never captured or parsed (it runs in pass-through mode),
+// and the recorded command log stays read-only queries plus at most one
+// push.
+func TestRecoveryRunsPushOnceAndNeverParsesStdout(t *testing.T) {
+	_, jj, c, _ := uploadFixture(t, twoRevisions(), session42, true)
+	jj.mu.Lock()
+	jj.pushErr = errors.New("exit status 1")
+	jj.pushStdout = "Uploaded fix for review: this line is not a contract"
+	jj.mu.Unlock()
+	if err := c.cmdUpload(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	cmds := jj.commandsSnapshot()
+	if got := countPushes(cmds); got != 1 {
+		t.Fatalf("pushes = %d, want exactly 1: the failed push is never retried", got)
+	}
+	for _, cmd := range cmds {
+		if cmd.name != jjBinary {
+			t.Errorf("unexpected subprocess %q", cmd.name)
+			continue
+		}
+		if strings.HasPrefix(jjBody(cmd), "gerrit upload") {
+			// Pass-through stdio: the push's stdout goes to the
+			// terminal untouched, so grfa cannot have parsed it.
+			if !cmd.passthrough {
+				t.Errorf("the delegated push must run in pass-through mode: %v", cmd)
+			}
+			continue
+		}
+		if len(cmd.args) == 0 || cmd.args[0] != "--ignore-working-copy" {
+			t.Errorf("command is not in the read-only stance: %v", cmd.args)
+		}
 	}
 }
 

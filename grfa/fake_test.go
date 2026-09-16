@@ -37,6 +37,9 @@ type fakeGerrit struct {
 	user     string
 	details  map[string]*changeDetail
 	comments map[string]map[string][]commentInfo
+	// raw serves verbatim payloads keyed by "METHOD path",
+	// mirroring the exact bytes a real Gerrit produced.
+	raw      map[string]string
 	posts    []recordedPost
 	requests []string
 	statuses map[string]int
@@ -50,6 +53,7 @@ func newFakeGerrit(t *testing.T, user string) (*fakeGerrit, *httptest.Server) {
 		user:     user,
 		details:  map[string]*changeDetail{},
 		comments: map[string]map[string][]commentInfo{},
+		raw:      map[string]string{},
 		statuses: map[string]int{},
 	}
 	srv := httptest.NewServer(f)
@@ -67,7 +71,11 @@ func (f *fakeGerrit) writeJSON(w http.ResponseWriter, v any) {
 func (f *fakeGerrit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.requests = append(f.requests, r.Method+" "+r.URL.Path)
+	rec := r.Method + " " + r.URL.Path
+	if r.URL.RawQuery != "" {
+		rec += "?" + r.URL.RawQuery
+	}
+	f.requests = append(f.requests, rec)
 	if r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
 		f.authSeen = true
 	}
@@ -80,10 +88,18 @@ func (f *fakeGerrit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		return
 	}
+	if body, ok := f.raw[r.Method+" "+r.URL.Path]; ok {
+		// A verbatim payload, exactly as the real server sent it.
+		w.Write([]byte(body))
+		return
+	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/accounts/self":
-		f.writeJSON(w, map[string]string{"username": f.user, "name": f.user})
+		f.writeJSON(w, f.selfAccount())
+	case r.Method == http.MethodGet && len(parts) == 1 && parts[0] == "changes" && r.URL.RawQuery != "":
+		// The change-query endpoint, GET /changes/?q=<term>&o=<option>.
+		f.serveChangeQuery(w, r)
 	case r.Method == http.MethodGet && len(parts) == 3 && parts[0] == "changes" && parts[2] == "detail":
 		d, ok := f.details[parts[1]]
 		if !ok {
@@ -104,6 +120,45 @@ func (f *fakeGerrit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		f.writeJSON(w, map[string]string{"error": "no such route"})
 	}
+}
+
+// selfAccount is the fake's authenticated account, mirroring the real
+// AccountInfo shape: a numeric _account_id with name and username.
+func (f *fakeGerrit) selfAccount() *accountInfo {
+	return &accountInfo{ID: accountID(1000000), Name: f.user, Username: f.user}
+}
+
+// serveChangeQuery mirrors the real change-query endpoint,
+// GET /changes/?q=change:<Change-Id>&o=CURRENT_REVISION, whose response is
+// a list of ChangeInfo entries. Only the change:<Change-Id> term is
+// supported, and the CURRENT_REVISION option is required, because that is
+// the only query grfa issues.
+func (f *fakeGerrit) serveChangeQuery(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	id, ok := strings.CutPrefix(q.Get("q"), "change:")
+	if !ok || id == "" {
+		w.WriteHeader(http.StatusNotFound)
+		f.writeJSON(w, map[string]string{"error": "unsupported query term"})
+		return
+	}
+	hasOption := false
+	for _, o := range q["o"] {
+		if o == "CURRENT_REVISION" {
+			hasOption = true
+		}
+	}
+	if !hasOption {
+		w.WriteHeader(http.StatusBadRequest)
+		f.writeJSON(w, map[string]string{"error": "query requires o=CURRENT_REVISION"})
+		return
+	}
+	matches := []*changeDetail{}
+	for _, d := range f.details {
+		if d.ChangeID == id || d.ID == id || strings.HasSuffix(d.ID, "~"+id) {
+			matches = append(matches, d)
+		}
+	}
+	f.writeJSON(w, matches)
 }
 
 // applyReview records the post and folds it into the fake's change state, the
@@ -144,7 +199,7 @@ func (f *fakeGerrit) applyReview(w http.ResponseWriter, change, revision string,
 				Parent:     ci.Parent,
 				Line:       ci.Line,
 				Range:      ci.Range,
-				Author:     &accountInfo{Username: f.user},
+				Author:     f.selfAccount(),
 			})
 		}
 	}
@@ -232,6 +287,7 @@ type jjFake struct {
 	defaultRev string // answer to the description probe: "@" or "@-"
 	setRevs    []revision
 	pushErr    error
+	pushStdout string // stdout the push emits; grfa must never parse it
 	hookErr    error
 	commands   []command
 }
@@ -269,7 +325,9 @@ func (j *jjFake) respond(cmd command) (string, error) {
 	case strings.HasPrefix(joined, "log --no-graph -r"):
 		return uploadSetOutput(j.setRevs), nil
 	case strings.HasPrefix(joined, "gerrit upload"):
-		return "", j.pushErr
+		// pushStdout is never parsed by grfa; it exists
+		// so tests can prove exactly that.
+		return j.pushStdout, j.pushErr
 	}
 	return "", fmt.Errorf("unexpected jj command: %s", joined)
 }
@@ -279,6 +337,10 @@ func (j *jjFake) commandsSnapshot() []command {
 	defer j.mu.Unlock()
 	return append([]command{}, j.commands...)
 }
+
+// accountID is a helper for building the numeric
+// _account_id of a real AccountInfo.
+func accountID(n int) *int { return &n }
 
 // uploadSetOutput renders the upload-set
 // query answer in the same shape the real

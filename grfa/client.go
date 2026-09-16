@@ -127,10 +127,7 @@ func (c *gerritClient) checkIdentity(ctx context.Context) error {
 	if status != http.StatusOK {
 		return fmt.Errorf("check identity: %w", statusError(status, data))
 	}
-	var acct struct {
-		Name     string `json:"name"`
-		Username string `json:"username"`
-	}
+	var acct accountInfo
 	if err := decodeGerritJSON(data, &acct); err != nil {
 		return fmt.Errorf("check identity: decode: %w", err)
 	}
@@ -194,6 +191,35 @@ func (c *gerritClient) postReview(ctx context.Context, change, revision string, 
 		return fmt.Errorf("post review: %w", statusError(status, data))
 	}
 	return nil
+}
+
+// queryCurrentRevisions looks a change up by its Change-Id through the
+// authenticated entrance and returns the current revisions of the matching
+// changes, in the server's order. The query is read-only and list-form;
+// an empty result means no such change exists. It is how an upload
+// recognizes a push that was rejected because every revision was already
+// on the server as its current patch set, without ever parsing the
+// delegated push's output.
+func (c *gerritClient) queryCurrentRevisions(ctx context.Context, changeID string) ([]string, error) {
+	q := url.Values{}
+	q.Set("q", "change:"+changeID)
+	q.Add("o", "CURRENT_REVISION")
+	data, status, err := c.request(ctx, http.MethodGet, []string{"changes"}, q, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query change: %w", err)
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("query change: %w", statusError(status, data))
+	}
+	var list []changeDetail
+	if err := decodeGerritJSON(data, &list); err != nil {
+		return nil, fmt.Errorf("query change: decode: %w", err)
+	}
+	revs := make([]string, 0, len(list))
+	for _, d := range list {
+		revs = append(revs, d.CurrentRevision)
+	}
+	return revs, nil
 }
 
 // decodeGerritJSON strips Gerrit's magic prefix
@@ -284,27 +310,43 @@ type reviewInput struct {
 // revisionInfo is one revision entry in
 // ChangeInfo.revisions.
 type revisionInfo struct {
-	Number int `json:"_number"`
+	Kind     string       `json:"kind,omitempty"`
+	Number   int          `json:"_number"`
+	Created  string       `json:"created,omitempty"`
+	Uploader *accountInfo `json:"uploader,omitempty"`
+	Ref      string       `json:"ref,omitempty"`
 }
 
 // labelInfo is Gerrit's LabelInfo with its votes.
 type labelInfo struct {
-	Value int        `json:"value"`
-	All   []voteInfo `json:"all,omitempty"`
+	Value        int               `json:"value"`
+	DefaultValue int               `json:"default_value,omitempty"`
+	Values       map[string]string `json:"values,omitempty"`
+	All          []voteInfo        `json:"all,omitempty"`
 }
 
-// voteInfo is one vote on a label; the
-// account rides in the _account_id key
-// as an AccountInfo object.
+// voteInfo is one entry of a label's all list. Gerrit flattens the voter's
+// AccountInfo into the vote object — _account_id is a number, with name and
+// username as siblings — alongside the vote's own fields: value, date, and
+// the permitted_voting_range the querying account may cast.
 type voteInfo struct {
-	Value   int          `json:"value"`
-	Account *accountInfo `json:"_account_id,omitempty"`
+	Value          int          `json:"value"`
+	Date           string       `json:"date,omitempty"`
+	PermittedRange *votingRange `json:"permitted_voting_range,omitempty"`
+	accountInfo
+}
+
+// votingRange is Gerrit's VotingRangeInfo.
+type votingRange struct {
+	Min int `json:"min"`
+	Max int `json:"max"`
 }
 
 // changeMessage is one published change message.
 type changeMessage struct {
 	ID       string       `json:"id"`
 	Author   *accountInfo `json:"author,omitempty"`
+	Date     string       `json:"date,omitempty"`
 	Revision int          `json:"_revision_number,omitempty"`
 	Message  string       `json:"message"`
 }
@@ -312,9 +354,16 @@ type changeMessage struct {
 // changeDetail is the ChangeInfo /detail response.
 type changeDetail struct {
 	ID                     string                  `json:"id"`
+	Project                string                  `json:"project,omitempty"`
+	Branch                 string                  `json:"branch,omitempty"`
+	ChangeID               string                  `json:"change_id,omitempty"`
 	Number                 int                     `json:"_number"`
 	Status                 string                  `json:"status"`
 	Subject                string                  `json:"subject"`
+	Created                string                  `json:"created,omitempty"`
+	Updated                string                  `json:"updated,omitempty"`
+	Insertions             int                     `json:"insertions,omitempty"`
+	Deletions              int                     `json:"deletions,omitempty"`
 	CurrentRevision        string                  `json:"current_revision"`
 	Revisions              map[string]revisionInfo `json:"revisions"`
 	Labels                 map[string]labelInfo    `json:"labels"`
