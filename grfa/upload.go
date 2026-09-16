@@ -23,6 +23,13 @@ var jjGlobalArgs = []string{"--ignore-working-copy", "--no-pager"}
 // changeIDTrailers matches a Change-Id trailer line in a commit description.
 var changeIDTrailers = regexp.MustCompile(`(?m)^Change-Id:[ \t]*(\S+)[ \t]*$`)
 
+// The two exhaustive causes of an empty mutable upload set, as the
+// trailing cause clause of the empty-upload-set diagnosis.
+const (
+	causeRevsetMatchedNothing = "the revset matched no revisions"
+	causeAlreadyLanded        = "the named revisions are already landed and immutable"
+)
+
 // revision is one commit in the resolved upload set.
 type revision struct {
 	Commit   string
@@ -63,9 +70,11 @@ func (c *cli) cmdUpload(ctx context.Context, args []string) error {
 	// delegated push. -dry-run gets the same diagnosis, since an
 	// empty set is no more reportable as a successful dry run than
 	// as a silent success. The diagnosis names the revision set the
-	// caller asked for, never the internal mutable()::(...) query.
+	// caller asked for, never the internal mutable()::(...) query,
+	// and names the cause so the operator knows whether the revset
+	// matched nothing or everything it named is already landed.
 	if len(revs) == 0 {
-		return fmt.Errorf("no mutable revisions in the upload set (%s); nothing to upload", rev)
+		return fmt.Errorf("no mutable revisions in the upload set (%s); nothing to upload%s", rev, c.emptySetCause(ctx, rev))
 	}
 
 	// Require local Change-Id trailers
@@ -280,6 +289,28 @@ func (c *cli) resolveUploadSet(ctx context.Context, revset string) ([]revision, 
 		return nil, "", err
 	}
 	return revs, rev, nil
+}
+
+// emptySetCause names why mutable()::(<revset>) resolved empty, as the
+// trailing cause clause of the empty-upload-set diagnosis. An empty
+// mutable set means one of exactly two things, and they are cheaply
+// distinguishable at resolution: the revset named nothing at all, or
+// everything it named is immutable. The plain revset is probed read-only
+// — never the internal mutable()::(...) query — and a probe that returns
+// no revisions is the first cause, while a probe that returns revisions
+// is the second: the post-merge re-run, which must tell the operator to
+// stop rather than to try to make the commit mutable. Any probe failure
+// yields no clause at all: the diagnosis never becomes an error and never
+// guesses.
+func (c *cli) emptySetCause(ctx context.Context, rev string) string {
+	out, err := c.jj(ctx, "log", "--no-graph", "-r", rev, "-T", "commit_id")
+	if err != nil {
+		return ""
+	}
+	if strings.TrimSpace(out) == "" {
+		return " (" + causeRevsetMatchedNothing + ")"
+	}
+	return " (" + causeAlreadyLanded + ")"
 }
 
 // uploadSetOf runs the mutable-ancestors query for one effective revset.

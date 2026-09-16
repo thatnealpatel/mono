@@ -1014,11 +1014,45 @@ func TestUploadSetRejectsGarbage(t *testing.T) {
 	}
 }
 
-// emptySetDiagnosis is the exact report an empty upload set owes the
-// operator: the revset the caller asked for, no internal mutable()::
-// query, and no push failure.
-func emptySetDiagnosis(revset string) string {
+// The two cause clauses the empty-upload-set diagnosis may carry, pinned
+// here as literal text rather than read from the production constants, so
+// a change to the wording fails the tests that depend on it.
+const (
+	causeMatchedNothing = "the revset matched no revisions"
+	causeLanded         = "the named revisions are already landed and immutable"
+)
+
+// mandatedEmptySetSentence is the part of the diagnosis that is owed
+// unconditionally: the revset the caller asked for, no internal
+// mutable():: query, and no push failure.
+func mandatedEmptySetSentence(revset string) string {
 	return fmt.Sprintf("no mutable revisions in the upload set (%s); nothing to upload", revset)
+}
+
+// emptySetDiagnosis is the exact report an empty upload set owes the
+// operator: the mandated sentence, plus — when the cause is known — the
+// cause clause naming why the set is empty. An empty cause means the
+// mandated sentence stands alone, which is what a failed cause probe owes.
+func emptySetDiagnosis(revset, cause string) string {
+	s := mandatedEmptySetSentence(revset)
+	if cause != "" {
+		s += " (" + cause + ")"
+	}
+	return s
+}
+
+// causeProbed reports whether the cause diagnosis ran as a read-only
+// probe of the plain revset the caller asked for — never of the internal
+// mutable()::(...) query. The probe must also still carry the global
+// read-only flags: jjBody strips them before matching, so the revset
+// match alone cannot prove the probe was read-only.
+func causeProbed(cmds []command, revset string) bool {
+	for _, cmd := range cmds {
+		if cmd.name == jjBinary && jjBody(cmd) == "log --no-graph -r "+revset+" -T commit_id" {
+			return hasReadOnlyGlobalFlags(cmd)
+		}
+	}
+	return false
 }
 
 // hookRan reports whether the pre-upload hook was invoked at all.
@@ -1032,19 +1066,26 @@ func hookRan(cmds []command) bool {
 }
 
 // assertEmptySetAborted pins the resolution-stage contract for an empty
-// upload set: the exact diagnosis naming the requested revset, a non-zero
+// upload set: the exact diagnosis naming the requested revset and — when
+// cause is non-empty — the cause clause that distinguishes a revset which
+// matched nothing from one whose revisions are all immutable, a non-zero
 // exit status of its own, no delegated push, no pre-upload hook, and no
 // network traffic of any kind. The fake runner never executes the hook
 // script — it returns its own hookErr, which these tests leave nil — so the
 // detector for a hook that ran is the hookRan command-log assertion.
-func assertEmptySetAborted(t *testing.T, f *fakeGerrit, jj *jjFake, err error, out *bytes.Buffer, revset string) {
+func assertEmptySetAborted(t *testing.T, f *fakeGerrit, jj *jjFake, err error, out *bytes.Buffer, revset, cause string) {
 	t.Helper()
 	if err == nil {
 		t.Fatalf("empty upload set: want an error, got nil; output:\n%s", out)
 	}
-	want := emptySetDiagnosis(revset)
+	want := emptySetDiagnosis(revset, cause)
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err, want)
+	}
+	// The mandated sentence is present verbatim whether or not a cause
+	// clause follows it.
+	if !strings.HasPrefix(err.Error(), mandatedEmptySetSentence(revset)) {
+		t.Errorf("error = %q, want it to begin with the mandated sentence %q", err, mandatedEmptySetSentence(revset))
 	}
 	if strings.Contains(err.Error(), "mutable()::") {
 		t.Errorf("error leaks the internal upload-set query: %q", err)
@@ -1056,6 +1097,9 @@ func assertEmptySetAborted(t *testing.T, f *fakeGerrit, jj *jjFake, err error, o
 		t.Errorf("exitStatus = %d, want non-zero", got)
 	}
 	cmds := jj.commandsSnapshot()
+	if !causeProbed(cmds, revset) {
+		t.Errorf("the cause diagnosis did not probe the plain revset %q read-only", revset)
+	}
 	if got := countPushes(cmds); got != 0 {
 		t.Errorf("delegated %d push(es), want 0", got)
 	}
@@ -1071,7 +1115,8 @@ func assertEmptySetAborted(t *testing.T, f *fakeGerrit, jj *jjFake, err error, o
 // post-merge re-run against an immutable revision) must be reported as
 // its own stage naming that revset, before the pre-upload hook and before
 // the delegated push — not as jj's raw immutable-commit fault or a bare
-// push: jj: exit status 1.
+// push: jj: exit status 1. A revset that names nothing at all is the
+// cause that must be named: the revset matched no revisions.
 func TestEmptyUploadSetWithExplicitRevsetStopsBeforePush(t *testing.T) {
 	f, jj, c, out := uploadFixture(t, nil, session42, true)
 	// The fake runner never executes this script — it returns its own
@@ -1079,48 +1124,105 @@ func TestEmptyUploadSetWithExplicitRevsetStopsBeforePush(t *testing.T) {
 	// is what detects a hook that ran.
 	writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
 	err := c.cmdUpload(context.Background(), []string{"-r", "none()"})
-	assertEmptySetAborted(t, f, jj, err, out, "none()")
+	assertEmptySetAborted(t, f, jj, err, out, "none()", causeMatchedNothing)
+}
+
+// An explicit -r that does name revisions while the mutable upload set is
+// empty is the post-merge re-run: everything named is immutable (already
+// landed). The cause clause must say so — telling the operator (or an
+// agent) to stop rather than to try to make the commit mutable — and must
+// not read like a repository fault.
+func TestEmptyUploadSetLandedRevisionReportsCause(t *testing.T) {
+	f, jj, c, out := uploadFixture(t, nil, session42, true)
+	jj.mu.Lock()
+	jj.probeRevs = []string{revA}
+	jj.mu.Unlock()
+	writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
+	err := c.cmdUpload(context.Background(), []string{"-r", revA})
+	assertEmptySetAborted(t, f, jj, err, out, revA, causeLanded)
+}
+
+// The landed cause is diagnosed identically when YAH_SESSION is absent:
+// the cause is a property of the repository, not of the session.
+func TestEmptyUploadSetLandedRevisionWithoutSessionReportsCause(t *testing.T) {
+	f, jj, c, out := uploadFixture(t, nil, "", false)
+	jj.mu.Lock()
+	jj.probeRevs = []string{revA}
+	jj.mu.Unlock()
+	writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
+	err := c.cmdUpload(context.Background(), []string{"-r", revA})
+	assertEmptySetAborted(t, f, jj, err, out, revA, causeLanded)
+}
+
+// A cause probe that fails must not turn the diagnosis into an error and
+// must not guess: the mandated sentence stands alone, the exit status
+// stays non-zero, and nothing is pushed, hooked, or requested. Both the
+// session-present and session-absent paths are covered.
+func TestEmptyUploadSetCauseProbeFailureKeepsMandatedSentence(t *testing.T) {
+	for _, sessionSet := range []bool{false, true} {
+		name := "session-absent"
+		session := ""
+		if sessionSet {
+			name = "session-present"
+			session = session42
+		}
+		t.Run(name, func(t *testing.T) {
+			f, jj, c, out := uploadFixture(t, nil, session, sessionSet)
+			jj.mu.Lock()
+			jj.probeErr = errors.New("probe failed")
+			jj.mu.Unlock()
+			writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
+			err := c.cmdUpload(context.Background(), []string{"-r", "none()"})
+			assertEmptySetAborted(t, f, jj, err, out, "none()", "")
+		})
+	}
 }
 
 // An empty upload set is diagnosed identically when YAH_SESSION is absent:
 // the abort is at resolution, so it precedes the pre-upload hook and the
-// delegated push whether or not a provenance marker would be posted.
+// delegated push whether or not a provenance marker would be posted. A
+// revset that names nothing is still the matched-nothing cause.
 func TestEmptyUploadSetWithoutSessionStopsBeforePush(t *testing.T) {
 	f, jj, c, out := uploadFixture(t, nil, "", false)
 	writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
 	err := c.cmdUpload(context.Background(), []string{"-r", "none()"})
-	assertEmptySetAborted(t, f, jj, err, out, "none()")
+	assertEmptySetAborted(t, f, jj, err, out, "none()", causeMatchedNothing)
 }
 
 // The default revset is no exception without YAH_SESSION: the diagnosis
-// names the default the resolver chose, @ or @-.
+// names the default the resolver chose, @ or @-, and the cause clause
+// says the named revisions are already landed and immutable.
 func TestEmptyUploadSetWithDefaultRevsetWithoutSession(t *testing.T) {
 	for _, def := range []string{"@", "@-"} {
 		t.Run(def, func(t *testing.T) {
 			f, jj, c, out := uploadFixture(t, nil, "", false)
 			jj.mu.Lock()
 			jj.defaultRev = def
+			jj.probeRevs = []string{revA}
 			jj.mu.Unlock()
 			writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
 			err := c.cmdUpload(context.Background(), nil)
-			assertEmptySetAborted(t, f, jj, err, out, def)
+			assertEmptySetAborted(t, f, jj, err, out, def, causeLanded)
 		})
 	}
 }
 
 // The defect, shape 2: a revset that resolves to nothing must not be a
 // silent success with jj's No revisions to upload. on stderr. The same
-// diagnosis names the default the resolver actually chose, @ or @-.
+// diagnosis names the default the resolver actually chose, @ or @-, and
+// the cause clause for a default that names an immutable parent: the
+// named revisions are already landed and immutable.
 func TestEmptyUploadSetWithDefaultRevsetStopsBeforePush(t *testing.T) {
 	for _, def := range []string{"@", "@-"} {
 		t.Run(def, func(t *testing.T) {
 			f, jj, c, out := uploadFixture(t, nil, session42, true)
 			jj.mu.Lock()
 			jj.defaultRev = def
+			jj.probeRevs = []string{revA}
 			jj.mu.Unlock()
 			writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
 			err := c.cmdUpload(context.Background(), nil)
-			assertEmptySetAborted(t, f, jj, err, out, def)
+			assertEmptySetAborted(t, f, jj, err, out, def, causeLanded)
 		})
 	}
 }
@@ -1133,7 +1235,7 @@ func TestEmptyUploadSetDryRunReportsSameDiagnosis(t *testing.T) {
 	f, jj, c, out := uploadFixture(t, nil, session42, true)
 	writeHook(t, jj.root, "#!/bin/sh\nexit 7\n")
 	err := c.cmdUpload(context.Background(), []string{"-r", "none()", "-dry-run"})
-	assertEmptySetAborted(t, f, jj, err, out, "none()")
+	assertEmptySetAborted(t, f, jj, err, out, "none()", causeMatchedNothing)
 	if got := out.String(); strings.Contains(got, "dry-run:") {
 		t.Errorf("dry-run reported a count for an empty upload set:\n%s", got)
 	}

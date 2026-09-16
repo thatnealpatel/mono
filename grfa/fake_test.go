@@ -330,6 +330,14 @@ type jjFake struct {
 	root       string
 	defaultRev string // answer to the description probe: "@" or "@-"
 	setRevs    []revision
+	// probeRevs is what the plain-revset cause probe reports, and it
+	// is independent of setRevs: a revset can name revisions while
+	// the mutable()::(...) upload set is empty, which is the landed
+	// case. An empty probeRevs means the named revset matched
+	// nothing at all.
+	probeRevs []string
+	// probeErr, when set, makes the cause probe fail.
+	probeErr   error
 	pushErr    error
 	pushStdout string // stdout the push emits; grfa must never parse it
 	hookErr    error
@@ -355,6 +363,18 @@ func jjBody(cmd command) string {
 	return strings.Join(rest, " ")
 }
 
+// hasReadOnlyGlobalFlags reports whether a recorded jj command still
+// carries the global read-only flags. jjBody strips them before matching,
+// so a revset match alone cannot prove the invocation was read-only.
+func hasReadOnlyGlobalFlags(cmd command) bool {
+	for _, arg := range cmd.args {
+		if arg == "--ignore-working-copy" {
+			return true
+		}
+	}
+	return false
+}
+
 func (j *jjFake) respond(cmd command) (string, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -370,6 +390,18 @@ func (j *jjFake) respond(cmd command) (string, error) {
 		return j.root + "\n", nil
 	case strings.Contains(joined, `if(description`):
 		return j.defaultRev + "\n", nil
+	case strings.HasSuffix(joined, "-T commit_id"):
+		// The plain-revset cause probe. The upload-set query
+		// uses the same command with a richer template, so the
+		// suffix is what distinguishes the two.
+		if j.probeErr != nil {
+			return "", j.probeErr
+		}
+		var b strings.Builder
+		for _, rev := range j.probeRevs {
+			b.WriteString(rev + "\n")
+		}
+		return b.String(), nil
 	case strings.HasPrefix(joined, "log --no-graph -r"):
 		return uploadSetOutput(j.setRevs), nil
 	case strings.HasPrefix(joined, "gerrit upload"):
