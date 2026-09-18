@@ -7,27 +7,18 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 )
 
-func cmdSearchIssues(ctx context.Context, args []string) error {
-	return cmdSearchIssuesTo(ctx, os.Stdout, args)
-}
-
-func cmdSearchIssuesTo(ctx context.Context, out io.Writer, args []string) error {
+func cmdSearchIssues(ctx context.Context, proxy string, out io.Writer, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: ghfa search issues <query>")
 	}
-	return searchIssues(ctx, out, strings.Join(args, " "))
-}
-
-func searchIssues(ctx context.Context, out io.Writer, query string) error {
 	params := url.Values{}
-	params.Set("q", query)
+	params.Set("q", strings.Join(args, " "))
 	params.Set("per_page", "100")
 
-	base, err := url.JoinPath(proxyBase, "gh", "search", "issues")
+	base, err := url.JoinPath(proxy, "gh", "search", "issues")
 	if err != nil {
 		return err
 	}
@@ -52,5 +43,5 @@ func searchIssues(ctx context.Context, out io.Writer, query string) error {
 		result.Items = append(result.Items, page.Items...)
 		rawURL = nextLink(header.Get("Link"))
 	}
-	return printJSONTo(out, result)
+	return writeJSON(out, result)
 }

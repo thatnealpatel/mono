@@ -27,7 +27,7 @@ type revision struct {
 	Subject  string
 }
 
-func cmdUpload(ctx context.Context, host string, args []string) error {
+func cmdUpload(ctx context.Context, proxy string, args []string) error {
 	opts, err := parseUploadArgs(args)
 	if err != nil {
 		return err
@@ -74,7 +74,7 @@ func cmdUpload(ctx context.Context, host string, args []string) error {
 	for _, r := range opts.reviewers {
 		pushArgs = append(pushArgs, "--reviewer", r)
 	}
-	if err := pushUpload(ctx, host, revs, pushArgs); err != nil {
+	if err := pushUpload(ctx, proxy, revs, pushArgs); err != nil {
 		return err
 	}
 
@@ -82,11 +82,11 @@ func cmdUpload(ctx context.Context, host string, args []string) error {
 		log.Printf("uploaded %d revision(s); YAH_SESSION not set, no provenance marker posted", len(revs))
 		return nil
 	}
-	return stampUpload(ctx, host, revs, session)
+	return stampUpload(ctx, proxy, revs, session)
 }
 
-func pushUpload(ctx context.Context, host string, revs []revision, pushArgs []string) error {
-	present, lookupErr := pushAlreadyPresent(ctx, host, revs)
+func pushUpload(ctx context.Context, proxy string, revs []revision, pushArgs []string) error {
+	present, lookupErr := pushAlreadyPresent(ctx, proxy, revs)
 	switch {
 	case lookupErr != nil:
 		log.Printf("pre-push lookup: %v; pushing as usual", lookupErr)
@@ -99,7 +99,7 @@ func pushUpload(ctx context.Context, host string, revs []revision, pushArgs []st
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	if err := c.Run(); err != nil {
-		present, lookupErr := pushAlreadyPresent(ctx, host, revs)
+		present, lookupErr := pushAlreadyPresent(ctx, proxy, revs)
 		if lookupErr != nil || !present {
 			return fmt.Errorf("push: %w", err)
 		}
@@ -108,12 +108,12 @@ func pushUpload(ctx context.Context, host string, revs []revision, pushArgs []st
 	return nil
 }
 
-func pushAlreadyPresent(ctx context.Context, host string, revs []revision) (bool, error) {
+func pushAlreadyPresent(ctx context.Context, proxy string, revs []revision) (bool, error) {
 	if len(revs) == 0 {
 		return false, nil
 	}
 	for _, r := range revs {
-		currents, err := queryCurrentRevisions(ctx, host, r.ChangeID)
+		currents, err := queryCurrentRevisions(ctx, proxy, r.ChangeID)
 		if err != nil {
 			return false, err
 		}
@@ -247,7 +247,7 @@ func runPreUploadHook(ctx context.Context, root string) error {
 
 const sessionMarkerPrefix = "Yah-Session: "
 
-func stampUpload(ctx context.Context, host string, revs []revision, session string) error {
+func stampUpload(ctx context.Context, proxy string, revs []revision, session string) error {
 	marker := sessionMarkerPrefix + session
 	seen := map[string]bool{}
 	var problems []string
@@ -256,7 +256,7 @@ func stampUpload(ctx context.Context, host string, revs []revision, session stri
 			continue
 		}
 		seen[r.ChangeID] = true
-		stamped, err := stampChange(ctx, host, r.ChangeID, marker)
+		stamped, err := stampChange(ctx, proxy, r.ChangeID, marker)
 		if err != nil {
 			problems = append(problems, err.Error())
 			continue
@@ -273,12 +273,12 @@ func stampUpload(ctx context.Context, host string, revs []revision, session stri
 	return nil
 }
 
-func stampChange(ctx context.Context, host, changeID, marker string) (bool, error) {
-	detail, err := fetchChangeDetail(ctx, host, changeID)
+func stampChange(ctx context.Context, proxy, changeID, marker string) (bool, error) {
+	detail, err := fetchChangeDetail(ctx, proxy, changeID)
 	if err != nil {
 		return false, fmt.Errorf("stamp %s: %w", changeID, err)
 	}
-	comments, err := fetchChangeComments(ctx, host, changeID)
+	comments, err := fetchChangeComments(ctx, proxy, changeID)
 	if err != nil {
 		return false, fmt.Errorf("stamp %s: %w", changeID, err)
 	}
@@ -292,7 +292,7 @@ func stampChange(ctx context.Context, host, changeID, marker string) (bool, erro
 			patchSetLevel: {{Message: marker, Unresolved: false}},
 		},
 	}
-	if err := postReview(ctx, host, changeID, detail.CurrentRevision, in); err != nil {
+	if err := postReview(ctx, proxy, changeID, detail.CurrentRevision, in); err != nil {
 		return false, fmt.Errorf("stamp %s: %w", changeID, err)
 	}
 	return true, nil

@@ -12,12 +12,12 @@ import (
 
 const patchSetLevel = "/PATCHSET_LEVEL"
 
-func cmdView(ctx context.Context, host, change string) error {
-	detail, err := fetchChangeDetail(ctx, host, change)
+func cmdView(ctx context.Context, proxy, change string) error {
+	detail, err := fetchChangeDetail(ctx, proxy, change)
 	if err != nil {
 		return err
 	}
-	comments, err := fetchChangeComments(ctx, host, change)
+	comments, err := fetchChangeComments(ctx, proxy, change)
 	if err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func cmdView(ctx context.Context, host, change string) error {
 	return nil
 }
 
-func cmdComment(ctx context.Context, host, change string, args []string) error {
+func cmdComment(ctx context.Context, proxy, change string, args []string) error {
 	opts, message, err := parseCommentArgs(args)
 	if err != nil {
 		return err
@@ -37,14 +37,14 @@ func cmdComment(ctx context.Context, host, change string, args []string) error {
 		Unresolved: !opts.resolved,
 	}
 	if opts.reply == "" {
-		detail, err := fetchChangeDetail(ctx, host, change)
+		detail, err := fetchChangeDetail(ctx, proxy, change)
 		if err != nil {
 			return err
 		}
 		revision = detail.CurrentRevision
 		path = patchSetLevel
 	} else {
-		comments, err := fetchChangeComments(ctx, host, change)
+		comments, err := fetchChangeComments(ctx, proxy, change)
 		if err != nil {
 			return err
 		}
@@ -60,16 +60,16 @@ func cmdComment(ctx context.Context, host, change string, args []string) error {
 		in.Line = target.Info.Line
 		in.Range = target.Info.Range
 	}
-	if err := postReview(ctx, host, change, revision, &reviewInput{
+	if err := postReview(ctx, proxy, change, revision, &reviewInput{
 		Comments: map[string][]commentInput{path: {in}},
 	}); err != nil {
 		return err
 	}
-	detail, err := fetchChangeDetail(ctx, host, change)
+	detail, err := fetchChangeDetail(ctx, proxy, change)
 	if err != nil {
 		return err
 	}
-	comments, err := fetchChangeComments(ctx, host, change)
+	comments, err := fetchChangeComments(ctx, proxy, change)
 	if err != nil {
 		return err
 	}

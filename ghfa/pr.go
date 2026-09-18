@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,9 +19,9 @@ type prRef struct {
 	State   string `json:"state"`
 }
 
-// cmdPRCreate creates a cross-repo pull request.
-// Usage: ghfa <owner/repo> pr create -title <t> -head <owner:branch> -base <branch> [-body|-file]
-func cmdPRCreate(ctx context.Context, args []string) error {
+// cmdPRCreate creates a cross-repo pull request. Usage: ghfa <owner/repo> pr
+// create -title <t> -head <owner:branch> -base <branch> [-body|-file]
+func cmdPRCreate(ctx context.Context, proxy, repo string, out io.Writer, args []string) error {
 	fs := flag.NewFlagSet("pr create", flag.ContinueOnError)
 	title := fs.String("title", "", "PR title (required)")
 	bodyFlag := fs.String("body", "", "inline PR body")
@@ -65,7 +66,7 @@ func cmdPRCreate(ctx context.Context, args []string) error {
 		Base:  baseBranch,
 	}
 
-	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "pulls")
+	rawURL, err := url.JoinPath(proxy, "gh", "repos", repo, "pulls")
 	if err != nil {
 		return err
 	}
@@ -80,5 +81,5 @@ func cmdPRCreate(ctx context.Context, args []string) error {
 	if err := json.Unmarshal(resp, &pr); err != nil {
 		return fmt.Errorf("ghfa: decode PR: %w", err)
 	}
-	return printJSON(pr)
+	return writeJSON(out, pr)
 }

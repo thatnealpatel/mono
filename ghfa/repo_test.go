@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cgi"
 	"net/http/httptest"
@@ -14,7 +15,7 @@ import (
 )
 
 func TestCmdRepoFork(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.Method, http.MethodPost; got != want {
 			t.Errorf("method = %q, want %q", got, want)
 		}
@@ -29,18 +30,18 @@ func TestCmdRepoFork(t *testing.T) {
 		w.Write([]byte(`{"full_name":"notnealpatel/repo","html_url":"https://github.com/notnealpatel/repo","default_branch":"main","fork":true}`))
 	}))
 
-	if err := cmdRepoFork(context.Background(), nil); err != nil {
+	if err := cmdRepoFork(context.Background(), proxy, testRepo, io.Discard, nil); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCmdRepoForkHTTPError(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		w.Write([]byte(`{"message":"Forbidden"}`))
 	}))
 
-	err := cmdRepoFork(context.Background(), nil)
+	err := cmdRepoFork(context.Background(), proxy, testRepo, io.Discard, nil)
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -50,7 +51,7 @@ func TestCmdRepoForkHTTPError(t *testing.T) {
 }
 
 func TestCmdRepoSync(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.Method, http.MethodPost; got != want {
 			t.Errorf("method = %q, want %q", got, want)
 		}
@@ -69,13 +70,13 @@ func TestCmdRepoSync(t *testing.T) {
 		w.Write([]byte(`{"message":"Successfully fetched and fast-forwarded from upstream main.","merge_type":"fast-forward","base_branch":"main"}`))
 	}))
 
-	if err := cmdRepoSync(context.Background(), nil); err != nil {
+	if err := cmdRepoSync(context.Background(), proxy, testRepo, io.Discard, nil); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCmdRepoSyncCustomBranch(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Branch string `json:"branch"`
 		}
@@ -88,18 +89,18 @@ func TestCmdRepoSyncCustomBranch(t *testing.T) {
 		w.Write([]byte(`{"message":"ok","merge_type":"fast-forward","base_branch":"develop"}`))
 	}))
 
-	if err := cmdRepoSync(context.Background(), []string{"-branch", "develop"}); err != nil {
+	if err := cmdRepoSync(context.Background(), proxy, testRepo, io.Discard, []string{"-branch", "develop"}); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCmdRepoSyncHTTPError(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusConflict)
 		w.Write([]byte(`{"message":"merge conflict"}`))
 	}))
 
-	err := cmdRepoSync(context.Background(), nil)
+	err := cmdRepoSync(context.Background(), proxy, testRepo, io.Discard, nil)
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -108,31 +109,9 @@ func TestCmdRepoSyncHTTPError(t *testing.T) {
 	}
 }
 
-func TestGitURL(t *testing.T) {
-	oldBase := proxyBase
-	t.Cleanup(func() { proxyBase = oldBase })
-
-	for _, tc := range []struct {
-		name, base, repo, want string
-	}{
-		{"Simple", "http://host:9001", "owner/repo", "http://host:9001/git/owner/repo.git"},
-		{"TrailingSlash", "http://host:9001", "org/lib", "http://host:9001/git/org/lib.git"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			proxyBase = tc.base
-			got, err := gitURL(tc.repo)
-			if err != nil {
-				t.Fatalf("gitURL: %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("got %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
-// initBareRepo creates a bare git repo with one commit, suitable for
-// serving over smart HTTP via git-http-backend.
+// initBareRepo creates a bare git repo
+// with one commit, suitable for serving
+// over smart HTTP via git-http-backend.
 func initBareRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -165,9 +144,9 @@ func initBareRepo(t *testing.T) string {
 	return bare
 }
 
-// gitHTTPServer returns an httptest.Server serving smart HTTP for bare
-// repos under root. Repos are accessed at /git/<name>/... mirroring the
-// proxy path shape that Px1 will serve.
+// gitHTTPServer returns an httptest.Server serving smart HTTP for
+// bare repos under root. Repos are accessed at /git/<name>/...
+// mirroring the proxy path shape that Px1 will serve.
 func gitHTTPServer(t *testing.T, root string) *httptest.Server {
 	t.Helper()
 	backend, err := exec.LookPath("git-http-backend")
@@ -189,7 +168,8 @@ func gitHTTPServer(t *testing.T, root string) *httptest.Server {
 			"GIT_HTTP_EXPORT_ALL=1",
 		},
 	}
-	// Strip /git/ prefix so git-http-backend sees repo-relative paths.
+	// Strip /git/ prefix so git-http-backend
+	// sees repo-relative paths.
 	mux := http.NewServeMux()
 	mux.Handle("/git/", http.StripPrefix("/git", handler))
 	srv := httptest.NewServer(mux)
@@ -202,13 +182,11 @@ func TestCmdRepoClone(t *testing.T) {
 	root := filepath.Dir(bare)
 	srv := gitHTTPServer(t, root)
 
-	oldProxy := proxyBase
-	t.Cleanup(func() { proxyBase = oldProxy })
-	proxyBase = srv.URL
-
-	// Repo name matches bare dir name (test.git -> test).
-	// Clone URL: <srv>/git/owner/test.git
-	// We name the bare dir to match the owner/repo.git pattern.
+	// Repo name matches bare dir name
+	// (test.git -> test). Clone URL:
+	// <srv>/git/owner/test.git We name the
+	// bare dir to match the owner/repo.git
+	// pattern.
 	ownerDir := filepath.Join(root, "owner")
 	if err := os.MkdirAll(ownerDir, 0o755); err != nil {
 		t.Fatalf("mkdir owner: %v", err)
@@ -218,10 +196,7 @@ func TestCmdRepoClone(t *testing.T) {
 	}
 
 	dir := filepath.Join(t.TempDir(), "cloned")
-	oldUpstream := upstream
-	upstream = "owner/repo"
-	t.Cleanup(func() { upstream = oldUpstream })
-	if err := cmdRepoClone(context.Background(), []string{dir}); err != nil {
+	if err := cmdRepoClone(context.Background(), srv.URL+"/", "owner/repo", io.Discard, []string{dir}); err != nil {
 		t.Fatalf("cmdRepoClone: %v", err)
 	}
 	// Verify .git exists (real clone).
@@ -233,8 +208,8 @@ func TestCmdRepoClone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("git remote get-url: %v", err)
 	}
-	if got := strings.TrimSpace(string(out)); !strings.HasPrefix(got, srv.URL) {
-		t.Errorf("origin = %q, want prefix %q", got, srv.URL)
+	if got, want := strings.TrimSpace(string(out)), srv.URL+"/git/owner/repo.git"; got != want {
+		t.Errorf("origin = %q, want %q", got, want)
 	}
 }
 
@@ -242,10 +217,6 @@ func TestCmdRepoCloneDefaultDir(t *testing.T) {
 	bare := initBareRepo(t)
 	root := filepath.Dir(bare)
 	srv := gitHTTPServer(t, root)
-
-	oldProxy := proxyBase
-	t.Cleanup(func() { proxyBase = oldProxy })
-	proxyBase = srv.URL
 
 	ownerDir := filepath.Join(root, "org")
 	if err := os.MkdirAll(ownerDir, 0o755); err != nil {
@@ -255,11 +226,8 @@ func TestCmdRepoCloneDefaultDir(t *testing.T) {
 		t.Fatalf("rename: %v", err)
 	}
 
-	oldUpstream := upstream
-	upstream = "org/lib"
-	t.Cleanup(func() { upstream = oldUpstream })
-
-	// Run from a temp directory so the default dir lands there.
+	// Run from a temp directory so the
+	// default dir lands there.
 	orig, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -270,7 +238,7 @@ func TestCmdRepoCloneDefaultDir(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chdir(orig) })
 
-	if err := cmdRepoClone(context.Background(), nil); err != nil {
+	if err := cmdRepoClone(context.Background(), srv.URL, "org/lib", io.Discard, nil); err != nil {
 		t.Fatalf("cmdRepoClone: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(tmp, "lib", ".git")); err != nil {
@@ -279,12 +247,8 @@ func TestCmdRepoCloneDefaultDir(t *testing.T) {
 }
 
 func TestCmdRepoCloneInvalidRepo(t *testing.T) {
-	oldUpstream := upstream
-	t.Cleanup(func() { upstream = oldUpstream })
-
 	for _, repo := range []string{"noslash", "/leading", "trailing/", ""} {
-		upstream = repo
-		err := cmdRepoClone(context.Background(), nil)
+		err := cmdRepoClone(context.Background(), "http://proxy", repo, io.Discard, nil)
 		if err == nil {
 			t.Errorf("cmdRepoClone(%q): want error, got nil", repo)
 		}

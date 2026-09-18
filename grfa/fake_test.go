@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,6 +19,7 @@ type recordedPost struct {
 }
 
 type fakeGerrit struct {
+	t        *testing.T
 	mu       sync.Mutex
 	user     string
 	details  map[string]*changeDetail
@@ -38,6 +38,7 @@ type fakeGerrit struct {
 func newFakeGerrit(t *testing.T, user string) (*fakeGerrit, string) {
 	t.Helper()
 	f := &fakeGerrit{
+		t:        t,
 		user:     user,
 		details:  map[string]*changeDetail{},
 		comments: map[string]map[string][]commentInfo{},
@@ -45,16 +46,9 @@ func newFakeGerrit(t *testing.T, user string) (*fakeGerrit, string) {
 		statuses: map[string]int{},
 		onServer: map[string]bool{},
 	}
-	srv := httptest.NewUnstartedServer(f)
-	srv.Listener.Close()
-	ln, err := net.Listen("tcp", "127.0.0.1:9001")
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv.Listener = ln
-	srv.Start()
+	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
-	return f, "127.0.0.1"
+	return f, srv.URL
 }
 
 func (f *fakeGerrit) writeJSON(w http.ResponseWriter, v any) {
@@ -65,6 +59,9 @@ func (f *fakeGerrit) writeJSON(w http.ResponseWriter, v any) {
 }
 
 func (f *fakeGerrit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if !strings.HasPrefix(r.URL.Path, "/gerrit/a") {
+		f.t.Errorf("request path %q does not carry the /gerrit/a route prefix", r.URL.Path)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -11,31 +14,43 @@ func TestRunUsage(t *testing.T) {
 		{"-h"},
 		{"owner/repo"},
 	} {
-		if err := run(args); err != nil {
+		var out bytes.Buffer
+		if err := run(context.Background(), "http://proxy", &out, args); err != nil {
 			t.Errorf("run(%v) = %v, want nil", args, err)
+		}
+		if got := out.String(); got != usage {
+			t.Errorf("run(%v) output = %q, want usage", args, got)
 		}
 	}
 }
 
 func TestRunUnknownCommand(t *testing.T) {
-	err := run([]string{"owner/repo", "bogus", "cmd"})
+	err := run(context.Background(), "http://proxy", &bytes.Buffer{}, []string{"owner/repo", "bogus", "cmd"})
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
-	if !strings.Contains(err.Error(), "unknown command") {
-		t.Errorf("error = %q, want it to contain 'unknown command'", err)
+	for _, want := range []string{`unknown command "bogus cmd"`, "issue view", "repo clone", "pr create"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to contain %q", err, want)
+		}
 	}
 }
 
-func TestUsageError(t *testing.T) {
-	err := usageError("bogus cmd")
-	msg := err.Error()
-	if !strings.Contains(msg, `"bogus cmd"`) {
-		t.Errorf("error = %q, want it to contain the command name", msg)
-	}
-	for _, cmd := range commands {
-		if !strings.Contains(msg, cmd.name) {
-			t.Errorf("error = %q, want it to list %q", msg, cmd.name)
+func TestRunSearchIssuesWithoutRepo(t *testing.T) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.Path, "/gh/search/issues"; got != want {
+			t.Errorf("path = %q, want %q", got, want)
 		}
+		if got, want := r.URL.Query().Get("q"), "is:issue is:open"; got != want {
+			t.Errorf("query = %q, want %q", got, want)
+		}
+		w.Write([]byte(`{"total_count":0,"incomplete_results":false,"items":[]}`))
+	}))
+	var out bytes.Buffer
+	if err := run(t.Context(), proxy, &out, []string{"search", "issues", "is:issue", "is:open"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"items": []`) {
+		t.Errorf("output = %q, want empty items", out.String())
 	}
 }

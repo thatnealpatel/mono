@@ -11,7 +11,7 @@ import (
 )
 
 func TestCmdSearchIssues(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
 		if strings.Contains(q, "repo:owner/repo") {
 			t.Errorf("q = %q, want no repo injection for search issues", q)
@@ -23,7 +23,7 @@ func TestCmdSearchIssues(t *testing.T) {
 	}))
 
 	var out bytes.Buffer
-	err := cmdSearchIssuesTo(t.Context(), &out, []string{"is:issue", "is:open"})
+	err := cmdSearchIssues(t.Context(), proxy, &out, []string{"is:issue", "is:open"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,6 +40,7 @@ func TestCmdSearchIssues(t *testing.T) {
 
 func TestSearchIssuesPreservesUnknownFieldsAcrossPages(t *testing.T) {
 	srv := setupTest(t, nil)
+	proxy := srv.URL
 	mux := http.NewServeMux()
 	srv.Config.Handler = mux
 
@@ -51,13 +52,13 @@ func TestSearchIssuesPreservesUnknownFieldsAcrossPages(t *testing.T) {
 		case "2":
 			w.Write([]byte(`{"total_count":99,"incomplete_results":true,"items":[{"number":2,"proxy_second":{"nested":true}}]}`))
 		default:
-			w.Header().Set("Link", `<`+proxyBase+`/gh/search/issues?q=repo%3Aowner%2Frepo+is%3Aissue&page=2>; rel="next"`)
+			w.Header().Set("Link", `<`+proxy+`/gh/search/issues?q=repo%3Aowner%2Frepo+is%3Aissue&page=2>; rel="next"`)
 			w.Write([]byte(`{"total_count":2,"incomplete_results":false,"items":[{"number":1,"proxy_first":"kept"}]}`))
 		}
 	})
 
 	var out bytes.Buffer
-	if err := searchIssues(t.Context(), &out, "repo:owner/repo is:issue"); err != nil {
+	if err := cmdSearchIssues(t.Context(), proxy, &out, []string{"repo:owner/repo", "is:issue"}); err != nil {
 		t.Fatalf("command: %v", err)
 	}
 	var got struct {
@@ -95,18 +96,18 @@ func TestSearchIssuesPreservesUnknownFieldsAcrossPages(t *testing.T) {
 }
 
 func TestCmdSearchIssuesBadArgs(t *testing.T) {
-	if err := cmdSearchIssues(context.Background(), nil); err == nil {
+	if err := cmdSearchIssues(context.Background(), proxy, io.Discard, nil); err == nil {
 		t.Fatal("want error for empty args")
 	}
 }
 
 func TestSearchIssuesHTTPError(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		w.Write([]byte("rate limited"))
 	}))
 
-	err := searchIssues(t.Context(), io.Discard, "test")
+	err := cmdSearchIssues(t.Context(), proxy, io.Discard, []string{"test"})
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}

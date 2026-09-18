@@ -7,6 +7,9 @@
 //
 // patel.codes/grfa assumes the user is untrusted: Trust and safety
 // are the caller's responsibility.
+//
+// GRFA_PROXY supplies the proxy base URL (scheme://host:port) to
+// which the Gerrit REST routes are appended.
 package main
 
 import (
@@ -22,17 +25,17 @@ import (
 )
 
 func main() {
-	host := os.Getenv("GRFA_HOST")
-	if host == "" {
-		log.Fatal("grfa: GRFA_HOST is not set")
+	proxy := os.Getenv("GRFA_PROXY")
+	if proxy == "" {
+		log.Fatal("grfa: GRFA_PROXY is not set")
 	}
-	if err := run(context.Background(), host, os.Args[1:]); err != nil {
+	if err := run(context.Background(), proxy, os.Args[1:]); err != nil {
 		log.Printf("grfa: %v", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, host string, args []string) error {
+func run(ctx context.Context, proxy string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		fmt.Print(usage)
 		return nil
@@ -40,7 +43,7 @@ func run(ctx context.Context, host string, args []string) error {
 	if args[0] == "upload" {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		defer cancel()
-		return usageOnHelp(cmdUpload(ctx, host, args[1:]))
+		return usageOnHelp(cmdUpload(ctx, proxy, args[1:]))
 	}
 	if strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("unknown flag %q\n\n%s", args[0], usage)
@@ -56,11 +59,11 @@ func run(ctx context.Context, host string, args []string) error {
 		}
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		return cmdView(ctx, host, change)
+		return cmdView(ctx, proxy, change)
 	case "comment":
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		return usageOnHelp(cmdComment(ctx, host, change, rest))
+		return usageOnHelp(cmdComment(ctx, proxy, change, rest))
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", verb, usage)
 	}

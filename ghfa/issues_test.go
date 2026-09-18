@@ -4,12 +4,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+type issueRequestBody struct {
+	Title  string   `json:"title"`
+	Body   string   `json:"body"`
+	Labels []string `json:"labels"`
+}
+
+type commentRequestBody struct {
+	Body string `json:"body"`
+}
 
 type issueViewRecorder struct {
 	t        *testing.T
@@ -29,10 +41,10 @@ func (rec *issueViewRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 func TestCmdViewPrintsRawEnvelopeWithOneRequest(t *testing.T) {
 	recorder := &issueViewRecorder{t: t}
-	setupTest(t, recorder)
+	proxy := setupTest(t, recorder).URL
 
 	var out bytes.Buffer
-	if err := cmdIssueViewTo(t.Context(), &out, []string{"7"}); err != nil {
+	if err := cmdIssueView(t.Context(), proxy, testRepo, &out, []string{"7"}); err != nil {
 		t.Fatalf("command: %v", err)
 	}
 	got := out.String()
@@ -45,13 +57,24 @@ func TestCmdViewPrintsRawEnvelopeWithOneRequest(t *testing.T) {
 	}
 }
 
+func TestCmdViewPropagatesWriteError(t *testing.T) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"issue":{"number":7},"timeline":[]}`))
+	}))
+	want := errors.New("write failed")
+	err := cmdIssueView(t.Context(), proxy, testRepo, errorWriter{err: want}, []string{"7"})
+	if !errors.Is(err, want) {
+		t.Errorf("command error = %v, want %v", err, want)
+	}
+}
+
 func TestCmdViewNotFound(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`{"message":"Not Found"}`))
 	}))
 
-	err := cmdIssueView(context.Background(), []string{"999"})
+	err := cmdIssueView(context.Background(), proxy, testRepo, io.Discard, []string{"999"})
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -62,21 +85,21 @@ func TestCmdViewNotFound(t *testing.T) {
 
 func TestCmdViewBadArgs(t *testing.T) {
 	for _, args := range [][]string{nil, {"a", "b"}, {"abc"}} {
-		if err := cmdIssueView(context.Background(), args); err == nil {
+		if err := cmdIssueView(context.Background(), proxy, testRepo, io.Discard, args); err == nil {
 			t.Errorf("cmdIssueView(%v) = nil, want error", args)
 		}
 	}
 }
 
 func TestCmdCreate(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %q, want POST", r.Method)
 		}
 		if r.URL.Path != "/gh/repos/owner/repo/issues" {
 			t.Errorf("path = %q, want /gh/repos/owner/repo/issues", r.URL.Path)
 		}
-		var req issueRequest
+		var req issueRequestBody
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -93,15 +116,15 @@ func TestCmdCreate(t *testing.T) {
 		w.Write([]byte(`{"number":42,"html_url":"https://github.com/owner/repo/issues/42","state":"open"}`))
 	}))
 
-	err := cmdIssueCreate(context.Background(), []string{"-title", "the title", "-body", "the body", "-label", "bug,auto-filed"})
+	err := cmdIssueCreate(context.Background(), proxy, testRepo, io.Discard, []string{"-title", "the title", "-body", "the body", "-label", "bug,auto-filed"})
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCmdCreateNoLabels(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req issueRequest
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req issueRequestBody
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -112,15 +135,15 @@ func TestCmdCreateNoLabels(t *testing.T) {
 		w.Write([]byte(`{"number":1,"html_url":"u","state":"open"}`))
 	}))
 
-	err := cmdIssueCreate(context.Background(), []string{"-title", "bare issue"})
+	err := cmdIssueCreate(context.Background(), proxy, testRepo, io.Discard, []string{"-title", "bare issue"})
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCmdCreateLabelCSVTrimming(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req issueRequest
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req issueRequestBody
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -131,15 +154,15 @@ func TestCmdCreateLabelCSVTrimming(t *testing.T) {
 		w.Write([]byte(`{"number":1,"html_url":"u","state":"open"}`))
 	}))
 
-	err := cmdIssueCreate(context.Background(), []string{"-title", "t", "-label", " bug , feature request "})
+	err := cmdIssueCreate(context.Background(), proxy, testRepo, io.Discard, []string{"-title", "t", "-label", " bug , feature request "})
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCmdCreateLabelCSVEmpty(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req issueRequest
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req issueRequestBody
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -150,7 +173,7 @@ func TestCmdCreateLabelCSVEmpty(t *testing.T) {
 		w.Write([]byte(`{"number":1,"html_url":"u","state":"open"}`))
 	}))
 
-	err := cmdIssueCreate(context.Background(), []string{"-title", "t", "-label", " , , "})
+	err := cmdIssueCreate(context.Background(), proxy, testRepo, io.Discard, []string{"-title", "t", "-label", " , , "})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,8 +186,8 @@ func TestCmdCreateFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req issueRequest
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req issueRequestBody
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -175,14 +198,14 @@ func TestCmdCreateFile(t *testing.T) {
 		w.Write([]byte(`{"number":1,"html_url":"u","state":"open"}`))
 	}))
 
-	err := cmdIssueCreate(context.Background(), []string{"-title", "t", "-file", md})
+	err := cmdIssueCreate(context.Background(), proxy, testRepo, io.Discard, []string{"-title", "t", "-file", md})
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCmdCreateBodyFileExclusive(t *testing.T) {
-	err := cmdIssueCreate(context.Background(), []string{"-title", "t", "-body", "x", "-file", "y"})
+	err := cmdIssueCreate(context.Background(), proxy, testRepo, io.Discard, []string{"-title", "t", "-body", "x", "-file", "y"})
 	if err == nil {
 		t.Fatal("want error for -body and -file together")
 	}
@@ -192,19 +215,19 @@ func TestCmdCreateBodyFileExclusive(t *testing.T) {
 }
 
 func TestCmdCreateMissingTitle(t *testing.T) {
-	err := cmdIssueCreate(context.Background(), []string{"-body", "only body"})
+	err := cmdIssueCreate(context.Background(), proxy, testRepo, io.Discard, []string{"-body", "only body"})
 	if err == nil {
 		t.Fatal("want error for missing title")
 	}
 }
 
 func TestCmdCreateHTTPError(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		w.Write([]byte(`{"message":"Validation Failed"}`))
 	}))
 
-	err := cmdIssueCreate(context.Background(), []string{"-title", "t"})
+	err := cmdIssueCreate(context.Background(), proxy, testRepo, io.Discard, []string{"-title", "t"})
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -214,7 +237,7 @@ func TestCmdCreateHTTPError(t *testing.T) {
 }
 
 func TestCmdEdit(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPatch {
 			t.Errorf("method = %q, want PATCH", r.Method)
 		}
@@ -234,14 +257,14 @@ func TestCmdEdit(t *testing.T) {
 		w.Write([]byte(`{"number":7,"html_url":"h","state":"open"}`))
 	}))
 
-	err := cmdIssueEdit(context.Background(), []string{"7", "-title", "new title", "-body", "new body"})
+	err := cmdIssueEdit(context.Background(), proxy, testRepo, io.Discard, []string{"7", "-title", "new title", "-body", "new body"})
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCmdEditTitleOnly(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var m map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -255,14 +278,14 @@ func TestCmdEditTitleOnly(t *testing.T) {
 		w.Write([]byte(`{"number":7,"html_url":"h","state":"open"}`))
 	}))
 
-	err := cmdIssueEdit(context.Background(), []string{"7", "-title", "updated"})
+	err := cmdIssueEdit(context.Background(), proxy, testRepo, io.Discard, []string{"7", "-title", "updated"})
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCmdEditBodyOnly(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var m map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -276,14 +299,14 @@ func TestCmdEditBodyOnly(t *testing.T) {
 		w.Write([]byte(`{"number":7,"html_url":"h","state":"open"}`))
 	}))
 
-	err := cmdIssueEdit(context.Background(), []string{"7", "-body", "updated body"})
+	err := cmdIssueEdit(context.Background(), proxy, testRepo, io.Discard, []string{"7", "-body", "updated body"})
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCmdEditNoFlags(t *testing.T) {
-	err := cmdIssueEdit(context.Background(), []string{"7"})
+	err := cmdIssueEdit(context.Background(), proxy, testRepo, io.Discard, []string{"7"})
 	if err == nil {
 		t.Fatal("want error for no flags")
 	}
@@ -293,24 +316,24 @@ func TestCmdEditNoFlags(t *testing.T) {
 }
 
 func TestCmdEditBadNumber(t *testing.T) {
-	if err := cmdIssueEdit(context.Background(), []string{"abc"}); err == nil {
+	if err := cmdIssueEdit(context.Background(), proxy, testRepo, io.Discard, []string{"abc"}); err == nil {
 		t.Fatal("want error for non-numeric issue number")
 	}
 }
 
 func TestCmdEditNoArgs(t *testing.T) {
-	if err := cmdIssueEdit(context.Background(), nil); err == nil {
+	if err := cmdIssueEdit(context.Background(), proxy, testRepo, io.Discard, nil); err == nil {
 		t.Fatal("want error for empty args")
 	}
 }
 
 func TestCmdEditHTTPError(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`{"message":"Not Found"}`))
 	}))
 
-	err := cmdIssueEdit(context.Background(), []string{"999", "-title", "t"})
+	err := cmdIssueEdit(context.Background(), proxy, testRepo, io.Discard, []string{"999", "-title", "t"})
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -331,7 +354,7 @@ func TestCmdClose(t *testing.T) {
 		{"NotPlanned", []string{"7", "-r", "not planned"}, "closed", "not_planned"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if got, want := r.Method, http.MethodPatch; got != want {
 					t.Errorf("method = %q, want %q", got, want)
 				}
@@ -347,8 +370,13 @@ func TestCmdClose(t *testing.T) {
 				}
 				w.Write([]byte(`{"number":7,"html_url":"h","state":"` + tc.wantState + `"}`))
 			}))
-			if err := cmdIssueClose(context.Background(), tc.args); err != nil {
+			var out bytes.Buffer
+			if err := cmdIssueClose(context.Background(), proxy, testRepo, &out, tc.args); err != nil {
 				t.Fatal(err)
+			}
+			want := "{\n  \"number\": 7,\n  \"html_url\": \"h\",\n  \"state\": \"" + tc.wantState + "\"\n}\n"
+			if got := out.String(); got != want {
+				t.Errorf("output = %q, want %q", got, want)
 			}
 		})
 	}
@@ -357,6 +385,7 @@ func TestCmdClose(t *testing.T) {
 func TestCmdCloseDupeof(t *testing.T) {
 	var gotComment string
 	srv := setupTest(t, nil)
+	proxy := srv.URL
 	mux := http.NewServeMux()
 	srv.Config.Handler = mux
 
@@ -377,7 +406,7 @@ func TestCmdCloseDupeof(t *testing.T) {
 		if got, want := r.Method, http.MethodPost; got != want {
 			t.Errorf("method = %q, want %q", got, want)
 		}
-		var req commentRequest
+		var req commentRequestBody
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -386,7 +415,7 @@ func TestCmdCloseDupeof(t *testing.T) {
 		w.Write([]byte(`{"user":{"login":"bot","id":1},"created_at":"t","updated_at":"t","body":"ok"}`))
 	})
 
-	if err := cmdIssueClose(context.Background(), []string{"7", "-dupeof", "42"}); err != nil {
+	if err := cmdIssueClose(context.Background(), proxy, testRepo, io.Discard, []string{"7", "-dupeof", "42"}); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := gotComment, "Duplicate of #42"; got != want {
@@ -405,7 +434,7 @@ func TestCmdCloseBadArgs(t *testing.T) {
 		{"NegativeDupeof", []string{"7", "-dupeof", "-1"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := cmdIssueClose(context.Background(), tc.args); err == nil {
+			if err := cmdIssueClose(context.Background(), proxy, testRepo, io.Discard, tc.args); err == nil {
 				t.Errorf("cmdIssueClose(%v) = nil, want error", tc.args)
 			}
 		})
@@ -413,7 +442,7 @@ func TestCmdCloseBadArgs(t *testing.T) {
 }
 
 func TestCmdCloseConflictingFlags(t *testing.T) {
-	err := cmdIssueClose(context.Background(), []string{"7", "-dupeof", "5", "-r", "not planned"})
+	err := cmdIssueClose(context.Background(), proxy, testRepo, io.Discard, []string{"7", "-dupeof", "5", "-r", "not planned"})
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -423,11 +452,11 @@ func TestCmdCloseConflictingFlags(t *testing.T) {
 }
 
 func TestCmdCloseHTTPError(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`{"message":"Not Found"}`))
 	}))
-	err := cmdIssueClose(context.Background(), []string{"999"})
+	err := cmdIssueClose(context.Background(), proxy, testRepo, io.Discard, []string{"999"})
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -437,7 +466,7 @@ func TestCmdCloseHTTPError(t *testing.T) {
 }
 
 func TestCmdCloseOmitsUnsetFields(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var m map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -454,25 +483,13 @@ func TestCmdCloseOmitsUnsetFields(t *testing.T) {
 		}
 		w.Write([]byte(`{"number":7,"html_url":"h","state":"closed"}`))
 	}))
-	if err := cmdIssueClose(context.Background(), []string{"7"}); err != nil {
+	if err := cmdIssueClose(context.Background(), proxy, testRepo, io.Discard, []string{"7"}); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestCloseResultShape(t *testing.T) {
-	out, err := json.Marshal(closeResult{Number: 7, HTMLURL: "h", State: "closed"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{`"number":7`, `"html_url":"h"`, `"state":"closed"`} {
-		if !strings.Contains(string(out), want) {
-			t.Errorf("got %s, want it to contain %s", out, want)
-		}
 	}
 }
 
 func TestCmdReopen(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.Method, http.MethodPatch; got != want {
 			t.Errorf("method = %q, want %q", got, want)
 		}
@@ -488,7 +505,7 @@ func TestCmdReopen(t *testing.T) {
 		}
 		w.Write([]byte(`{"number":7,"html_url":"h","state":"open"}`))
 	}))
-	if err := cmdIssueReopen(context.Background(), []string{"7"}); err != nil {
+	if err := cmdIssueReopen(context.Background(), proxy, testRepo, io.Discard, []string{"7"}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -496,6 +513,7 @@ func TestCmdReopen(t *testing.T) {
 func TestCmdReopenWithComment(t *testing.T) {
 	var gotComment string
 	srv := setupTest(t, nil)
+	proxy := srv.URL
 	mux := http.NewServeMux()
 	srv.Config.Handler = mux
 
@@ -503,7 +521,7 @@ func TestCmdReopenWithComment(t *testing.T) {
 		w.Write([]byte(`{"number":7,"html_url":"h","state":"open"}`))
 	})
 	mux.HandleFunc("/gh/repos/owner/repo/issues/7/comments", func(w http.ResponseWriter, r *http.Request) {
-		var req commentRequest
+		var req commentRequestBody
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -512,7 +530,7 @@ func TestCmdReopenWithComment(t *testing.T) {
 		w.Write([]byte(`{"user":{"login":"neal","id":1},"created_at":"t","updated_at":"t","body":"ok"}`))
 	})
 
-	if err := cmdIssueReopen(context.Background(), []string{"7", "-c", "reopening this"}); err != nil {
+	if err := cmdIssueReopen(context.Background(), proxy, testRepo, io.Discard, []string{"7", "-c", "reopening this"}); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := gotComment, "reopening this"; got != want {
@@ -521,20 +539,20 @@ func TestCmdReopenWithComment(t *testing.T) {
 }
 
 func TestCmdReopenBadArgs(t *testing.T) {
-	if err := cmdIssueReopen(context.Background(), nil); err == nil {
+	if err := cmdIssueReopen(context.Background(), proxy, testRepo, io.Discard, nil); err == nil {
 		t.Fatal("want error for no args")
 	}
-	if err := cmdIssueReopen(context.Background(), []string{"abc"}); err == nil {
+	if err := cmdIssueReopen(context.Background(), proxy, testRepo, io.Discard, []string{"abc"}); err == nil {
 		t.Fatal("want error for non-numeric issue number")
 	}
 }
 
 func TestCmdReopenHTTPError(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`{"message":"Not Found"}`))
 	}))
-	err := cmdIssueReopen(context.Background(), []string{"999"})
+	err := cmdIssueReopen(context.Background(), proxy, testRepo, io.Discard, []string{"999"})
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -550,14 +568,14 @@ func TestCmdComment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %q, want POST", r.Method)
 		}
 		if r.URL.Path != "/gh/repos/owner/repo/issues/7/comments" {
 			t.Errorf("path = %q, want /gh/repos/owner/repo/issues/7/comments", r.URL.Path)
 		}
-		var req commentRequest
+		var req commentRequestBody
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -565,18 +583,21 @@ func TestCmdComment(t *testing.T) {
 			t.Errorf("body = %q, want 'hello from test'", req.Body)
 		}
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(`{"user":{"login":"neal","id":1},"created_at":"t","updated_at":"t","body":"hello from test"}`))
+		w.Write([]byte(`{"arbitrary_proxy_field":{"nested":true}}`))
 	}))
 
-	err := cmdIssueComment(context.Background(), []string{"7", "-file", md})
-	if err != nil {
+	var out bytes.Buffer
+	if err := cmdIssueComment(context.Background(), proxy, testRepo, &out, []string{"7", "-file", md}); err != nil {
 		t.Fatal(err)
+	}
+	if got, want := out.String(), "{\n  \"number\": 7\n}\n"; got != want {
+		t.Errorf("output = %q, want %q", got, want)
 	}
 }
 
 func TestCmdCommentBody(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req commentRequest
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req commentRequestBody
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -587,7 +608,7 @@ func TestCmdCommentBody(t *testing.T) {
 		w.Write([]byte(`{"user":{"login":"neal","id":1},"created_at":"t","updated_at":"t","body":"inline body"}`))
 	}))
 
-	err := cmdIssueComment(context.Background(), []string{"7", "-body", "inline body"})
+	err := cmdIssueComment(context.Background(), proxy, testRepo, io.Discard, []string{"7", "-body", "inline body"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -595,22 +616,34 @@ func TestCmdCommentBody(t *testing.T) {
 
 func TestCmdCommentBadArgs(t *testing.T) {
 	for _, args := range [][]string{nil, {"7"}, {"7", "-body", "x", "-file", "y"}} {
-		if err := cmdIssueComment(context.Background(), args); err == nil {
+		if err := cmdIssueComment(context.Background(), proxy, testRepo, io.Discard, args); err == nil {
 			t.Errorf("cmdIssueComment(%v) = nil, want error", args)
 		}
 	}
 }
 
 func TestCmdCommentBadNumber(t *testing.T) {
-	if err := cmdIssueComment(context.Background(), []string{"abc", "-body", "x"}); err == nil {
+	if err := cmdIssueComment(context.Background(), proxy, testRepo, io.Discard, []string{"abc", "-body", "x"}); err == nil {
 		t.Fatal("want error for non-numeric issue number")
 	}
 }
 
 func TestCmdCommentMissingFile(t *testing.T) {
-	err := cmdIssueComment(context.Background(), []string{"7", "-file", "/nonexistent/file.md"})
+	err := cmdIssueComment(context.Background(), proxy, testRepo, io.Discard, []string{"7", "-file", "/nonexistent/file.md"})
 	if err == nil {
 		t.Fatal("want error for missing file")
+	}
+}
+
+func TestCmdCommentRejectsMalformedResponse(t *testing.T) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte(`{"incomplete":`))
+	}))
+
+	err := cmdIssueComment(context.Background(), proxy, testRepo, io.Discard, []string{"7", "-body", "hello"})
+	if err == nil || !strings.Contains(err.Error(), "decode comment") {
+		t.Fatalf("error = %v, want decode comment error", err)
 	}
 }
 
@@ -621,31 +654,16 @@ func TestCmdCommentHTTPError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		w.Write([]byte("rate limited"))
 	}))
 
-	err := cmdIssueComment(context.Background(), []string{"7", "-file", md})
+	err := cmdIssueComment(context.Background(), proxy, testRepo, io.Discard, []string{"7", "-file", md})
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
 	if !strings.Contains(err.Error(), "403") {
 		t.Errorf("error = %q, want it to contain 403", err)
-	}
-}
-
-func TestCommentResultShape(t *testing.T) {
-	out, err := json.Marshal(commentResult{Number: 73})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := `"number":73`; !strings.Contains(string(out), want) {
-		t.Errorf("got %s, want it to contain %s", out, want)
-	}
-	for _, absent := range []string{"html_url", "body", "user"} {
-		if strings.Contains(string(out), absent) {
-			t.Errorf("got %s, want it to omit %s", out, absent)
-		}
 	}
 }

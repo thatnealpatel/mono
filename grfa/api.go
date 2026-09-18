@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -14,14 +13,18 @@ import (
 
 const magicPrefix = ")]}'\n"
 
-func request(ctx context.Context, host, method string, parts []string, query url.Values, body any) ([]byte, error) {
-	var u strings.Builder
-	u.WriteString("http://" + net.JoinHostPort(host, "9001") + "/gerrit/a")
+func request(ctx context.Context, proxy, method string, parts []string, query url.Values, body any) ([]byte, error) {
+	elem := make([]string, 0, len(parts)+2)
+	elem = append(elem, "gerrit", "a")
 	for _, p := range parts {
-		u.WriteString("/" + url.PathEscape(p))
+		elem = append(elem, url.PathEscape(p))
+	}
+	rawURL, err := url.JoinPath(proxy, elem...)
+	if err != nil {
+		return nil, fmt.Errorf("build request URL: %w", err)
 	}
 	if len(query) > 0 {
-		u.WriteString("?" + query.Encode())
+		rawURL += "?" + query.Encode()
 	}
 	var r io.Reader
 	if body != nil {
@@ -31,7 +34,7 @@ func request(ctx context.Context, host, method string, parts []string, query url
 		}
 		r = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u.String(), r)
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, r)
 	if err != nil {
 		return nil, fmt.Errorf("new request: %w", err)
 	}
@@ -55,12 +58,12 @@ func request(ctx context.Context, host, method string, parts []string, query url
 	return bytes.TrimPrefix(data, []byte(magicPrefix)), nil
 }
 
-func fetchChangeDetail(ctx context.Context, host, change string) (*changeDetail, error) {
+func fetchChangeDetail(ctx context.Context, proxy, change string) (*changeDetail, error) {
 	q := url.Values{}
 	for _, o := range []string{"ALL_REVISIONS", "DETAILED_LABELS", "MESSAGES", "DETAILED_ACCOUNTS"} {
 		q.Add("o", o)
 	}
-	data, err := request(ctx, host, http.MethodGet, []string{"changes", change, "detail"}, q, nil)
+	data, err := request(ctx, proxy, http.MethodGet, []string{"changes", change, "detail"}, q, nil)
 	if err != nil {
 		return nil, fmt.Errorf("fetch change detail: %w", err)
 	}
@@ -71,8 +74,8 @@ func fetchChangeDetail(ctx context.Context, host, change string) (*changeDetail,
 	return &d, nil
 }
 
-func fetchChangeComments(ctx context.Context, host, change string) (map[string][]commentInfo, error) {
-	data, err := request(ctx, host, http.MethodGet, []string{"changes", change, "comments"}, nil, nil)
+func fetchChangeComments(ctx context.Context, proxy, change string) (map[string][]commentInfo, error) {
+	data, err := request(ctx, proxy, http.MethodGet, []string{"changes", change, "comments"}, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("fetch comments: %w", err)
 	}
@@ -86,18 +89,18 @@ func fetchChangeComments(ctx context.Context, host, change string) (map[string][
 	return m, nil
 }
 
-func postReview(ctx context.Context, host, change, revision string, in *reviewInput) error {
-	if _, err := request(ctx, host, http.MethodPost, []string{"changes", change, "revisions", revision, "review"}, nil, in); err != nil {
+func postReview(ctx context.Context, proxy, change, revision string, in *reviewInput) error {
+	if _, err := request(ctx, proxy, http.MethodPost, []string{"changes", change, "revisions", revision, "review"}, nil, in); err != nil {
 		return fmt.Errorf("post review: %w", err)
 	}
 	return nil
 }
 
-func queryCurrentRevisions(ctx context.Context, host, changeID string) ([]string, error) {
+func queryCurrentRevisions(ctx context.Context, proxy, changeID string) ([]string, error) {
 	q := url.Values{}
 	q.Set("q", "change:"+changeID)
 	q.Add("o", "CURRENT_REVISION")
-	data, err := request(ctx, host, http.MethodGet, []string{"changes"}, q, nil)
+	data, err := request(ctx, proxy, http.MethodGet, []string{"changes"}, q, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query change: %w", err)
 	}

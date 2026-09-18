@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestCmdPRCreate(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.Method, http.MethodPost; got != want {
 			t.Errorf("method = %q, want %q", got, want)
 		}
@@ -43,7 +44,7 @@ func TestCmdPRCreate(t *testing.T) {
 		w.Write([]byte(`{"number":1,"html_url":"https://github.com/owner/repo/pull/1","state":"open"}`))
 	}))
 
-	err := cmdPRCreate(context.Background(), []string{
+	err := cmdPRCreate(context.Background(), proxy, testRepo, io.Discard, []string{
 		"-title", "add lemma",
 		"-head", "notnealpatel:bot/machine/slug",
 		"-base", "main",
@@ -61,7 +62,7 @@ func TestCmdPRCreateFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Body string `json:"body"`
 		}
@@ -75,7 +76,7 @@ func TestCmdPRCreateFile(t *testing.T) {
 		w.Write([]byte(`{"number":2,"html_url":"u","state":"open"}`))
 	}))
 
-	err := cmdPRCreate(context.Background(), []string{
+	err := cmdPRCreate(context.Background(), proxy, testRepo, io.Discard, []string{
 		"-title", "t",
 		"-head", "notnealpatel:bot/x",
 		"-file", md,
@@ -86,7 +87,7 @@ func TestCmdPRCreateFile(t *testing.T) {
 }
 
 func TestCmdPRCreateDefaultBase(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Base string `json:"base"`
 		}
@@ -100,7 +101,7 @@ func TestCmdPRCreateDefaultBase(t *testing.T) {
 		w.Write([]byte(`{"number":3,"html_url":"u","state":"open"}`))
 	}))
 
-	err := cmdPRCreate(context.Background(), []string{
+	err := cmdPRCreate(context.Background(), proxy, testRepo, io.Discard, []string{
 		"-title", "t",
 		"-head", "notnealpatel:bot/x",
 	})
@@ -120,7 +121,7 @@ func TestCmdPRCreateBadArgs(t *testing.T) {
 		{"BodyAndFile", []string{"-title", "t", "-head", "x:y", "-body", "b", "-file", "f"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := cmdPRCreate(context.Background(), tc.args); err == nil {
+			if err := cmdPRCreate(context.Background(), proxy, testRepo, io.Discard, tc.args); err == nil {
 				t.Errorf("cmdPRCreate(%v) = nil, want error", tc.args)
 			}
 		})
@@ -128,12 +129,12 @@ func TestCmdPRCreateBadArgs(t *testing.T) {
 }
 
 func TestCmdPRCreateHTTPError(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		w.Write([]byte(`{"message":"Validation Failed"}`))
 	}))
 
-	err := cmdPRCreate(context.Background(), []string{"-title", "t", "-head", "x:y"})
+	err := cmdPRCreate(context.Background(), proxy, testRepo, io.Discard, []string{"-title", "t", "-head", "x:y"})
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}

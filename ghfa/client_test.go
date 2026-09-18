@@ -2,31 +2,40 @@ package main
 
 import (
 	"context"
-	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-// setupTest points the package globals at an httptest.Server so
-// commands hit the fake instead of api.github.com.
+const (
+	proxy    = ""
+	testRepo = "owner/repo"
+)
+
 func setupTest(t *testing.T, handler http.Handler) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	oldBase, oldUpstream := proxyBase, upstream
-	t.Cleanup(func() {
-		proxyBase = oldBase
-		upstream = oldUpstream
-	})
-	proxyBase = srv.URL
-	upstream = "owner/repo"
 	return srv
 }
 
+func setupURL(t *testing.T, handler http.Handler) string {
+	t.Helper()
+	return setupTest(t, handler).URL
+}
+
+type errorWriter struct {
+	err error
+}
+
+func (w errorWriter) Write([]byte) (int, error) {
+	return 0, w.err
+}
+
 func TestDoSetsHeaders(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "" {
 			t.Errorf("auth = %q, want empty (proxy handles auth)", got)
 		}
@@ -38,35 +47,42 @@ func TestDoSetsHeaders(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
-	_, _, _, err := do(context.Background(), http.MethodGet, proxyBase+"/test", nil)
+	_, _, _, err := do(context.Background(), http.MethodGet, srv.URL+"/test", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestDoSetsContentType(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Content-Type"); got != "application/json" {
 			t.Errorf("content-type = %q, want application/json", got)
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
-	_, _, _, err := do(context.Background(), http.MethodPost, proxyBase+"/test", map[string]string{"k": "v"})
+	_, _, _, err := do(context.Background(), http.MethodPost, srv.URL+"/test", map[string]string{"k": "v"})
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestDoNoContentTypeOnNilBody(t *testing.T) {
-	setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := setupTest(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Content-Type"); got != "" {
 			t.Errorf("content-type = %q, want empty", got)
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
-	_, _, _, err := do(context.Background(), http.MethodGet, proxyBase+"/test", nil)
+	_, _, _, err := do(context.Background(), http.MethodGet, srv.URL+"/test", nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestWriteJSONReportsEncodingError(t *testing.T) {
+	err := writeJSON(io.Discard, make(chan int))
+	if err == nil || !strings.Contains(err.Error(), "unsupported type") {
+		t.Fatalf("error = %v, want unsupported type", err)
 	}
 }
 
@@ -104,23 +120,5 @@ func TestNextLink(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
-	}
-}
-
-func TestPrintJSON(t *testing.T) {
-	if err := printJSON(map[string]int{"n": 1}); err != nil {
-		t.Fatal(err)
-	}
-}
-
-type errorWriter struct{}
-
-func (errorWriter) Write([]byte) (int, error) {
-	return 0, errors.New("write failed")
-}
-
-func TestPrintJSONToIgnoresWriteError(t *testing.T) {
-	if err := printJSONTo(errorWriter{}, map[string]int{"n": 1}); err != nil {
-		t.Errorf("printJSONTo error = %v, want nil", err)
 	}
 }

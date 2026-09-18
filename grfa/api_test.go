@@ -8,8 +8,8 @@ import (
 )
 
 func TestNoCredentialsAttached(t *testing.T) {
-	f, host := seededServer(t, "Agent")
-	if err := cmdComment(t.Context(), host, changeKey, []string{"hello"}); err != nil {
+	f, proxy := seededServer(t, "Agent")
+	if err := cmdComment(t.Context(), proxy, changeKey, []string{"hello"}); err != nil {
 		t.Fatal(err)
 	}
 	if f.sawCredentials() {
@@ -18,11 +18,11 @@ func TestNoCredentialsAttached(t *testing.T) {
 }
 
 func TestHTTPErrorOnDetail(t *testing.T) {
-	f, host := seededServer(t, "Agent")
+	f, proxy := seededServer(t, "Agent")
 	f.mu.Lock()
 	f.statuses["GET /changes/"+changeKey+"/detail"] = http.StatusInternalServerError
 	f.mu.Unlock()
-	err := cmdView(t.Context(), host, changeKey)
+	err := cmdView(t.Context(), proxy, changeKey)
 	if err == nil {
 		t.Fatal("internal server error: want an error")
 	}
@@ -35,11 +35,11 @@ func TestHTTPErrorOnDetail(t *testing.T) {
 }
 
 func TestRequestStripsMagicPrefix(t *testing.T) {
-	f, host := newFakeGerrit(t, "Agent")
+	f, proxy := newFakeGerrit(t, "Agent")
 	f.mu.Lock()
 	f.raw["GET /changes/x/detail"] = magicPrefix + `{"k":"v"}`
 	f.mu.Unlock()
-	data, err := request(t.Context(), host, http.MethodGet, []string{"changes", "x", "detail"}, nil, nil)
+	data, err := request(t.Context(), proxy, http.MethodGet, []string{"changes", "x", "detail"}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,13 +53,13 @@ func TestRequestStripsMagicPrefix(t *testing.T) {
 }
 
 func TestQueryCurrentRevisions(t *testing.T) {
-	f, host := newFakeGerrit(t, "Agent")
+	f, proxy := newFakeGerrit(t, "Agent")
 	f.details[changeKey] = &changeDetail{
 		ID: changeKey, ChangeID: changeKey, CurrentRevision: ps2SHA,
 		Revisions: map[string]revisionInfo{ps2SHA: {Number: 2}},
 	}
 	f.land([]revision{{Commit: ps2SHA, ChangeID: changeKey}})
-	revs, err := queryCurrentRevisions(t.Context(), host, changeKey)
+	revs, err := queryCurrentRevisions(t.Context(), proxy, changeKey)
 	if err != nil {
 		t.Fatal(err)
 	}

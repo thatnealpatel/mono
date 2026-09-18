@@ -86,11 +86,11 @@ func testFixture() (*changeDetail, map[string][]commentInfo) {
 
 func seededServer(t *testing.T, user string) (*fakeGerrit, string) {
 	t.Helper()
-	f, host := newFakeGerrit(t, user)
+	f, proxy := newFakeGerrit(t, user)
 	d, comments := testFixture()
 	f.details[changeKey] = d
 	f.comments[changeKey] = comments
-	return f, host
+	return f, proxy
 }
 
 const realVotesFragment = `"all":[{"value":0,"permitted_voting_range":{"min":-2,"max":2},"_account_id":1000000,"name":"Human","username":"Human"}]`
@@ -169,11 +169,11 @@ const realDetailPayload = ")]}'\n" + `{
 }`
 
 func TestFetchChangeDetailDecodesRealPayload(t *testing.T) {
-	f, host := newFakeGerrit(t, "Agent")
+	f, proxy := newFakeGerrit(t, "Agent")
 	f.mu.Lock()
 	f.raw["GET /changes/141/detail"] = realDetailPayload
 	f.mu.Unlock()
-	d, err := fetchChangeDetail(t.Context(), host, "141")
+	d, err := fetchChangeDetail(t.Context(), proxy, "141")
 	if err != nil {
 		t.Fatalf("the real payload must decode: %v", err)
 	}
@@ -236,8 +236,8 @@ func TestFetchChangeDetailDecodesRealPayload(t *testing.T) {
 }
 
 func TestReplyToRemovedFileUsesTargetCommitAndPath(t *testing.T) {
-	f, host := seededServer(t, "Agent")
-	if err := cmdComment(t.Context(), host, changeKey, []string{"-reply", "c3", "why was this removed?"}); err != nil {
+	f, proxy := seededServer(t, "Agent")
+	if err := cmdComment(t.Context(), proxy, changeKey, []string{"-reply", "c3", "why was this removed?"}); err != nil {
 		t.Fatal(err)
 	}
 	posts, _ := f.snapshot()
@@ -273,8 +273,8 @@ func TestReplyToRemovedFileUsesTargetCommitAndPath(t *testing.T) {
 
 func TestReplyMatchingIsExact(t *testing.T) {
 	t.Run("unknown id fails without posting", func(t *testing.T) {
-		f, host := seededServer(t, "Agent")
-		err := cmdComment(t.Context(), host, changeKey, []string{"-reply", "does-not-exist", "hello"})
+		f, proxy := seededServer(t, "Agent")
+		err := cmdComment(t.Context(), proxy, changeKey, []string{"-reply", "does-not-exist", "hello"})
 		if err == nil {
 			t.Fatal("reply to unknown id: want error")
 		}
@@ -283,8 +283,8 @@ func TestReplyMatchingIsExact(t *testing.T) {
 		}
 	})
 	t.Run("change message id is not a target", func(t *testing.T) {
-		f, host := seededServer(t, "Agent")
-		err := cmdComment(t.Context(), host, changeKey, []string{"-reply", "msg-1", "hello"})
+		f, proxy := seededServer(t, "Agent")
+		err := cmdComment(t.Context(), proxy, changeKey, []string{"-reply", "msg-1", "hello"})
 		if err == nil {
 			t.Fatal("reply to change-message id: want error")
 		}
@@ -296,8 +296,8 @@ func TestReplyMatchingIsExact(t *testing.T) {
 		}
 	})
 	t.Run("older patch set id succeeds", func(t *testing.T) {
-		f, host := seededServer(t, "Agent")
-		if err := cmdComment(t.Context(), host, changeKey, []string{"-reply", "c3", "hello"}); err != nil {
+		f, proxy := seededServer(t, "Agent")
+		if err := cmdComment(t.Context(), proxy, changeKey, []string{"-reply", "c3", "hello"}); err != nil {
 			t.Fatal(err)
 		}
 		posts, _ := f.snapshot()
@@ -359,7 +359,7 @@ func TestReplyLocationCopy(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			f, host := newFakeGerrit(t, "Agent")
+			f, proxy := newFakeGerrit(t, "Agent")
 			target := tc.target
 			target.ID = "target-1"
 			target.PatchSet = 2
@@ -371,7 +371,7 @@ func TestReplyLocationCopy(t *testing.T) {
 				Revisions: map[string]revisionInfo{ps2SHA: {Number: 2}},
 			}
 			f.comments[changeKey] = map[string][]commentInfo{tc.path: {target}}
-			if err := cmdComment(t.Context(), host, changeKey, []string{"-reply", "target-1", "reply body"}); err != nil {
+			if err := cmdComment(t.Context(), proxy, changeKey, []string{"-reply", "target-1", "reply body"}); err != nil {
 				t.Fatal(err)
 			}
 			posts, _ := f.snapshot()
@@ -427,8 +427,8 @@ func TestUnresolvedDefaults(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			f, host := seededServer(t, "Agent")
-			if err := cmdComment(t.Context(), host, changeKey, tc.args); err != nil {
+			f, proxy := seededServer(t, "Agent")
+			if err := cmdComment(t.Context(), proxy, changeKey, tc.args); err != nil {
 				t.Fatal(err)
 			}
 			posts, _ := f.snapshot()
@@ -459,9 +459,9 @@ func TestUnresolvedDefaults(t *testing.T) {
 }
 
 func TestOptionLikeMessagePreserved(t *testing.T) {
-	f, host := seededServer(t, "Agent")
+	f, proxy := seededServer(t, "Agent")
 	msg := `-r main --remote upstream "quoted text" -resolved`
-	if err := cmdComment(t.Context(), host, changeKey, []string{"--", msg}); err != nil {
+	if err := cmdComment(t.Context(), proxy, changeKey, []string{"--", msg}); err != nil {
 		t.Fatal(err)
 	}
 	posts, _ := f.snapshot()

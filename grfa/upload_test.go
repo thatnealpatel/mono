@@ -38,7 +38,7 @@ func unsetenv(t *testing.T, name string) {
 func seededChanges(t *testing.T, session string) (*fakeGerrit, string) {
 	t.Helper()
 	t.Setenv("YAH_SESSION", session)
-	f, host := newFakeGerrit(t, "Agent")
+	f, proxy := newFakeGerrit(t, "Agent")
 	f.details[changeID1] = &changeDetail{
 		ID: changeID1, ChangeID: changeID1, Number: 1, Status: "NEW", CurrentRevision: revA,
 		Revisions: map[string]revisionInfo{revA: {Number: 1}},
@@ -47,7 +47,7 @@ func seededChanges(t *testing.T, session string) (*fakeGerrit, string) {
 		ID: changeID2, ChangeID: changeID2, Number: 2, Status: "NEW", CurrentRevision: revB,
 		Revisions: map[string]revisionInfo{revB: {Number: 1}},
 	}
-	return f, host
+	return f, proxy
 }
 
 func twoRevisions() []revision {
@@ -58,8 +58,8 @@ func twoRevisions() []revision {
 }
 
 func TestStampUploadStampsEveryChange(t *testing.T) {
-	f, host := seededChanges(t, session42)
-	if err := stampUpload(t.Context(), host, twoRevisions(), session42); err != nil {
+	f, proxy := seededChanges(t, session42)
+	if err := stampUpload(t.Context(), proxy, twoRevisions(), session42); err != nil {
 		t.Fatal(err)
 	}
 	posts, _ := f.snapshot()
@@ -97,13 +97,13 @@ func TestStampUploadStampsEveryChange(t *testing.T) {
 }
 
 func TestStampUploadOneMarkerPerChange(t *testing.T) {
-	f, host := seededChanges(t, session42)
+	f, proxy := seededChanges(t, session42)
 	revs := []revision{
 		{Commit: revA, ChangeID: changeID1, Subject: "first change"},
 		{Commit: revB, ChangeID: changeID1, Subject: "same change"},
 		{Commit: revB, ChangeID: changeID2, Subject: "second change"},
 	}
-	if err := stampUpload(t.Context(), host, revs, session42); err != nil {
+	if err := stampUpload(t.Context(), proxy, revs, session42); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.postCount(); got != 2 {
@@ -112,8 +112,8 @@ func TestStampUploadOneMarkerPerChange(t *testing.T) {
 }
 
 func TestStampChangeOnce(t *testing.T) {
-	f, host := seededChanges(t, session42)
-	stamped, err := stampChange(t.Context(), host, changeID1, marker42)
+	f, proxy := seededChanges(t, session42)
+	stamped, err := stampChange(t.Context(), proxy, changeID1, marker42)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestStampChangeOnce(t *testing.T) {
 	if len(posts) != 1 || posts[0].Revision != revA {
 		t.Fatalf("posts = %+v, want one against %s", posts, revA)
 	}
-	stamped, err = stampChange(t.Context(), host, changeID1, marker42)
+	stamped, err = stampChange(t.Context(), proxy, changeID1, marker42)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestStampChangeOnce(t *testing.T) {
 }
 
 func TestStampIdempotent(t *testing.T) {
-	f, host := seededChanges(t, session42)
+	f, proxy := seededChanges(t, session42)
 	one := []revision{{Commit: revA, ChangeID: changeID1, Subject: "first change"}}
 
 	f.mu.Lock()
@@ -149,7 +149,7 @@ func TestStampIdempotent(t *testing.T) {
 	}
 	f.mu.Unlock()
 	for run := 1; run <= 2; run++ {
-		if err := stampUpload(t.Context(), host, one, session42); err != nil {
+		if err := stampUpload(t.Context(), proxy, one, session42); err != nil {
 			t.Fatalf("run %d: %v", run, err)
 		}
 		if got := f.postCount(); got != 0 {
@@ -164,7 +164,7 @@ func TestStampIdempotent(t *testing.T) {
 		},
 	}
 	f.mu.Unlock()
-	if err := stampUpload(t.Context(), host, one, session42); err != nil {
+	if err := stampUpload(t.Context(), proxy, one, session42); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.postCount(); got != 0 {
@@ -178,7 +178,7 @@ func TestStampIdempotent(t *testing.T) {
 		},
 	}
 	f.mu.Unlock()
-	if err := stampUpload(t.Context(), host, one, session42); err != nil {
+	if err := stampUpload(t.Context(), proxy, one, session42); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.postCount(); got != 0 {
@@ -187,11 +187,11 @@ func TestStampIdempotent(t *testing.T) {
 }
 
 func TestFailedStampIsPartialResult(t *testing.T) {
-	f, host := seededChanges(t, session42)
+	f, proxy := seededChanges(t, session42)
 	f.mu.Lock()
 	delete(f.details, changeID2)
 	f.mu.Unlock()
-	err := stampUpload(t.Context(), host, twoRevisions(), session42)
+	err := stampUpload(t.Context(), proxy, twoRevisions(), session42)
 	if err == nil {
 		t.Fatal("stamp failure: want an error")
 	}

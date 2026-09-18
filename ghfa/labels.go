@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 )
 
-func cmdLabelList(ctx context.Context, args []string) error {
-	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "labels")
+func cmdLabelList(ctx context.Context, proxy, repo string, out io.Writer, args []string) error {
+	rawURL, err := url.JoinPath(proxy, "gh", "repos", repo, "labels")
 	if err != nil {
 		return err
 	}
@@ -30,5 +31,5 @@ func cmdLabelList(ctx context.Context, args []string) error {
 		all = append(all, page...)
 		rawURL = nextLink(header.Get("Link"))
 	}
-	return printJSON(all)
+	return writeJSON(out, all)
 }

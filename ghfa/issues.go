@@ -13,11 +13,7 @@ import (
 	"strings"
 )
 
-func cmdIssueView(ctx context.Context, args []string) error {
-	return cmdIssueViewTo(ctx, os.Stdout, args)
-}
-
-func cmdIssueViewTo(ctx context.Context, out io.Writer, args []string) error {
+func cmdIssueView(ctx context.Context, proxy, repo string, out io.Writer, args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: ghfa <owner/repo> issue view <num>")
 	}
@@ -25,7 +21,7 @@ func cmdIssueViewTo(ctx context.Context, out io.Writer, args []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid issue number %q", args[0])
 	}
-	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number))
+	rawURL, err := url.JoinPath(proxy, "gh", "repos", repo, "issues", strconv.Itoa(number))
 	if err != nil {
 		return err
 	}
@@ -40,10 +36,10 @@ func cmdIssueViewTo(ctx context.Context, out io.Writer, args []string) error {
 	if err := json.Unmarshal(resp, &envelope); err != nil {
 		return fmt.Errorf("ghfa: decode issue view: %w", err)
 	}
-	return printJSONTo(out, envelope)
+	return writeJSON(out, envelope)
 }
 
-func cmdIssueCreate(ctx context.Context, args []string) error {
+func cmdIssueCreate(ctx context.Context, proxy, repo string, out io.Writer, args []string) error {
 	fs := flag.NewFlagSet("issue create", flag.ContinueOnError)
 	title := fs.String("title", "", "issue title (required)")
 	bodyFlag := fs.String("body", "", "inline markdown body")
@@ -75,7 +71,7 @@ func cmdIssueCreate(ctx context.Context, args []string) error {
 			}
 		}
 	}
-	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues")
+	rawURL, err := url.JoinPath(proxy, "gh", "repos", repo, "issues")
 	if err != nil {
 		return err
 	}
@@ -94,7 +90,7 @@ func cmdIssueCreate(ctx context.Context, args []string) error {
 	if err := json.Unmarshal(resp, &ref); err != nil {
 		return fmt.Errorf("ghfa: decode: %w", err)
 	}
-	return printJSON(ref)
+	return writeJSON(out, ref)
 }
 
 type issueRequest struct {
@@ -103,7 +99,7 @@ type issueRequest struct {
 	Labels []string `json:"labels,omitempty"`
 }
 
-func cmdIssueEdit(ctx context.Context, args []string) error {
+func cmdIssueEdit(ctx context.Context, proxy, repo string, out io.Writer, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: ghfa <owner/repo> issue edit <num> [-title <title>] [-body <body>]")
 	}
@@ -127,7 +123,7 @@ func cmdIssueEdit(ctx context.Context, args []string) error {
 	if patch.Title == nil && patch.Body == nil {
 		return fmt.Errorf("at least one of -title or -body is required")
 	}
-	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number))
+	rawURL, err := url.JoinPath(proxy, "gh", "repos", repo, "issues", strconv.Itoa(number))
 	if err != nil {
 		return err
 	}
@@ -142,10 +138,10 @@ func cmdIssueEdit(ctx context.Context, args []string) error {
 	if err := json.Unmarshal(resp, &ref); err != nil {
 		return fmt.Errorf("ghfa: decode: %w", err)
 	}
-	return printJSON(ref)
+	return writeJSON(out, ref)
 }
 
-func cmdIssueClose(ctx context.Context, args []string) error {
+func cmdIssueClose(ctx context.Context, proxy, repo string, out io.Writer, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: ghfa <owner/repo> issue close <num> [-r completed|\"not planned\"] [-dupeof N]")
 	}
@@ -182,7 +178,7 @@ func cmdIssueClose(ctx context.Context, args []string) error {
 		patch = issuePatch{State: &s, StateReason: &r}
 	}
 
-	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number))
+	rawURL, err := url.JoinPath(proxy, "gh", "repos", repo, "issues", strconv.Itoa(number))
 	if err != nil {
 		return err
 	}
@@ -199,7 +195,7 @@ func cmdIssueClose(ctx context.Context, args []string) error {
 	}
 
 	if *dupeof > 0 {
-		commentURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number), "comments")
+		commentURL, err := url.JoinPath(proxy, "gh", "repos", repo, "issues", strconv.Itoa(number), "comments")
 		if err != nil {
 			return err
 		}
@@ -214,7 +210,7 @@ func cmdIssueClose(ctx context.Context, args []string) error {
 		}
 	}
 
-	return printJSON(closeResult{Number: ref.Number, HTMLURL: ref.HTMLURL, State: ref.State})
+	return writeJSON(out, closeResult{Number: ref.Number, HTMLURL: ref.HTMLURL, State: ref.State})
 }
 
 type closeResult struct {
@@ -223,7 +219,7 @@ type closeResult struct {
 	State   string `json:"state"`
 }
 
-func cmdIssueReopen(ctx context.Context, args []string) error {
+func cmdIssueReopen(ctx context.Context, proxy, repo string, out io.Writer, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: ghfa <owner/repo> issue reopen <num> [-c <comment>]")
 	}
@@ -238,7 +234,7 @@ func cmdIssueReopen(ctx context.Context, args []string) error {
 	}
 	s, r := "open", "reopened"
 	patch := issuePatch{State: &s, StateReason: &r}
-	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number))
+	rawURL, err := url.JoinPath(proxy, "gh", "repos", repo, "issues", strconv.Itoa(number))
 	if err != nil {
 		return err
 	}
@@ -254,7 +250,7 @@ func cmdIssueReopen(ctx context.Context, args []string) error {
 		return fmt.Errorf("ghfa: decode: %w", err)
 	}
 	if *comment != "" {
-		commentURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number), "comments")
+		commentURL, err := url.JoinPath(proxy, "gh", "repos", repo, "issues", strconv.Itoa(number), "comments")
 		if err != nil {
 			return err
 		}
@@ -266,10 +262,10 @@ func cmdIssueReopen(ctx context.Context, args []string) error {
 			return statusError(cstatus, cresp)
 		}
 	}
-	return printJSON(closeResult{Number: ref.Number, HTMLURL: ref.HTMLURL, State: ref.State})
+	return writeJSON(out, closeResult{Number: ref.Number, HTMLURL: ref.HTMLURL, State: ref.State})
 }
 
-func cmdIssueComment(ctx context.Context, args []string) error {
+func cmdIssueComment(ctx context.Context, proxy, repo string, out io.Writer, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: ghfa <owner/repo> issue comment <num> [-body <text> | -file <file.md>]")
 	}
@@ -294,7 +290,7 @@ func cmdIssueComment(ctx context.Context, args []string) error {
 		}
 		body = string(md)
 	}
-	rawURL, err := url.JoinPath(proxyBase, "gh", "repos", upstream, "issues", strconv.Itoa(number), "comments")
+	rawURL, err := url.JoinPath(proxy, "gh", "repos", repo, "issues", strconv.Itoa(number), "comments")
 	if err != nil {
 		return err
 	}
@@ -305,13 +301,11 @@ func cmdIssueComment(ctx context.Context, args []string) error {
 	if status != http.StatusCreated {
 		return statusError(status, resp)
 	}
-	var cmt comment
-	if err := json.Unmarshal(resp, &cmt); err != nil {
+	var response json.RawMessage
+	if err := json.Unmarshal(resp, &response); err != nil {
 		return fmt.Errorf("ghfa: decode comment: %w", err)
 	}
-	return printJSON(commentResult{Number: number})
-}
-
-type commentResult struct {
-	Number int `json:"number"`
+	return writeJSON(out, struct {
+		Number int `json:"number"`
+	}{Number: number})
 }

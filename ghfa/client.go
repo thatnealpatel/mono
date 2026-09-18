@@ -7,23 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 )
-
-var (
-	proxyBase string // scheme + authority, no trailing slash
-	upstream  string
-)
-
-func initClient() error {
-	proxy := os.Getenv("GHFA_PROXY")
-	if proxy == "" {
-		return fmt.Errorf("GHFA_PROXY is required; ghfa refuses to make requests without a proxy")
-	}
-	proxyBase = strings.TrimRight(proxy, "/")
-	return nil
-}
 
 func do(ctx context.Context, method, rawURL string, body any) ([]byte, http.Header, int, error) {
 	var r io.Reader
@@ -79,15 +64,11 @@ func nextLink(header string) string {
 	return ""
 }
 
-func printJSON(v any) error {
-	return printJSONTo(os.Stdout, v)
-}
-
-func printJSONTo(w io.Writer, v any) error {
-	out, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return err
+func writeJSON(w io.Writer, v any) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		return fmt.Errorf("write JSON: %w", err)
 	}
-	fmt.Fprintln(w, string(out))
 	return nil
 }
