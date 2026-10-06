@@ -1,8 +1,7 @@
 module patel.codes/srvfs
 
-go 1.26.3
+go 1.27
 
-require (
-	golang.org/x/text v0.3.7 // indirect
-	rsc.io/markdown v0.0.0-20241212154241-6bf72452917f // indirect
-)
+require patel.codes/render v0.0.1
+
+require golang.org/x/text v0.3.7 // indirect
