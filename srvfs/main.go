@@ -1,4 +1,5 @@
 // Command srvfs serves a directory over HTTP on 0.0.0.0:11111.
+// Markdown files are rendered as HTML; other files use the standard file server.
 // It is intended for personal use and adds no authentication or file filtering.
 package main
 
@@ -27,5 +28,5 @@ func main() {
 
 	const addr = "0.0.0.0:11111"
 	log.Printf("serving %s at http://%s", root, addr)
-	log.Fatal(http.ListenAndServe(addr, http.FileServer(http.Dir(root))))
+	log.Fatal(http.ListenAndServe(addr, newHandler(root)))
 }
