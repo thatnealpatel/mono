@@ -86,11 +86,32 @@ func cmdIssueCreate(ctx context.Context, proxy, repo string, out io.Writer, args
 	if status != http.StatusCreated {
 		return statusError(status, resp)
 	}
-	var ref issueRef
-	if err := json.Unmarshal(resp, &ref); err != nil {
+	var created struct {
+		issueRef
+		Labels []struct {
+			Name string `json:"name"`
+		} `json:"labels"`
+	}
+	if err := json.Unmarshal(resp, &created); err != nil {
 		return fmt.Errorf("ghfa: decode: %w", err)
 	}
-	return writeJSON(out, ref)
+	var missing []string
+	for _, requested := range labels {
+		found := false
+		for _, applied := range created.Labels {
+			if applied.Name == requested {
+				found = true
+				break
+			}
+		}
+		if !found {
+			missing = append(missing, requested)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("ghfa: partial success: created issue #%d (%s), but missing requested labels: %s; do not retry issue creation", created.Number, created.HTMLURL, strings.Join(missing, ", "))
+	}
+	return writeJSON(out, created.issueRef)
 }
 
 type issueRequest struct {

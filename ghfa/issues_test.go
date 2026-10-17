@@ -113,12 +113,80 @@ func TestCmdCreate(t *testing.T) {
 			t.Errorf("labels = %v, want [bug auto-filed]", req.Labels)
 		}
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(`{"number":42,"html_url":"https://github.com/owner/repo/issues/42","state":"open"}`))
+		w.Write([]byte(`{"number":42,"html_url":"https://github.com/owner/repo/issues/42","state":"open","labels":[{"name":"bug"},{"name":"auto-filed"}]}`))
 	}))
 
 	err := cmdIssueCreate(context.Background(), proxy, testRepo, io.Discard, []string{"-title", "the title", "-body", "the body", "-label", "bug,auto-filed"})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCmdCreateReturnedLabels(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		returned  string
+		wantError string
+	}{
+		{name: "all", returned: `[{"name":"auto-filed"},{"name":"bug"},{"name":"extra"}]`},
+		{name: "none", returned: `[]`, wantError: "bug, auto-filed"},
+		{name: "subset", returned: `[{"name":"bug"}]`, wantError: "auto-filed"},
+		{name: "last only", returned: `[{"name":"auto-filed"}]`, wantError: "bug"},
+		{name: "null", returned: `null`, wantError: "bug, auto-filed"},
+		{name: "omitted", wantError: "bug, auto-filed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requests := 0
+			proxy := setupURL(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
+				if r.Method != http.MethodPost {
+					t.Errorf("method = %q, want POST", r.Method)
+				}
+				if r.URL.Path != "/gh/repos/owner/repo/issues" {
+					t.Errorf("path = %q, want /gh/repos/owner/repo/issues", r.URL.Path)
+				}
+				var req issueRequestBody
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					t.Errorf("decode: %v", err)
+					return
+				}
+				if len(req.Labels) != 2 || req.Labels[0] != "bug" || req.Labels[1] != "auto-filed" {
+					t.Errorf("labels = %v, want [bug auto-filed]", req.Labels)
+				}
+				response := `{"number":42,"html_url":"https://github.com/owner/repo/issues/42","state":"open"`
+				if tc.returned != "" {
+					response += `,"labels":` + tc.returned
+				}
+				w.WriteHeader(http.StatusCreated)
+				w.Write([]byte(response + "}"))
+			}))
+			var out bytes.Buffer
+			err := cmdIssueCreate(t.Context(), proxy, testRepo, &out, []string{"-title", "t", "-label", "bug,auto-filed"})
+			if requests != 1 {
+				t.Errorf("requests = %d, want exactly one POST", requests)
+			}
+			if tc.wantError == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				const want = "{\n  \"number\": 42,\n  \"html_url\": \"https://github.com/owner/repo/issues/42\",\n  \"state\": \"open\"\n}\n"
+				if out.String() != want {
+					t.Errorf("output = %q, want %q", out.String(), want)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("want partial-success error, got nil")
+			}
+			for _, want := range []string{"partial success", "#42", "https://github.com/owner/repo/issues/42", "missing requested labels: " + tc.wantError + ";", "do not retry issue creation"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to contain %q", err, want)
+				}
+			}
+			if out.Len() != 0 {
+				t.Errorf("output = %q, want no success output", out.String())
+			}
+		})
 	}
 }
 
@@ -151,7 +219,7 @@ func TestCmdCreateLabelCSVTrimming(t *testing.T) {
 			t.Errorf("labels = %v, want [bug, feature request]", req.Labels)
 		}
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(`{"number":1,"html_url":"u","state":"open"}`))
+		w.Write([]byte(`{"number":1,"html_url":"u","state":"open","labels":[{"name":"bug"},{"name":"feature request"}]}`))
 	}))
 
 	err := cmdIssueCreate(context.Background(), proxy, testRepo, io.Discard, []string{"-title", "t", "-label", " bug , feature request "})
