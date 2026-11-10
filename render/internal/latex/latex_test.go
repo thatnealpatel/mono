@@ -120,3 +120,33 @@ func TestParseRejectsMalformedInput(t *testing.T) {
 		}
 	}
 }
+
+func TestParseLimitOperators(t *testing.T) {
+	for _, name := range []string{`\limsup`, `\liminf`, `\bigoplus`} {
+		for _, scripts := range []string{`_n^r`, `^r_n`} {
+			nodes, err := Parse(name + scripts + `x`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []Node{SubSup{Base: Command{Name: name}, Sub: Letter("n"), Sup: Letter("r")}, Letter("x")}
+			if !reflect.DeepEqual(nodes, want) {
+				t.Errorf("Parse(%q) = %#v, want %#v", name+scripts+`x`, nodes, want)
+			}
+		}
+	}
+}
+
+func TestParseNestedAligned(t *testing.T) {
+	nodes, err := Parse(`\begin{aligned}x&=\begin{aligned}u&v\\w&z\end{aligned}\\{a&b}&c\\\end{aligned}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Node{Env{Name: "aligned", Body: []Node{
+		Letter("x"), Operator("&"), Operator("="),
+		Env{Name: "aligned", Body: []Node{Letter("u"), Operator("&"), Letter("v"), Operator(`\\`), Letter("w"), Operator("&"), Letter("z")}},
+		Operator(`\\`), List{Letter("a"), Operator("&"), Letter("b")}, Operator("&"), Letter("c"), Operator(`\\`),
+	}}}
+	if !reflect.DeepEqual(nodes, want) {
+		t.Errorf("got %#v, want %#v", nodes, want)
+	}
+}

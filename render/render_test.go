@@ -263,3 +263,26 @@ func TestRenderTableMathBacktickDoesNotStartCode(t *testing.T) {
 		t.Errorf("contains LaTeX double pipe: got %t, want %t; HTML = %q", got, want, html)
 	}
 }
+
+func TestRenderAlignedLimits(t *testing.T) {
+	expr := `\begin{aligned}S&=\limsup_n a_n&V&=\bigoplus_i^r V_i\\I&=\liminf_n b_n&\text{<tag>}&=1\\\end{aligned}`
+	for _, source := range []string{`before $` + expr + `$ after`, "\\[\n" + expr + "\n\\]"} {
+		html, err := Render(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := string(html)
+		for _, want := range []string{
+			`<mtable class="aligned" displaystyle="true" scriptlevel="0">`,
+			`<munder accentunder="false">`, `<munderover accent="false" accentunder="false">`,
+			`lim sup`, `lim inf`, `⨁`, `<mtext>&lt;tag&gt;</mtext>`,
+		} {
+			if !strings.Contains(got, want) {
+				t.Errorf("missing %q in %s", want, got)
+			}
+		}
+		if strings.Count(got, `<math`) != 1 || strings.Count(got, `<mtr>`) != 2 || strings.Count(got, `<mtd>`) != 8 || strings.Contains(got, `<merror>`) {
+			t.Errorf("expected one semantic tree with two four-cell rows: %s", got)
+		}
+	}
+}

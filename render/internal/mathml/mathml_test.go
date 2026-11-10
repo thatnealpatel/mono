@@ -477,3 +477,184 @@ func TestRenderEmptyGroups(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderMovableLimits(t *testing.T) {
+	for _, op := range []struct {
+		name, text, large string
+	}{
+		{`\limsup`, "lim\u2009sup", "false"},
+		{`\liminf`, "lim\u2009inf", "false"},
+		{`\bigoplus`, "⨁", "true"},
+	} {
+		base := `<mo form="prefix" largeop="` + op.large + `" movablelimits="true" lspace="0em" rspace="0em">` + op.text + `</mo>`
+		for _, attachment := range []struct {
+			source, want string
+		}{
+			{"", base},
+			{`_n`, `<munder accentunder="false">` + base + `<mi>n</mi></munder>`},
+			{`^r`, `<mover accent="false">` + base + `<mi>r</mi></mover>`},
+			{`_n^r`, `<munderover accent="false" accentunder="false">` + base + `<mi>n</mi><mi>r</mi></munderover>`},
+			{`^r_n`, `<munderover accent="false" accentunder="false">` + base + `<mi>n</mi><mi>r</mi></munderover>`},
+		} {
+			for _, display := range []bool{false, true} {
+				got, err := Render(op.name+attachment.source, display)
+				if err != nil {
+					t.Fatal(err)
+				}
+				open := `<math>`
+				if display {
+					open = `<math display="block">`
+				}
+				if want := open + attachment.want + `</math>`; got != want {
+					t.Errorf("Render(%q, %t) = %q, want %q", op.name+attachment.source, display, got, want)
+				}
+			}
+		}
+	}
+}
+
+func TestRenderLimitOperatorContext(t *testing.T) {
+	for _, test := range []struct {
+		expr         string
+		thin, medium int
+	}{
+		{`a\limsup_n b`, 2, 0},
+		{`\liminf_n=0`, 0, 0},
+		{`(\liminf_n)`, 0, 0},
+		{`\limsup_n\bigoplus_i`, 1, 0},
+		{`\bigoplus_i\mathbin{X}b`, 1, 0},
+		{`a\mathbin{X}\limsup_n`, 0, 2},
+	} {
+		got, err := Render(test.expr, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The thin Op glue is separate from normalized binary glue.
+		if count := strings.Count(got, `<mspace width="0.1667em"/>`); count != test.thin {
+			t.Errorf("Render(%q) has %d thin spaces, want %d: %s", test.expr, count, test.thin, got)
+		}
+		if count := strings.Count(got, `<mspace width="0.2222em"/>`); count != test.medium {
+			t.Errorf("Render(%q) has %d medium spaces, want %d: %s", test.expr, count, test.medium, got)
+		}
+	}
+}
+
+func TestRenderLimitsInCompactStyles(t *testing.T) {
+	for _, expr := range []string{
+		`\frac{\limsup_n a}{\liminf_n b}`,
+		`\frac{\bigoplus_i^r V}{W}`,
+		`x_{\liminf_n a}`,
+		`x_{y_{\bigoplus_i^r V}}`,
+	} {
+		got, err := Render(expr, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Placement must remain native: local fraction/script style, not the outer
+		// display flag, controls movable limits.
+		if !strings.Contains(got, `movablelimits="true"`) || strings.Contains(got, `displaystyle=`) || strings.Contains(got, `<mstyle`) {
+			t.Errorf("local style overridden in %s", got)
+		}
+	}
+	got, err := Render(`\sum_n^r\bigsqcup_i\oplus`, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`<msubsup><mo>∑</mo>`, `<msub><mo form="prefix" largeop="true" movablelimits="true">⨆</mo>`, `<mo>⊕</mo>`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("unrelated operator behavior changed: %s", got)
+		}
+	}
+}
+
+func TestRenderAlignedRows(t *testing.T) {
+	for _, test := range []struct {
+		body       string
+		rows, cols int
+	}{
+		{`x&=1\\y&=2`, 2, 2},
+		{`x&=1&y&=2&z&=3\\u&=4\\&=5&w&=6\\`, 3, 6},
+		{`x&=1&u\\y`, 2, 4},
+		{`&\\&`, 2, 2},
+		{`x&\\`, 1, 2},
+		{``, 0, 2},
+	} {
+		got, err := Render(`\begin{aligned}`+test.body+`\end{aligned}`, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(got, `<math><mtable class="aligned" displaystyle="true" scriptlevel="0">`) {
+			t.Errorf("aligned missing native display-style table: %s", got)
+		}
+		rows := strings.Split(got, `<mtr>`)[1:]
+		if len(rows) != test.rows {
+			t.Errorf("%q has %d rows, want %d: %s", test.body, len(rows), test.rows, got)
+		}
+		for _, row := range rows {
+			if count := strings.Count(row, `<mtd>`); count != test.cols {
+				t.Errorf("%q has %d columns, want %d", row, count, test.cols)
+			}
+		}
+	}
+}
+
+func TestRenderAlignedRHS(t *testing.T) {
+	infix := `<mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">`
+	for _, test := range []struct {
+		cell, want string
+	}{
+		{`=x`, `<mrow><mspace width="0.2778em"/>` + infix + `=</mo><mspace width="0.2778em"/><mi>x</mi></mrow>`},
+		{`\le x`, `<mrow><mspace width="0.2778em"/>` + infix + `≤</mo><mspace width="0.2778em"/><mspace width="0.25em"/><mi>x</mi></mrow>`},
+		{`+x`, `<mrow><mspace width="0.2222em"/>` + infix + `+</mo><mspace width="0.2222em"/><mi>x</mi></mrow>`},
+		{`\not=x`, `<mrow><mspace width="0.2778em"/>` + infix + `≠</mo><mspace width="0.2778em"/><mi>x</mi></mrow>`},
+		{`\times x`, `<mrow><mspace width="0.2222em"/>` + infix + `×</mo><mspace width="0.2222em"/><mspace width="0.25em"/><mi>x</mi></mrow>`},
+		{`+`, infix + `+</mo>`},
+		{`\mathbin{X}x`, `<mrow><mspace width="0.2222em"/><mrow><mi>X</mi></mrow><mspace width="0.2222em"/><mi>x</mi></mrow>`},
+		{`\mathrel{R}x`, `<mrow><mspace width="0.2778em"/>` + infix + `R</mo><mspace width="0.2778em"/><mi>x</mi></mrow>`},
+		{`=^rx`, `<mrow><mspace width="0.2778em"/><msup>` + infix + `=</mo><mi>r</mi></msup><mspace width="0.2778em"/><mi>x</mi></mrow>`},
+		{`x`, `<mi>x</mi>`},
+		{`(x)`, `<mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow>`},
+		{`{=x}`, `<mrow><mo>=</mo><mi>x</mi></mrow>`},
+		{``, `<mrow></mrow>`},
+	} {
+		got, err := Render(`\begin{aligned}a&`+test.cell+`\end{aligned}`, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := `<mtd>` + test.want + `</mtd>`
+		if !strings.Contains(got, want) {
+			t.Errorf("RHS %q: got %s, want cell %s", test.cell, got, want)
+		}
+	}
+}
+
+func TestRenderAlignedNesting(t *testing.T) {
+	for _, test := range []struct {
+		expr                string
+		tables, rows, cells int
+	}{
+		{`\frac{\left(\begin{aligned}x&=1\\y&=2\end{aligned}\right)}{z}`, 1, 2, 4},
+		{`\begin{aligned}x&=\begin{aligned}u&=1\\v&=2\end{aligned}\\y&=3\end{aligned}`, 2, 4, 8},
+		{`\begin{aligned}x&=\begin{cases}u&v\\w&z\end{cases}\\{a&b}&{c\\d}\end{aligned}`, 2, 4, 8},
+	} {
+		got, err := Render(test.expr, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, count := range []struct {
+			tag  string
+			want int
+		}{{`<mtable`, test.tables}, {`<mtr>`, test.rows}, {`<mtd>`, test.cells}, {`<math`, 1}} {
+			if n := strings.Count(got, count.tag); n != count.want {
+				t.Errorf("%q: %s count %d, want %d: %s", test.expr, count.tag, n, count.want, got)
+			}
+		}
+	}
+	got, err := Render(`x_{\begin{aligned}a&=b\mathbin{X}c\end{aligned}c\mathbin{Y}d}`, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(got, `<mspace width="0.2222em"/>`) != 2 {
+		t.Errorf("aligned failed to enter display style or restore script style: %s", got)
+	}
+}

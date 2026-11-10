@@ -24,6 +24,9 @@ func TestStylesheet(t *testing.T) {
 		"color: #0e7187;", "color: #008000;", "background: #ffffe1;",
 		".markdown pre code *", "border-collapse: collapse;", "border: 1px solid #8a8a8a;",
 		`.markdown math[display="block"]`,
+		`.markdown mtable.aligned > mtr > mtd`,
+		`justify-items: end;`, `justify-items: start;`,
+		`padding-inline-start: 1em;`,
 	} {
 		if !strings.Contains(string(Stylesheet()), want) {
 			t.Errorf("stylesheet missing %q", want)

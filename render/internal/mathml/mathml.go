@@ -42,6 +42,12 @@ func (w *writer) raw(s string)  { w.WriteString(s) }
 func (w *writer) text(s string) { w.WriteString(html.EscapeString(s)) }
 
 func (w *writer) nodes(nodes []latex.Node) {
+	w.nodesAfter(nodes, atomNone)
+}
+
+// nodesAfter can supply the virtual ordinary atom at an aligned RHS.
+// It affects spacing, not the tree.
+func (w *writer) nodesAfter(nodes []latex.Node, initial atomClass) {
 	if len(nodes) == 0 {
 		w.raw("<mrow></mrow>")
 		return
@@ -49,8 +55,33 @@ func (w *writer) nodes(nodes []latex.Node) {
 	if len(nodes) > 1 {
 		w.raw("<mrow>")
 	}
-	classes := normalizedAtomClasses(nodes)
+	classes := normalizedAtomClasses(nodes, initial)
+	first := true
 	for i, node := range nodes {
+		leading := first && initial == atomOrd && !isMathSpace(node)
+		if !isMathSpace(node) {
+			first = false
+		}
+		if limitOperatorBase(node) {
+			left, right := limitOperatorSpaces(classes, i, initial)
+			if left != "0em" {
+				w.raw(`<mspace width="` + left + `"/>`)
+			}
+			w.node(node)
+			if right != "0em" {
+				w.raw(`<mspace width="` + right + `"/>`)
+			}
+			continue
+		}
+		if leading && classifyAtom(node) == atomRelation {
+			w.relationNode(node, "0.2778em", relationSpace(nodes, i, 1))
+			continue
+		}
+		if leading && classifyAtom(node) == atomBinary {
+			left, right := binarySpaces(classes, i)
+			w.binaryNode(node, left, right)
+			continue
+		}
 		if _, ok := relationBase(node); ok {
 			w.relationNode(node, relationSpace(nodes, i, -1), relationSpace(nodes, i, 1))
 			continue
@@ -78,6 +109,13 @@ func (w *writer) node(node latex.Node) {
 	case latex.Operator:
 		w.operator(string(node))
 	case latex.Sup:
+		if limitOperatorBase(node.Base) {
+			w.raw(`<mover accent="false">`)
+			w.node(node.Base)
+			w.script(node.Script)
+			w.raw(`</mover>`)
+			return
+		}
 		if command, ok := underbraceBase(node.Base); ok {
 			w.raw("<mover>")
 			w.underbrace(command.Args)
@@ -90,6 +128,13 @@ func (w *writer) node(node latex.Node) {
 		w.script(node.Script)
 		w.raw("</msup>")
 	case latex.Sub:
+		if limitOperatorBase(node.Base) {
+			w.raw(`<munder accentunder="false">`)
+			w.node(node.Base)
+			w.script(node.Script)
+			w.raw(`</munder>`)
+			return
+		}
 		if command, ok := underbraceBase(node.Base); ok {
 			w.raw("<munder>")
 			w.underbrace(command.Args)
@@ -102,6 +147,14 @@ func (w *writer) node(node latex.Node) {
 		w.script(node.Script)
 		w.raw("</msub>")
 	case latex.SubSup:
+		if limitOperatorBase(node.Base) {
+			w.raw(`<munderover accent="false" accentunder="false">`)
+			w.node(node.Base)
+			w.script(node.Sub)
+			w.script(node.Sup)
+			w.raw(`</munderover>`)
+			return
+		}
 		if command, ok := underbraceBase(node.Base); ok {
 			w.raw("<munderover>")
 			w.underbrace(command.Args)
@@ -279,14 +332,14 @@ func binaryBase(node latex.Node) bool {
 	}
 }
 
-func normalizedAtomClasses(nodes []latex.Node) []atomClass {
+func normalizedAtomClasses(nodes []latex.Node, initial atomClass) []atomClass {
 	classes := make([]atomClass, len(nodes))
 	for i, node := range nodes {
 		if !isMathSpace(node) {
 			classes[i] = classifyAtom(node)
 		}
 	}
-	previous := atomNone
+	previous := initial
 	for i, class := range classes {
 		if class == atomNone {
 			continue
@@ -349,8 +402,14 @@ func (w *writer) binaryNode(node latex.Node, leftSpace, rightSpace string) {
 
 func (w *writer) binaryNucleus(node latex.Node) {
 	switch node := node.(type) {
+	case latex.Operator:
+		w.binaryOperator(string(node))
 	case latex.Command:
-		w.command(node)
+		if value, ok := namedOperator(node.Name); ok {
+			w.binaryOperator(value)
+		} else {
+			w.command(node)
+		}
 	case latex.Sup:
 		w.raw("<msup>")
 		w.binaryNucleus(node.Base)
@@ -386,8 +445,22 @@ func (w *writer) relationNode(node latex.Node, leftSpace, rightSpace string) {
 
 func (w *writer) relationNucleus(node latex.Node) {
 	switch node := node.(type) {
+	case latex.Operator:
+		w.binaryOperator(string(node))
 	case latex.Command:
-		w.mathrel(node, "0em", "0em")
+		if node.Name == `\mathrel` {
+			w.mathrel(node, "0em", "0em")
+		} else if value, ok := namedOperator(node.Name); ok {
+			w.binaryOperator(value)
+		} else if (node.Name == `\not` || node.Name == `\centernot`) && len(node.Args[0]) == 1 {
+			if value, ok := operatorText(node.Args[0][0]); ok {
+				w.binaryOperator(negatedOperator(value))
+			} else {
+				w.command(node)
+			}
+		} else {
+			w.command(node)
+		}
 	case latex.Sup:
 		w.raw("<msup>")
 		w.relationNucleus(node.Base)
@@ -409,7 +482,7 @@ func (w *writer) relationNucleus(node latex.Node) {
 
 func commandIsOperator(name string) bool {
 	switch name {
-	case `\sum`, `\prod`, `\int`, `\bigcup`, `\bigsqcup`, `\gcd`, `\log`, `\sin`, `\cos`, `\exp`, `\ln`, `\min`, `\max`, `\deg`, `\dim`, `\ker`, `\operatorname`:
+	case `\sum`, `\prod`, `\int`, `\bigcup`, `\bigsqcup`, `\limsup`, `\liminf`, `\bigoplus`, `\gcd`, `\log`, `\sin`, `\cos`, `\exp`, `\ln`, `\min`, `\max`, `\deg`, `\dim`, `\ker`, `\operatorname`:
 		return true
 	default:
 		return false
@@ -438,6 +511,47 @@ func commandIsRelation(name string) bool {
 	default:
 		return false
 	}
+}
+
+func limitOperatorBase(node latex.Node) bool {
+	switch node := node.(type) {
+	case latex.Sup:
+		return limitOperatorBase(node.Base)
+	case latex.Sub:
+		return limitOperatorBase(node.Base)
+	case latex.SubSup:
+		return limitOperatorBase(node.Base)
+	case latex.Command:
+		return node.Name == `\limsup` || node.Name == `\liminf` || node.Name == `\bigoplus`
+	default:
+		return false
+	}
+}
+
+// Only the new limit operators use explicit Op glue. Other operators retain
+// their existing spacing.
+func limitOperatorSpaces(classes []atomClass, index int, initial atomClass) (string, string) {
+	previous, next := initial, atomNone
+	for i := index - 1; i >= 0; i-- {
+		if classes[i] != atomNone {
+			previous = classes[i]
+			break
+		}
+	}
+	for i := index + 1; i < len(classes); i++ {
+		if classes[i] != atomNone {
+			next = classes[i]
+			break
+		}
+	}
+	left, right := "0em", "0em"
+	if previous == atomOrd || previous == atomClose || previous == atomInner {
+		left = "0.1667em"
+	}
+	if next == atomOrd || next == atomOperator || next == atomInner {
+		right = "0.1667em"
+	}
+	return left, right
 }
 
 func underbraceBase(node latex.Node) (latex.Command, bool) {
@@ -607,6 +721,16 @@ func (w *writer) command(command latex.Command) {
 			form = "postfix"
 		}
 		w.raw(`<mo fence="true" form="` + form + `" stretchy="false" lspace="0em" rspace="0em">‖</mo>`)
+	case `\limsup`, `\liminf`:
+		w.raw(`<mo form="prefix" largeop="false" movablelimits="true" lspace="0em" rspace="0em">`)
+		if command.Name == `\limsup` {
+			w.text("lim\u2009sup")
+		} else {
+			w.text("lim\u2009inf")
+		}
+		w.raw(`</mo>`)
+	case `\bigoplus`:
+		w.raw(`<mo form="prefix" largeop="true" movablelimits="true" lspace="0em" rspace="0em">⨁</mo>`)
 	case `\bigsqcup`:
 		w.raw(`<mo form="prefix" largeop="true" movablelimits="true">⨆</mo>`)
 	case `\mathrel`:
@@ -932,6 +1056,10 @@ func commandSetsMathVariant(name string) bool {
 }
 
 func (w *writer) environment(environment latex.Env) {
+	if environment.Name == "aligned" {
+		w.aligned(environment.Body)
+		return
+	}
 	if environment.Name != "cases" {
 		w.nodes(environment.Body)
 		return
@@ -947,6 +1075,40 @@ func (w *writer) environment(environment latex.Env) {
 		w.raw("</mtr>")
 	}
 	w.raw("</mtable></mrow>")
+}
+
+func (w *writer) aligned(nodes []latex.Node) {
+	rows := splitOnLineBreak(nodes)
+	cells := make([][][]latex.Node, len(rows))
+	columns := 2
+	for i, row := range rows {
+		cells[i] = splitOnAmpersand(row)
+		columns = max(columns, len(cells[i]))
+	}
+	columns += columns % 2
+	previous := w.style
+	w.style = displayStyle
+	defer w.restoreStyle(previous)
+	// MathML Core resets table style; an outer mstyle is not enough.
+	w.raw(`<mtable class="aligned" displaystyle="true" scriptlevel="0">`)
+	for _, row := range cells {
+		w.raw(`<mtr>`)
+		for i := range columns {
+			var cell []latex.Node
+			if i < len(row) {
+				cell = row[i]
+			}
+			initial := atomNone
+			if i%2 == 1 {
+				initial = atomOrd
+			}
+			w.raw(`<mtd>`)
+			w.nodesAfter(cell, initial)
+			w.raw(`</mtd>`)
+		}
+		w.raw(`</mtr>`)
+	}
+	w.raw(`</mtable>`)
 }
 
 func (w *writer) substack(nodes []latex.Node) {
