@@ -32,6 +32,29 @@ func TestRenderMathSyntax(t *testing.T) {
 	}
 }
 
+func TestRenderRoutineLatexCommands(t *testing.T) {
+	html, err := Render(`$\lVert\widehat{AB}\rVert\Longleftrightarrow\sin^2 x\triangleright\texttt{code < 12}$`)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	for _, want := range []string{
+		`<mo fence="true" form="prefix" stretchy="false" lspace="0em" rspace="0em">‖</mo>`,
+		`<mover accent="true"><mrow><mi>A</mi><mi>B</mi></mrow><mo stretchy="true">^</mo></mover>`,
+		`<mo fence="true" form="postfix" stretchy="false" lspace="0em" rspace="0em">‖</mo>`,
+		`<mo>⟺</mo>`,
+		`<msup><mo>sin</mo><mn>2</mn></msup>`,
+		`<mspace width="0.2222em"/><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">▷</mo><mspace width="0.2222em"/>`,
+		`<mtext style="font-family: monospace">code &lt; 12</mtext>`,
+	} {
+		if !strings.Contains(string(html), want) {
+			t.Errorf("missing %q in %q", want, html)
+		}
+	}
+	if strings.Contains(string(html), "<merror>") {
+		t.Errorf("unexpected unknown command: %q", html)
+	}
+}
+
 func TestRenderDoesNotParseMathInCode(t *testing.T) {
 	source := "`$x$`\n\n```tex\n$$x$$\n\\[x\\]\n```\n\n    $y$"
 	html, err := Render(source)

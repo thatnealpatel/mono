@@ -240,9 +240,9 @@ func classifyAtom(node latex.Node) atomClass {
 			return atomBinary
 		}
 		switch node.Name {
-		case `\langle`, `\lfloor`, `\lceil`, `\bigl`, `\{`:
+		case `\langle`, `\lfloor`, `\lceil`, `\lVert`, `\bigl`, `\{`:
 			return atomOpen
-		case `\rangle`, `\rfloor`, `\rceil`, `\bigr`, `\}`:
+		case `\rangle`, `\rfloor`, `\rceil`, `\rVert`, `\bigr`, `\}`:
 			return atomClose
 		}
 	}
@@ -267,7 +267,7 @@ func relationBase(node latex.Node) (latex.Command, bool) {
 func binaryBase(node latex.Node) bool {
 	switch node := node.(type) {
 	case latex.Command:
-		return node.Name == `\mathbin`
+		return node.Name == `\mathbin` || node.Name == `\triangleright`
 	case latex.Sup:
 		return binaryBase(node.Base)
 	case latex.Sub:
@@ -350,7 +350,7 @@ func (w *writer) binaryNode(node latex.Node, leftSpace, rightSpace string) {
 func (w *writer) binaryNucleus(node latex.Node) {
 	switch node := node.(type) {
 	case latex.Command:
-		w.mathbin(node)
+		w.command(node)
 	case latex.Sup:
 		w.raw("<msup>")
 		w.binaryNucleus(node.Base)
@@ -409,7 +409,7 @@ func (w *writer) relationNucleus(node latex.Node) {
 
 func commandIsOperator(name string) bool {
 	switch name {
-	case `\sum`, `\prod`, `\int`, `\bigcup`, `\bigsqcup`, `\gcd`, `\log`, `\min`, `\max`, `\deg`, `\dim`, `\ker`, `\operatorname`:
+	case `\sum`, `\prod`, `\int`, `\bigcup`, `\bigsqcup`, `\gcd`, `\log`, `\sin`, `\cos`, `\exp`, `\ln`, `\min`, `\max`, `\deg`, `\dim`, `\ker`, `\operatorname`:
 		return true
 	default:
 		return false
@@ -418,7 +418,7 @@ func commandIsOperator(name string) bool {
 
 func commandIsBinary(name string) bool {
 	switch name {
-	case `\pm`, `\mp`, `\times`, `\div`, `\cdot`, `\circ`, `\otimes`, `\oplus`, `\rtimes`, `\cup`, `\sqcup`, `\cap`, `\setminus`:
+	case `\pm`, `\mp`, `\times`, `\div`, `\cdot`, `\circ`, `\otimes`, `\oplus`, `\rtimes`, `\cup`, `\sqcup`, `\cap`, `\setminus`, `\triangleright`:
 		return true
 	default:
 		return false
@@ -427,13 +427,13 @@ func commandIsBinary(name string) bool {
 
 func commandIsRelation(name string) bool {
 	switch name {
-	case `\leq`, `\le`, `\geq`, `\ge`, `\neq`, `\ne`, `\approx`, `\equiv`, `\cong`,
+	case `\leq`, `\le`, `\geq`, `\ge`, `\neq`, `\ne`, `\approx`, `\asymp`, `\sim`, `\gg`, `\ll`, `\gtrsim`, `\equiv`, `\cong`,
 		`\in`, `\notin`, `\subset`, `\subseteq`, `\supset`, `\supseteq`, `\smile`, `\mid`, `\nmid`, `\vert`, `\perp`,
 		`\not`, `\centernot`, `\uparrow`, `\downarrow`, `\updownarrow`, `\Uparrow`, `\Downarrow`, `\Updownarrow`,
 		`\rightarrow`, `\to`, `\leftarrow`, `\nearrow`, `\searrow`, `\nwarrow`, `\swarrow`,
 		`\longrightarrow`, `\longleftarrow`, `\leftrightarrow`, `\longleftrightarrow`,
 		`\hookrightarrow`, `\hookleftarrow`, `\rightsquigarrow`, `\leftsquigarrow`, `\mapsto`, `\longmapsto`, `\Rightarrow`,
-		`\Longrightarrow`, `\implies`, `\Leftarrow`, `\iff`:
+		`\Longrightarrow`, `\implies`, `\Leftarrow`, `\Longleftrightarrow`, `\iff`:
 		return true
 	default:
 		return false
@@ -544,6 +544,10 @@ func (w *writer) command(command latex.Command) {
 		w.raw("</mrow>")
 		w.element("mo", accent)
 		w.raw("</mover>")
+	case `\widehat`:
+		w.raw(`<mover accent="true">`)
+		w.arguments(command.Args)
+		w.raw(`<mo stretchy="true">^</mo></mover>`)
 	case `\widetilde`:
 		w.raw("<mover><mrow>")
 		for _, node := range command.Args[0] {
@@ -562,6 +566,10 @@ func (w *writer) command(command latex.Command) {
 		w.raw("</mtext>")
 	case `\textbf`:
 		w.raw(`<mtext mathvariant="bold">`)
+		w.textArguments(command.Args)
+		w.raw("</mtext>")
+	case `\texttt`:
+		w.raw(`<mtext style="font-family: monospace">`)
 		w.textArguments(command.Args)
 		w.raw("</mtext>")
 	case `\text`, `\textmd`, `\textrm`, `\mathrm`:
@@ -586,8 +594,19 @@ func (w *writer) command(command latex.Command) {
 		w.mathVariant(command.Args, fraktur)
 	case `\ell`:
 		w.element("mi", "ℓ")
-	case `\triangle`:
-		w.raw(`<mo lspace="0em" rspace="0em">△</mo>`)
+	case `\triangle`, `\neg`, `\Box`, `\Diamond`:
+		value, _ := namedOperator(command.Name)
+		w.raw(`<mo lspace="0em" rspace="0em">`)
+		w.text(value)
+		w.raw("</mo>")
+	case `\triangleright`:
+		w.binaryOperator("▷")
+	case `\lVert`, `\rVert`:
+		form := "prefix"
+		if command.Name == `\rVert` {
+			form = "postfix"
+		}
+		w.raw(`<mo fence="true" form="` + form + `" stretchy="false" lspace="0em" rspace="0em">‖</mo>`)
 	case `\bigsqcup`:
 		w.raw(`<mo form="prefix" largeop="true" movablelimits="true">⨆</mo>`)
 	case `\mathrel`:
@@ -597,7 +616,7 @@ func (w *writer) command(command latex.Command) {
 	case `\mod`, `\bmod`:
 		w.element("mo", "mod")
 		w.arguments(command.Args)
-	case `\gcd`, `\log`, `\min`, `\max`, `\deg`, `\dim`, `\ker`:
+	case `\gcd`, `\log`, `\sin`, `\cos`, `\exp`, `\ln`, `\min`, `\max`, `\deg`, `\dim`, `\ker`:
 		w.element("mo", command.Name[1:])
 		w.arguments(command.Args)
 	case `\pmod`:
@@ -723,14 +742,18 @@ func negatedOperator(value string) string {
 
 func (w *writer) mathbin(command latex.Command) {
 	if text, ok := binaryOperatorText(command.Args[0]); ok {
-		w.raw(`<mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">`)
-		w.text(text)
-		w.raw("</mo>")
+		w.binaryOperator(text)
 		return
 	}
 	w.raw("<mrow>")
 	w.arguments(command.Args)
 	w.raw("</mrow>")
+}
+
+func (w *writer) binaryOperator(text string) {
+	w.raw(`<mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">`)
+	w.text(text)
+	w.raw("</mo>")
 }
 
 func (w *writer) mathrel(command latex.Command, leftSpace, rightSpace string) {
@@ -901,7 +924,7 @@ func variantArguments(args [][]latex.Node, transform func(rune) rune) [][]latex.
 func commandSetsMathVariant(name string) bool {
 	switch name {
 	case `\mathcal`, `\mathscr`, `\mathbb`, `\mathfrak`, `\mathsf`, `\mathrm`, `\mathbf`, `\mathit`, `\operatorname`,
-		`\text`, `\textit`, `\textbf`, `\textmd`, `\textrm`:
+		`\text`, `\textit`, `\textbf`, `\textmd`, `\textrm`, `\texttt`:
 		return true
 	default:
 		return false
@@ -1076,6 +1099,14 @@ func namedOperator(command string) (string, bool) {
 	switch command {
 	case `\triangle`:
 		return "△", true
+	case `\neg`:
+		return "¬", true
+	case `\Box`:
+		return "□", true
+	case `\Diamond`:
+		return "◇", true
+	case `\triangleright`:
+		return "▷", true
 	case `\pm`:
 		return "±", true
 	case `\mp`:
@@ -1098,6 +1129,16 @@ func namedOperator(command string) (string, bool) {
 		return "≠", true
 	case `\approx`:
 		return "≈", true
+	case `\asymp`:
+		return "≍", true
+	case `\sim`:
+		return "∼", true
+	case `\gg`:
+		return "≫", true
+	case `\ll`:
+		return "≪", true
+	case `\gtrsim`:
+		return "≳", true
 	case `\equiv`:
 		return "≡", true
 	case `\cong`:
@@ -1170,7 +1211,7 @@ func namedOperator(command string) (string, bool) {
 		return "⟹", true
 	case `\Leftarrow`:
 		return "⇐", true
-	case `\iff`:
+	case `\Longleftrightarrow`, `\iff`:
 		return "⟺", true
 	case `\infty`:
 		return "∞", true
@@ -1190,6 +1231,8 @@ func namedOperator(command string) (string, bool) {
 		return "∤", true
 	case `\perp`:
 		return "⟂", true
+	case `\lVert`, `\rVert`:
+		return "‖", true
 	case `\langle`:
 		return "⟨", true
 	case `\rangle`:
@@ -1232,6 +1275,14 @@ func namedOperator(command string) (string, bool) {
 		return "gcd", true
 	case `\log`:
 		return "log", true
+	case `\sin`:
+		return "sin", true
+	case `\cos`:
+		return "cos", true
+	case `\exp`:
+		return "exp", true
+	case `\ln`:
+		return "ln", true
 	case `\min`:
 		return "min", true
 	case `\max`:

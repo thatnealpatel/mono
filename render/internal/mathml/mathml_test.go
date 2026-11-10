@@ -71,6 +71,78 @@ func TestRenderSupportedCommands(t *testing.T) {
 	}
 }
 
+func TestRenderRoutineSymbols(t *testing.T) {
+	for _, test := range []struct {
+		expr string
+		want string
+	}{
+		{expr: `\neg`, want: `<mo lspace="0em" rspace="0em">¬</mo>`},
+		{expr: `\Box`, want: `<mo lspace="0em" rspace="0em">□</mo>`},
+		{expr: `\Diamond`, want: `<mo lspace="0em" rspace="0em">◇</mo>`},
+		{expr: `\asymp`, want: `<mo>≍</mo>`},
+		{expr: `\sim`, want: `<mo>∼</mo>`},
+		{expr: `\gg`, want: `<mo>≫</mo>`},
+		{expr: `\ll`, want: `<mo>≪</mo>`},
+		{expr: `\gtrsim`, want: `<mo>≳</mo>`},
+		{expr: `\Longleftrightarrow`, want: `<mo>⟺</mo>`},
+		{expr: `\sin`, want: `<mo>sin</mo>`},
+		{expr: `\cos`, want: `<mo>cos</mo>`},
+		{expr: `\exp`, want: `<mo>exp</mo>`},
+		{expr: `\ln`, want: `<mo>ln</mo>`},
+	} {
+		t.Run(test.expr, func(t *testing.T) {
+			got, err := Render(test.expr, false)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if want := "<math>" + test.want + "</math>"; got != want {
+				t.Errorf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestRenderRoutineCommandSpacing(t *testing.T) {
+	// Relations cancel a preceding binary
+	// atom; named functions cancel a
+	// following one.
+	for _, test := range []struct {
+		commands []string
+		expr     string
+		want     string
+		spaces   int
+	}{
+		{
+			commands: []string{`\asymp`, `\sim`, `\gg`, `\ll`, `\gtrsim`, `\Longleftrightarrow`},
+			expr:     `a\mathbin{X}%s`,
+			want:     `<mi>a</mi><mrow><mi>X</mi></mrow>`,
+		},
+		{
+			commands: []string{`\sin`, `\cos`, `\exp`, `\ln`},
+			expr:     `%s\mathbin{X}b`,
+			want:     `<mrow><mi>X</mi></mrow><mi>b</mi>`,
+		},
+		{
+			commands: []string{`\sin`, `\cos`, `\exp`, `\ln`},
+			expr:     `a\mathbin{X}%s`,
+			want:     `<mi>a</mi><mspace width="0.2222em"/><mrow><mi>X</mi></mrow><mspace width="0.2222em"/>`,
+			spaces:   2,
+		},
+	} {
+		for _, command := range test.commands {
+			t.Run(command, func(t *testing.T) {
+				got, err := Render(strings.Replace(test.expr, "%s", command, 1), false)
+				if err != nil {
+					t.Fatalf("Render: %v", err)
+				}
+				if !strings.Contains(got, test.want) || strings.Count(got, `<mspace`) != test.spaces {
+					t.Errorf("unexpected binary spacing around %q; got %q, want %q and %d spaces", command, got, test.want, test.spaces)
+				}
+			})
+		}
+	}
+}
+
 func TestRenderCommandsWithArguments(t *testing.T) {
 	tests := []struct {
 		name string
@@ -85,6 +157,11 @@ func TestRenderCommandsWithArguments(t *testing.T) {
 		{name: "Mathfrak", expr: `\mathfrak{gRa}`, want: `<math><mrow><mi>𝔤</mi><mi>ℜ</mi><mi>𝔞</mi></mrow></math>`},
 		{name: "MathbfScript", expr: `\mathbf{x}_1`, want: `<math><msub><mrow><mi>𝐱</mi></mrow><mn>1</mn></msub></math>`},
 		{name: "WideTilde", expr: `\widetilde{ABC}`, want: `<math><mover><mrow><mi>A</mi><mi>B</mi><mi>C</mi></mrow><mo stretchy="true">~</mo></mover></math>`},
+		{name: "WideHat", expr: `\widehat{ABC}`, want: `<math><mover accent="true"><mrow><mi>A</mi><mi>B</mi><mi>C</mi></mrow><mo stretchy="true">^</mo></mover></math>`},
+		{name: "WideHatScript", expr: `\widehat x^2`, want: `<math><msup><mover accent="true"><mi>x</mi><mo stretchy="true">^</mo></mover><mn>2</mn></msup></math>`},
+		{name: "WideHatBinarySpacing", expr: `\widehat{a\mathbin{X}b}`, want: `<math><mover accent="true"><mrow><mi>a</mi><mspace width="0.2222em"/><mrow><mi>X</mi></mrow><mspace width="0.2222em"/><mi>b</mi></mrow><mo stretchy="true">^</mo></mover></math>`},
+		{name: "Texttt", expr: `\texttt{ab {12} < & >}`, want: `<math><mtext style="font-family: monospace">ab 12 &lt; &amp; &gt;</mtext></math>`},
+		{name: "TextttOverride", expr: `\mathbf{\texttt{Ab12}}`, want: `<math><mrow><mtext style="font-family: monospace">Ab12</mtext></mrow></math>`},
 		{name: "Phantom", expr: `a\phantom{b+1}c`, want: `<math><mrow><mi>a</mi><mphantom><mrow><mi>b</mi><mo>+</mo><mn>1</mn></mrow></mphantom><mi>c</mi></mrow></math>`},
 		{name: "Mathbin", expr: `a\mathbin{\triangle}b`, want: `<math><mrow><mi>a</mi><mspace width="0.2222em"/><mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">△</mo><mspace width="0.2222em"/><mi>b</mi></mrow></math>`},
 		{name: "TriangleOrdinary", expr: `a\triangle2`, want: `<math><mrow><mi>a</mi><mo lspace="0em" rspace="0em">△</mo><mn>2</mn></mrow></math>`},
@@ -129,6 +206,59 @@ func TestRenderCommandsWithArguments(t *testing.T) {
 	}
 }
 
+func TestRenderTriangleright(t *testing.T) {
+	const operator = `<mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">▷</mo>`
+	const space = `<mspace width="0.2222em"/>`
+	for _, test := range []struct {
+		name string
+		expr string
+		want string
+	}{
+		{name: "Infix", expr: `a\triangleright2`, want: `<mrow><mi>a</mi>` + space + operator + space + `<mn>2</mn></mrow>`},
+		{name: "Leading", expr: `\triangleright2`, want: `<mrow>` + operator + `<mn>2</mn></mrow>`},
+		{name: "Trailing", expr: `a\triangleright`, want: `<mrow><mi>a</mi>` + operator + `</mrow>`},
+		{name: "BeforeRelation", expr: `a\triangleright=2`, want: `<mrow><mi>a</mi>` + operator + `<mo>=</mo><mn>2</mn></mrow>`},
+		{name: "Script", expr: `x_{a\triangleright2}`, want: `<msub><mi>x</mi><mrow><mi>a</mi>` + operator + `<mn>2</mn></mrow></msub>`},
+		{name: "Scripted", expr: `a\triangleright_x2`, want: `<mrow><mi>a</mi>` + space + `<msub>` + operator + `<mi>x</mi></msub>` + space + `<mn>2</mn></mrow>`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.expr, false)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if want := "<math>" + test.want + "</math>"; got != want {
+				t.Errorf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestRenderStandaloneNormDelimiters(t *testing.T) {
+	const open = `<mo fence="true" form="prefix" stretchy="false" lspace="0em" rspace="0em">‖</mo>`
+	const close = `<mo fence="true" form="postfix" stretchy="false" lspace="0em" rspace="0em">‖</mo>`
+	const relation = `<mo form="infix" fence="false" separator="false" stretchy="false" lspace="0em" rspace="0em">R</mo>`
+	const space = `<mspace width="0.2778em"/>`
+	for _, test := range []struct {
+		name string
+		expr string
+		want string
+	}{
+		{name: "Norm", expr: `\lVert{x}\rVert`, want: open + `<mi>x</mi>` + close},
+		{name: "OpenClass", expr: `\lVert\mathrel{R}x\rVert`, want: open + relation + space + `<mi>x</mi>` + close},
+		{name: "CloseClass", expr: `\lVert{x}\mathrel{R}\rVert`, want: open + `<mi>x</mi>` + space + relation + close},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.expr, false)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if want := "<math><mrow>" + test.want + "</mrow></math>"; got != want {
+				t.Errorf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestRenderBigDelimiter(t *testing.T) {
 	tests := []struct {
 		name string
@@ -161,6 +291,7 @@ func TestRenderBiglDelimiters(t *testing.T) {
 		want string
 	}{
 		{name: "Vertical", expr: `\bigl\Vert x\bigr\Vert`, want: `<math><mrow><mo fence="true" form="prefix" stretchy="true" minsize="1.2em" maxsize="1.2em">‖</mo><mspace width="0.25em"/><mi>x</mi><mo fence="true" form="postfix" stretchy="true" minsize="1.2em" maxsize="1.2em">‖</mo></mrow></math>`},
+		{name: "NormAliases", expr: `\bigl\lVert{x}\bigr\rVert`, want: `<math><mrow><mo fence="true" form="prefix" stretchy="true" minsize="1.2em" maxsize="1.2em">‖</mo><mi>x</mi><mo fence="true" form="postfix" stretchy="true" minsize="1.2em" maxsize="1.2em">‖</mo></mrow></math>`},
 		{name: "Backslash", expr: `\bigl\backslash x\bigr/`, want: `<math><mrow><mo fence="true" form="prefix" stretchy="true" minsize="1.2em" maxsize="1.2em">\</mo><mspace width="0.25em"/><mi>x</mi><mo fence="true" form="postfix" stretchy="true" minsize="1.2em" maxsize="1.2em">/</mo></mrow></math>`},
 	}
 	for _, test := range tests {

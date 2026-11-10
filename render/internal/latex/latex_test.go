@@ -2,6 +2,7 @@ package latex
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -60,6 +61,40 @@ func TestParseStructures(t *testing.T) {
 	}
 }
 
+func TestParseWidehatAndTexttt(t *testing.T) {
+	for _, name := range []string{`\widehat`, `\texttt`} {
+		for _, test := range []struct {
+			name string
+			expr string
+			want []Node
+		}{
+			{
+				name: "Braced",
+				expr: name + `{xy}^2z`,
+				want: []Node{
+					Sup{Base: Command{Name: name, Args: [][]Node{{Letter("x"), Letter("y")}}}, Script: Number("2")},
+					Letter("z"),
+				},
+			},
+			{
+				name: "Unbraced",
+				expr: name + ` xy`,
+				want: []Node{Command{Name: name, Args: [][]Node{{Letter("x")}}}, Letter("y")},
+			},
+		} {
+			t.Run(name+"/"+test.name, func(t *testing.T) {
+				got, err := Parse(test.expr)
+				if err != nil {
+					t.Fatalf("Parse: %v", err)
+				}
+				if !reflect.DeepEqual(got, test.want) {
+					t.Errorf("got %#v, want %#v", got, test.want)
+				}
+			})
+		}
+	}
+}
+
 func TestParseUnknownCommand(t *testing.T) {
 	nodes, err := Parse(`\unknown{x}`)
 	if err != nil {
@@ -78,7 +113,7 @@ func TestParseUnknownCommand(t *testing.T) {
 }
 
 func TestParseRejectsMalformedInput(t *testing.T) {
-	for _, expr := range []string{`\frac{x}`, `{x`, `x^`, `\left(x`, `\middle|`, `\begin{cases}x`, `\Big x`, `\Big\alpha`, `\left\alpha x\right)`, `\left(x\right\beta`, `\mathrel`, `\mathbin`, `\mathscr`, `\widetilde`, `\phantom`, `\mathsf`} {
+	for _, expr := range []string{`\frac{x}`, `{x`, `x^`, `\left(x`, `\middle|`, `\begin{cases}x`, `\Big x`, `\Big\alpha`, `\left\alpha x\right)`, `\left(x\right\beta`, `\mathrel`, `\mathbin`, `\mathscr`, `\widetilde`, `\widehat`, `\texttt`, `\phantom`, `\mathsf`} {
 		_, err := Parse(expr)
 		if !errors.Is(err, ErrInvalid) {
 			t.Errorf("Parse(%q) error = %v, want ErrInvalid", expr, err)
